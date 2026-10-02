@@ -19,6 +19,12 @@
             "value" : " (standard)"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " (por defecto)"
+          }
+        },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
@@ -220,6 +226,12 @@
             "state" : "translated",
             "value" : "%@ só é necessário ao usar fontes de controle do macOS incorporadas para substituição do OSD. Fontes externas como BetterDisplay ou Lunar não precisam disso. Você pode ativá-lo mais tarde nas configurações OSD, se necessário."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ yalnızca OSD değiştirmek için macOS'in yerleşik denetim kaynakları kullanılırken gereklidir. BetterDisplay veya Lunar gibi harici kaynaklar bunu gerektirmez. Gerekirse daha sonra ekran göstergesi ayarlarından etkinleştirebilirsiniz."
+          }
         }
       }
     },
@@ -242,6 +254,12 @@
             "state" : "translated",
             "value" : "%@ é usado apenas para melhorar a mídia e as notificações de brilho. Nenhum dado é coletado ou compartilhado."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is used only to improve media and brightness notifications. No data is collected or shared."
+          }
         }
       }
     },
@@ -258,6 +276,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Notificação %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bildirim"
           }
         }
       }
@@ -286,6 +310,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ Necessário"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ gerekli"
           }
         }
       }
@@ -834,6 +864,12 @@
             "state" : "translated",
             "value" : "Acessibilidade"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erişilebilirlik"
+          }
         }
       }
     },
@@ -997,6 +1033,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Adicionar Aplicativo"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uygulama Ekle..."
           }
         }
       }
@@ -1883,6 +1925,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "App"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uygulama"
           }
         }
       }
@@ -3245,6 +3293,12 @@
             "state" : "translated",
             "value" : "Comportamento"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Davranış"
+          }
         }
       }
     },
@@ -3258,6 +3312,12 @@
           }
         },
         "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beta"
+          }
+        },
+        "tr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beta"
@@ -3278,6 +3338,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "BetterDisplay não está instalado ou não está em execução"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BetterDisplay yüklenmemiş ya da şu anda çalışmıyor"
           }
         }
       }
@@ -5629,6 +5695,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escolha como o calendário é exibido no notch."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Takvimin çentikte nasıl görüntüleneceğini seç."
           }
         }
       }
@@ -8636,6 +8708,12 @@
             "state" : "translated",
             "value" : "Defina o que acontece quando você segura a tecla Opção enquanto pressiona as teclas de mídia."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Media tuşuna basarken option tuşuna basınca ne olacağını seç."
+          }
         }
       }
     },
@@ -8782,6 +8860,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Controle do Dispositivo e Acesso aos Dados"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cihaz kontrolü ve Veri erişimi"
           }
         }
       }
@@ -9038,6 +9122,12 @@
             "state" : "translated",
             "value" : "Descartar notificação"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildirimi kapat"
+          }
         }
       }
     },
@@ -9059,6 +9149,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Telas"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ekranlar"
           }
         }
       }
@@ -9669,6 +9765,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Habilitar %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etkinleştir %@"
           }
         }
       }
@@ -10718,6 +10820,12 @@
             "state" : "translated",
             "value" : "Eventos"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Olaylar"
+          }
         }
       }
     },
@@ -11105,6 +11213,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Recursos"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Özellikler"
           }
         }
       }
@@ -11960,6 +12074,12 @@
             "state" : "translated",
             "value" : "Gestos"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hareketler"
+          }
         }
       }
     },
@@ -12313,6 +12433,12 @@
             "state" : "translated",
             "value" : "Permita %@ para que os controles de brilho da tecla do teclado integrado possam ser interceptados."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dahili klavye parlaklık kontrollerinin yakalanabilmesi için %@ Erişilebilirlik izni verin."
+          }
         }
       }
     },
@@ -12329,6 +12455,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Conceder %@ aos banners de notificação do espelhamento."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildirim afişlerini yansıtmak için %@ izni verin."
           }
         }
       }
@@ -13570,6 +13702,12 @@
             "state" : "translated",
             "value" : "Estado inativo"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Boşta"
+          }
         }
       }
     },
@@ -14381,6 +14519,12 @@
             "state" : "translated",
             "value" : "O brilho do teclado atualmente suporta apenas a fonte embutida."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klavye parlaklığı şu anda yalnızca yerleşik kaynağı destekliyor."
+          }
         }
       }
     },
@@ -15123,6 +15267,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lunar não está instalado ou não está acessível"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lunar yüklenmemiş ya da ona ulaşılamıyor"
           }
         }
       }
@@ -17608,6 +17758,12 @@
             "state" : "translated",
             "value" : "Noturna"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gecelik"
+          }
         }
       }
     },
@@ -17708,6 +17864,12 @@
             "state" : "translated",
             "value" : "Nenhum aplicativo selecionado"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiçbir uygulama seçilmedi"
+          }
         }
       }
     },
@@ -17724,6 +17886,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sem câmera"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera Yok"
           }
         }
       }
@@ -18503,6 +18671,12 @@
             "state" : "translated",
             "value" : "Entalhe"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Çentik"
+          }
         }
       }
     },
@@ -18606,6 +18780,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Entalhe chrome"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Çentik çerçevesi"
           }
         }
       }
@@ -19092,6 +19272,12 @@
             "state" : "translated",
             "value" : "Somente Apple displays são suportadas. Em configurações de multi-exibição, o OSD de brilho aparece na tela ativa se suportado ou em outra tela suportada."
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yalnızca Apple ekranları desteklenir. Birden fazla ekranlı kurulumlarda parlaklık OSD'si, destekleniyorsa etkin ekranda, desteklenmiyorsa desteklenen başka bir ekranda görünür."
+          }
         }
       }
     },
@@ -19108,6 +19294,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Apenas apps selecionados são espelhados. Adicione aplicativos do seu Mac; nenhuma lista de aplicativos predefinidos é usada."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yalnızca seçilen uygulamaların bildirimleri yansıtılır. Mac'inizdeki uygulamaları ekleyin. Hazır bir uygulama listesi kullanılmaz."
           }
         }
       }
@@ -19244,6 +19436,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abrir um relatório de erro com a sua versão preenchida automaticamente"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sürüm bilgisi otomatik olarak doldurulmuş bir hata raporu açın"
           }
         }
       }
@@ -20123,6 +20321,12 @@
             "state" : "translated",
             "value" : "Abre %@"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@’de Aç"
+          }
         }
       }
     },
@@ -20473,6 +20677,12 @@
             "state" : "translated",
             "value" : "Pausado"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duraklatıldı"
+          }
         }
       }
     },
@@ -20690,6 +20900,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aparência do Player"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oynatıcı Görünümü"
           }
         }
       }
@@ -23001,6 +23217,12 @@
             "state" : "translated",
             "value" : "Reportar um erro"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bir Hata bildir"
+          }
         }
       }
     },
@@ -23017,6 +23239,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Requer %@. Somente banners visíveis são espelhados."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ izni gerekir. Yalnızca görünen afişler yansıtılır."
           }
         }
       }
@@ -25227,6 +25455,12 @@
             "state" : "translated",
             "value" : "Mostrar próxima notificação na fila"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sıradaki bildirimi göster"
+          }
         }
       }
     },
@@ -26156,6 +26390,12 @@
             "state" : "translated",
             "value" : "Mostrar tempo restante ao invés da duração"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Süre yerine kalan zamanı göster"
+          }
         }
       }
     },
@@ -26533,6 +26773,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dimensionamento"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Boyutlandırma"
           }
         }
       }
@@ -27300,6 +27546,12 @@
             "state" : "translated",
             "value" : "Estável"
           }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sabit"
+          }
         }
       }
     },
@@ -27316,6 +27568,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Estável e Beta vem dos lançamentos oficiais."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kararlı ve Beta sürümleri resmi yayınlardan gelir."
           }
         }
       }
@@ -28827,6 +29085,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Canal de atualização"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Güncelleme kanalı"
           }
         }
       }
@@ -30603,6 +30867,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Janela"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pencere"
           }
         }
       }
