@@ -86,14 +86,14 @@ final class FleetMapModelTests: XCTestCase {
 
     // MARK: - 1. Cold start: both feeds nil
 
-    /// Rule: with no fleet and no activity, the map is the fixed five-node layout
-    /// [frank, dali, cloud, nova, macbook] plus the `case` origin — every node and the
+    /// Rule: with no fleet and no activity, the map is the fixed four-node layout
+    /// [frank, dali, nova, macbook] plus the `case` origin — every node and the
     /// origin offline, nothing busy, zero active, nothing sent out.
     func testNilFleetAndActivityProduceFiveOfflineNodesAndEmptyModel() {
         let model = FleetMapBuilder.build(fleet: nil, activity: nil)
 
-        XCTAssertEqual(model.nodes.map(\.id), ["frank", "dali", "cloud", "nova", "macbook"])
-        XCTAssertEqual(model.nodes.map(\.label), ["frank", "dali", "cloud", "nova", "MacBook"])
+        XCTAssertEqual(model.nodes.map(\.id), ["frank", "dali", "nova", "macbook"])
+        XCTAssertEqual(model.nodes.map(\.label), ["frank", "dali", "nova", "MacBook"])
         XCTAssertEqual(model.origin.id, "case")
         XCTAssertEqual(model.origin.label, "case")
         XCTAssertTrue(model.nodes.allSatisfy { $0.state == .offline })
@@ -196,12 +196,12 @@ final class FleetMapModelTests: XCTestCase {
         XCTAssertEqual(model.activeCount, 0)
     }
 
-    // MARK: - 4. Origin (case) excluded from activeCount
+    // MARK: - 4. Origin (case) counted once in activeCount for its own jobs
 
     /// Rule: origin-local jobs (items on the case device feed with `device == "case"`)
-    /// make the origin working and busy, yet every machine/cloud/nova node stays idle,
-    /// so activeCount must remain 0 — a busy origin is never counted as active.
-    func testBusyOriginIsNeverCountedInActiveCount() {
+    /// make the origin working and busy while every other node stays idle. With no
+    /// separate cloud node, a busy origin counts once, so activeCount is 1.
+    func testBusyOriginCountsOnceInActiveCount() {
         guard let fleet = decodedFleet(onlineFleetJSON()),
               let activity = decodedActivity(activityJSON([
                   deviceJSON("case", busy: true, items: [
@@ -217,8 +217,8 @@ final class FleetMapModelTests: XCTestCase {
         XCTAssertEqual(model.origin.jobs.count, 2)
         XCTAssertTrue(model.nodes.allSatisfy { !$0.busy })
         XCTAssertTrue(model.nodes.allSatisfy { $0.state == .idle })
-        XCTAssertEqual(model.activeCount, 0)
-        XCTAssertFalse(model.isBusy)
+        XCTAssertEqual(model.activeCount, 1)
+        XCTAssertTrue(model.isBusy)
         XCTAssertEqual(model.sentOut, 0)
     }
 
@@ -245,14 +245,12 @@ final class FleetMapModelTests: XCTestCase {
               ])) else { return }
 
         let model = FleetMapBuilder.build(fleet: fleet, activity: activity)
-        guard let cloud = mapNode(model, "cloud"), let nova = mapNode(model, "nova"),
+        XCTAssertNil(model.nodes.first { $0.id == "cloud" }, "no cloud node")
+        guard let nova = mapNode(model, "nova"),
               let frank = mapNode(model, "frank"), let dali = mapNode(model, "dali") else { return }
 
-        // device == "cloud" with a qwencloud model -> cloud node only.
-        XCTAssertTrue(cloud.busy)
-        XCTAssertEqual(cloud.state, .working)
-        XCTAssertEqual(cloud.jobs.map(\.label), ["qwen-job"])
-        XCTAssertEqual(cloud.dots, 1)
+        // device == "cloud" with a qwencloud model -> stays on the case origin only.
+        XCTAssertFalse(nova.jobs.map(\.label).contains("qwen-job"))
         // device == "cloud" with an openrouter model -> nova node only.
         XCTAssertTrue(nova.busy)
         XCTAssertEqual(nova.state, .working)
