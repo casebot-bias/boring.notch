@@ -182,6 +182,10 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .onAppear {
+                        fleetStore.start()
+                        fleetStore.setNotchOpen(vm.notchState == .open)
+                    }
                     .onChange(of: vm.notchState) { _, newState in
                         fleetStore.setNotchOpen(newState == .open)
                     }
