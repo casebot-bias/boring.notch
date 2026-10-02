@@ -22,7 +22,9 @@ struct MusicPlayerView: View {
             MusicControlsView(
                 albumArt: AnyView(
                     AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace)
-                        .frame(width: 64, height: 64)
+                        .frame(maxWidth: fleetCoverMaxSide, maxHeight: fleetCoverMaxSide)
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
                 )
             )
         } else {
@@ -133,10 +135,9 @@ struct MusicControlsView: View {
     var body: some View {
         VStack(alignment: .leading) {
             if let albumArt {
+                albumArt
                 songInfoAndSlider
                     .frame(height: 64)
-                albumArt
-                    .frame(maxWidth: .infinity)
                 Spacer(minLength: 0)
             } else {
                 songInfoAndSlider

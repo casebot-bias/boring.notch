@@ -14,7 +14,9 @@ let batterySneakSize: CGSize = .init(width: 160, height: 1)
 
 let shadowPadding: CGFloat = 20
 let fleetSectionWidth: CGFloat = 640
-let fleetMusicWidth: CGFloat = 380
+let fleetMusicWidth: CGFloat = 220
+/// Hard cap for the cover in the compact column, whatever the art size or shape.
+let fleetCoverMaxSide: CGFloat = 200
 let fleetMapScale: CGFloat = 1.45
 let fleetSectionSpacing: CGFloat = 15
 let fleetSectionHeight: CGFloat = 416
