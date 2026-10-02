@@ -38,8 +38,13 @@ struct FleetMapModel {
     var origin: FleetMapNode
     var sentOut: Int
 
-    /// Busy node count; origin is intentionally excluded (matches the design's "2 active" readout).
-    var activeCount: Int { nodes.filter(\.busy).count }
+    /// Busy node count, plus the case origin when it runs jobs of its own (cloud-model
+    /// runs not sent out to frank/dali/nova), since there is no separate cloud node.
+    var activeCount: Int {
+        let delegated = sentOut + (nodes.first { $0.id == "nova" }?.jobs.count ?? 0)
+        let originLocal = origin.jobs.count > delegated ? 1 : 0
+        return nodes.filter(\.busy).count + originLocal
+    }
     var isBusy: Bool { activeCount > 0 }
 }
 
@@ -102,24 +107,11 @@ enum FleetMapBuilder {
             jobs: toJobs(daliItems)
         )
 
-        // Cloud jobs run on case but land on "cloud"; openrouter models go to "nova".
-        let cloudItems = caseItems.filter {
-            $0.device == "cloud" && cloudProvider($0.model) != "openrouter"
-        }
+        // case hosts no model, so qwencloud runs stay on the case origin (no
+        // separate cloud node, matching the dashboard). openrouter runs go to "nova".
         let novaItems = caseItems.filter {
             $0.device == "cloud" && cloudProvider($0.model) == "openrouter"
         }
-
-        let cloudBusy = !cloudItems.isEmpty
-        let cloud = FleetMapNode(
-            id: "cloud",
-            label: "cloud",
-            // Not backed by a machine: only unreachable when the whole fleet feed is down.
-            state: fleet == nil ? .offline : (cloudBusy ? .working : .idle),
-            busy: cloudBusy,
-            dots: dotCount(itemsCount: cloudItems.count, slotsUsed: 0, busy: cloudBusy),
-            jobs: toJobs(cloudItems)
-        )
 
         let novaBusy = !novaItems.isEmpty
         let nova = FleetMapNode(
@@ -152,7 +144,7 @@ enum FleetMapBuilder {
 
         let sentOut = caseItems.filter { $0.device == "frank" || $0.device == "dali" }.count
 
-        return FleetMapModel(nodes: [frank, dali, cloud, nova, macbook], origin: origin, sentOut: sentOut)
+        return FleetMapModel(nodes: [frank, dali, nova, macbook], origin: origin, sentOut: sentOut)
     }
 
     // MARK: - Helpers
