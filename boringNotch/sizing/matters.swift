@@ -13,15 +13,17 @@ let downloadSneakSize: CGSize = .init(width: 65, height: 1)
 let batterySneakSize: CGSize = .init(width: 160, height: 1)
 
 let shadowPadding: CGFloat = 20
-let fleetSectionWidth: CGFloat = 460
+let fleetSectionWidth: CGFloat = 640
+let fleetMusicWidth: CGFloat = 380
+let fleetMapScale: CGFloat = 1.45
 let fleetSectionSpacing: CGFloat = 15
-let fleetSectionHeight: CGFloat = 366
+let fleetSectionHeight: CGFloat = 416
 private let baseOpenNotchSize: CGSize = .init(width: 640, height: 190)
 
 var openNotchSize: CGSize {
     guard Defaults[.showFleet] else { return baseOpenNotchSize }
     return .init(
-        width: baseOpenNotchSize.width + fleetSectionSpacing + 1 + fleetSectionWidth,
+        width: fleetMusicWidth + 40 + fleetSectionSpacing + 1 + fleetSectionWidth,
         height: max(baseOpenNotchSize.height, fleetSectionHeight)
     )
 }

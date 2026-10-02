@@ -23,6 +23,12 @@ struct FleetSectionView: View {
 
                 if store.fleet != nil || store.activity != nil {
                     FleetMapView(model: store.mapModel)
+                        .scaleEffect(fleetMapScale, anchor: .topLeading)
+                        .frame(
+                            width: 440 * fleetMapScale,
+                            height: 110 * fleetMapScale,
+                            alignment: .topLeading
+                        )
                     FleetMachineCardsView(machines: store.fleet?.machines ?? [], activity: store.activity)
                     FleetWorkRowsView(items: workItems)
                 } else {

@@ -442,6 +442,7 @@ struct NotchHomeView: View {
     private var mainContent: some View {
         HStack(alignment: .top, spacing: (shouldShowCamera && Defaults[.showCalendar]) ? 10 : 15) {
             MusicPlayerView(albumArtNamespace: albumArtNamespace)
+                .frame(maxWidth: Defaults[.showFleet] ? fleetMusicWidth : .infinity)
 
             if Defaults[.showCalendar] {
                 CalendarView()
