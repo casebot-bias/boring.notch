@@ -147,6 +147,8 @@ struct GeneralSettings: View {
     @Default(.automaticallySwitchDisplay) var automaticallySwitchDisplay
     @Default(.enableGestures) var enableGestures
     @Default(.openNotchOnHover) var openNotchOnHover
+    @Default(.showFleet) var showFleet
+    @Default(.fleetBaseURL) var fleetBaseURL
     
 
     var body: some View {
@@ -190,6 +192,26 @@ struct GeneralSettings: View {
                     .disabled(showOnAllDisplays)
             } header: {
                 Text("System features")
+            }
+
+            Section {
+                Defaults.Toggle(key: .showFleet) {
+                    Text("Show Fleet")
+                }
+                .onChange(of: showFleet) {
+                    FleetStore.shared.settingsDidChange()
+                }
+                TextField(
+                    "Base URL",
+                    text: $fleetBaseURL
+                )
+                .textFieldStyle(.roundedBorder)
+                .disabled(!showFleet)
+                Text("Polls /api/fleet every 5 s and /api/activity every 2 s while the notch is open.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Fleet")
             }
 
             Section {

@@ -21,6 +21,8 @@ struct BoringHeader: View {
                 } else if vm.notchState == .open {
                     EmptyView()
                 }
+                Spacer(minLength: 8)
+                FleetUpdatedLabel()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .opacity(vm.notchState == .closed ? 0 : 1)
