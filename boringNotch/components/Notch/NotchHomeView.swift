@@ -17,9 +17,19 @@ struct MusicPlayerView: View {
     let albumArtNamespace: Namespace.ID
 
     var body: some View {
-        HStack {
-            AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace).padding(.all, 5)
-            MusicControlsView().drawingGroup().compositingGroup()
+        if Defaults[.showFleet] {
+            // Compact column next to Fleet: small art sits above the controls.
+            MusicControlsView(
+                albumArt: AnyView(
+                    AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace)
+                        .frame(width: 64, height: 64)
+                )
+            )
+        } else {
+            HStack {
+                AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace).padding(.all, 5)
+                MusicControlsView().drawingGroup().compositingGroup()
+            }
         }
     }
 }
@@ -118,10 +128,19 @@ struct MusicControlsView: View {
     @State private var lastDragged: Date = .distantPast
     @Default(.musicControlSlots) private var slotConfig
     @Default(.musicControlSlotLimit) private var slotLimit
+    var albumArt: AnyView? = nil
 
     var body: some View {
         VStack(alignment: .leading) {
-            songInfoAndSlider
+            if let albumArt {
+                songInfoAndSlider
+                    .frame(height: 64)
+                albumArt
+                    .frame(maxWidth: .infinity)
+                Spacer(minLength: 0)
+            } else {
+                songInfoAndSlider
+            }
             slotToolbar
         }
         .buttonStyle(PlainButtonStyle())
