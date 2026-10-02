@@ -17,9 +17,21 @@ struct MusicPlayerView: View {
     let albumArtNamespace: Namespace.ID
 
     var body: some View {
-        HStack {
-            AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace).padding(.all, 5)
-            MusicControlsView().drawingGroup().compositingGroup()
+        if Defaults[.showFleet] {
+            // Compact column next to Fleet: small art sits above the controls.
+            MusicControlsView(
+                albumArt: AnyView(
+                    AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace)
+                        .frame(maxWidth: fleetCoverMaxSide, maxHeight: fleetCoverMaxSide)
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                )
+            )
+        } else {
+            HStack {
+                AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace).padding(.all, 5)
+                MusicControlsView().drawingGroup().compositingGroup()
+            }
         }
     }
 }
@@ -118,10 +130,18 @@ struct MusicControlsView: View {
     @State private var lastDragged: Date = .distantPast
     @Default(.musicControlSlots) private var slotConfig
     @Default(.musicControlSlotLimit) private var slotLimit
+    var albumArt: AnyView? = nil
 
     var body: some View {
         VStack(alignment: .leading) {
-            songInfoAndSlider
+            if let albumArt {
+                albumArt
+                songInfoAndSlider
+                    .frame(height: 64)
+                Spacer(minLength: 0)
+            } else {
+                songInfoAndSlider
+            }
             slotToolbar
         }
         .buttonStyle(PlainButtonStyle())
@@ -442,6 +462,7 @@ struct NotchHomeView: View {
     private var mainContent: some View {
         HStack(alignment: .top, spacing: (shouldShowCamera && Defaults[.showCalendar]) ? 10 : 15) {
             MusicPlayerView(albumArtNamespace: albumArtNamespace)
+                .frame(maxWidth: Defaults[.showFleet] ? fleetMusicWidth : .infinity)
 
             if Defaults[.showCalendar] {
                 CalendarView()
