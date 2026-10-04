@@ -3,7 +3,8 @@
 //  boringNotch
 //
 //  Fixed 440 x 110 fleet topology canvas ported from the SVG in notch-design.html:
-//  origin `case` at (220,55) r16 joined by cubic curves to frank/claire/dali/nova/MacBook.
+//  origin `case` at (220,55) r16 joined by cubic curves to frank/claire (right), dali/nova (left)
+//  and a straight link down to MacBook.
 //  Busy nodes pulse a sage ring and their link runs as an animated dashed flow.
 //
 
@@ -30,43 +31,42 @@ private enum FleetMapLayout {
 
     static let origin = FleetNodeGeometry(
         center: CGPoint(x: 220, y: 55), radius: 16,
-        labelCenter: CGPoint(x: 220, y: 84), labelWidth: 120, labelAlignment: .center,
+        labelCenter: CGPoint(x: 220, y: 26), labelWidth: 120, labelAlignment: .center,
         curveControls: nil
     )
 
-    // Curves are the design's `d` attributes verbatim:
-    //   frank   "M220 55 C170 55 150 30 100 30",   label <text x="75"  y="33" text-anchor="end">
-    //   claire  "M220 55 C170 55 150 59 100 59",   frank's twin, between frank and nova (not in the design)
-    //   dali    "M220 55 C270 55 290 30 340 30",    label <text x="358" y="33">
-    //   nova    "M220 55 C170 55 150 88 110 88",    label <text x="85"  y="91" text-anchor="end">
-    //   macbook "M220 55 C270 55 290 88 330 88",    label <text x="348" y="91">
+    // Layout: the Sparks (frank, claire) on the right, dali + nova on the left,
+    // MacBook straight below case. case label sits above case to make room.
+    //   frank   "M220 55 C270 55 290 30 340 30"    claire "M220 55 C270 55 290 80 340 80"
+    //   dali    "M220 55 C170 55 150 30 100 30"    nova   "M220 55 C170 55 150 80 100 80"
+    //   macbook straight "M220 55 L220 96", label right of the node
     // `position` centers views, so an end/start anchor becomes an aligned box whose edge sits
-    // on the design's text x; label centers below encode that (edge = labelCenter.x ∓ width/2).
+    // on the text x; label centers below encode that (edge = labelCenter.x ∓ width/2).
     static let nodes: [String: FleetNodeGeometry] = [
         "frank": FleetNodeGeometry(
-            center: CGPoint(x: 100, y: 30), radius: 11,
-            labelCenter: CGPoint(x: 40, y: 30), labelWidth: 70, labelAlignment: .trailing,
-            curveControls: [CGPoint(x: 170, y: 55), CGPoint(x: 150, y: 30)]
-        ),
-        "claire": FleetNodeGeometry(
-            center: CGPoint(x: 100, y: 59), radius: 11,
-            labelCenter: CGPoint(x: 40, y: 59), labelWidth: 70, labelAlignment: .trailing,
-            curveControls: [CGPoint(x: 170, y: 55), CGPoint(x: 150, y: 59)]
-        ),
-        "dali": FleetNodeGeometry(
             center: CGPoint(x: 340, y: 30), radius: 11,
-            labelCenter: CGPoint(x: 383, y: 30), labelWidth: 50, labelAlignment: .leading,
+            labelCenter: CGPoint(x: 393, y: 30), labelWidth: 70, labelAlignment: .leading,
             curveControls: [CGPoint(x: 270, y: 55), CGPoint(x: 290, y: 30)]
         ),
+        "claire": FleetNodeGeometry(
+            center: CGPoint(x: 340, y: 80), radius: 11,
+            labelCenter: CGPoint(x: 393, y: 80), labelWidth: 70, labelAlignment: .leading,
+            curveControls: [CGPoint(x: 270, y: 55), CGPoint(x: 290, y: 80)]
+        ),
+        "dali": FleetNodeGeometry(
+            center: CGPoint(x: 100, y: 30), radius: 11,
+            labelCenter: CGPoint(x: 47, y: 30), labelWidth: 70, labelAlignment: .trailing,
+            curveControls: [CGPoint(x: 170, y: 55), CGPoint(x: 150, y: 30)]
+        ),
         "nova": FleetNodeGeometry(
-            center: CGPoint(x: 110, y: 88), radius: 11,
-            labelCenter: CGPoint(x: 45, y: 88), labelWidth: 80, labelAlignment: .trailing,
-            curveControls: [CGPoint(x: 170, y: 55), CGPoint(x: 150, y: 88)]
+            center: CGPoint(x: 100, y: 80), radius: 11,
+            labelCenter: CGPoint(x: 47, y: 80), labelWidth: 70, labelAlignment: .trailing,
+            curveControls: [CGPoint(x: 170, y: 55), CGPoint(x: 150, y: 80)]
         ),
         "macbook": FleetNodeGeometry(
-            center: CGPoint(x: 330, y: 88), radius: 11,
-            labelCenter: CGPoint(x: 383, y: 88), labelWidth: 70, labelAlignment: .leading,
-            curveControls: [CGPoint(x: 270, y: 55), CGPoint(x: 290, y: 88)]
+            center: CGPoint(x: 220, y: 96), radius: 11,
+            labelCenter: CGPoint(x: 275, y: 96), labelWidth: 70, labelAlignment: .leading,
+            curveControls: nil
         ),
     ]
 }
