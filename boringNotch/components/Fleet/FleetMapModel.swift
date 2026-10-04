@@ -39,7 +39,7 @@ struct FleetMapModel {
     var sentOut: Int
 
     /// Busy node count, plus the case origin when it runs jobs of its own (cloud-model
-    /// runs not sent out to frank/dali/nova), since there is no separate cloud node.
+    /// runs not sent out to frank/claire/dali/nova), since there is no separate cloud node.
     var activeCount: Int {
         let delegated = sentOut + (nodes.first { $0.id == "nova" }?.jobs.count ?? 0)
         let originLocal = origin.jobs.count > delegated ? 1 : 0
@@ -68,25 +68,30 @@ enum FleetMapBuilder {
 
     static func build(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetMapModel {
         let frankDevice = device(in: activity, named: "frank")
+        let claireDevice = device(in: activity, named: "claire")
         let daliDevice = device(in: activity, named: "dali")
         let caseDevice = device(in: activity, named: "case")
 
         let frankMachine = machine(in: fleet, id: "frank")
+        let claireMachine = machine(in: fleet, id: "claire")
         let daliMachine = machine(in: fleet, id: "dali")
         let macbookMachine = machine(in: fleet, id: "macbook")
         let caseMachine = machine(in: fleet, id: "case")
 
         let frankItems = frankDevice?.items ?? []
+        let claireItems = claireDevice?.items ?? []
         let daliItems = daliDevice?.items ?? []
         let caseItems = caseDevice?.items ?? []
 
         let frankBusy = isBusy(items: frankItems, device: frankDevice)
+        let claireBusy = isBusy(items: claireItems, device: claireDevice)
         let daliBusy = isBusy(items: daliItems, device: daliDevice)
 
         // A missing device or `slots` falls back to the device's default layout
-        // (frank 4 slots, dali 3 slots); defaults report zero used, so dots
+        // (frank/claire 4 slots, dali 3 slots); defaults report zero used, so dots
         // collapse onto the item-count / busy fallback below.
         let frankSlotsUsed = frankDevice?.slots?.used ?? 0
+        let claireSlotsUsed = claireDevice?.slots?.used ?? 0
         let daliSlotsUsed = daliDevice?.slots?.used ?? 0
 
         let frank = FleetMapNode(
@@ -96,6 +101,15 @@ enum FleetMapBuilder {
             busy: frankBusy,
             dots: dotCount(itemsCount: frankItems.count, slotsUsed: frankSlotsUsed, busy: frankBusy),
             jobs: toJobs(frankItems)
+        )
+
+        let claire = FleetMapNode(
+            id: "claire",
+            label: "claire",
+            state: machineState(claireMachine, busy: claireBusy),
+            busy: claireBusy,
+            dots: dotCount(itemsCount: claireItems.count, slotsUsed: claireSlotsUsed, busy: claireBusy),
+            jobs: toJobs(claireItems)
         )
 
         let dali = FleetMapNode(
@@ -142,9 +156,9 @@ enum FleetMapBuilder {
             jobs: toJobs(caseItems)
         )
 
-        let sentOut = caseItems.filter { $0.device == "frank" || $0.device == "dali" }.count
+        let sentOut = caseItems.filter { ["frank", "claire", "dali"].contains($0.device) }.count
 
-        return FleetMapModel(nodes: [frank, dali, nova, macbook], origin: origin, sentOut: sentOut)
+        return FleetMapModel(nodes: [frank, claire, dali, nova, macbook], origin: origin, sentOut: sentOut)
     }
 
     // MARK: - Helpers
