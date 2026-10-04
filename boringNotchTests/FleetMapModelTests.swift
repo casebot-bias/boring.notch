@@ -81,19 +81,19 @@ final class FleetMapModelTests: XCTestCase {
 
     /// Fleet snapshot with all four machines reporting `state == "online"`.
     private func onlineFleetJSON() -> String {
-        return fleetJSON([machineJSON("case"), machineJSON("frank"), machineJSON("dali"), machineJSON("macbook")])
+        return fleetJSON([machineJSON("case"), machineJSON("frank"), machineJSON("claire"), machineJSON("dali"), machineJSON("macbook")])
     }
 
     // MARK: - 1. Cold start: both feeds nil
 
-    /// Rule: with no fleet and no activity, the map is the fixed four-node layout
-    /// [frank, dali, nova, macbook] plus the `case` origin — every node and the
+    /// Rule: with no fleet and no activity, the map is the fixed five-node layout
+    /// [frank, claire, dali, nova, macbook] plus the `case` origin — every node and the
     /// origin offline, nothing busy, zero active, nothing sent out.
     func testNilFleetAndActivityProduceFiveOfflineNodesAndEmptyModel() {
         let model = FleetMapBuilder.build(fleet: nil, activity: nil)
 
-        XCTAssertEqual(model.nodes.map(\.id), ["frank", "dali", "nova", "macbook"])
-        XCTAssertEqual(model.nodes.map(\.label), ["frank", "dali", "nova", "MacBook"])
+        XCTAssertEqual(model.nodes.map(\.id), ["frank", "claire", "dali", "nova", "macbook"])
+        XCTAssertEqual(model.nodes.map(\.label), ["frank", "claire", "dali", "nova", "MacBook"])
         XCTAssertEqual(model.origin.id, "case")
         XCTAssertEqual(model.origin.label, "case")
         XCTAssertTrue(model.nodes.allSatisfy { $0.state == .offline })
@@ -102,6 +102,31 @@ final class FleetMapModelTests: XCTestCase {
         XCTAssertEqual(model.activeCount, 0)
         XCTAssertFalse(model.isBusy)
         XCTAssertEqual(model.sentOut, 0)
+    }
+
+    // MARK: - 1b. Claire (frank's twin) is a first-class node
+
+    /// Rule: a busy claire device drives its own node, and case items routed to
+    /// claire count as sent out, exactly like frank.
+    func testClaireBusyDrivesNodeAndCountsAsSentOut() {
+        guard let fleet = decodedFleet(onlineFleetJSON()),
+              let activity = decodedActivity(activityJSON([
+                  deviceJSON("claire", busy: true, items: [
+                      itemJSON("claire-a", device: "claire", since: "2026-10-02T06:00:00.000Z")
+                  ]),
+                  deviceJSON("case", busy: true, items: [
+                      itemJSON("to-claire", device: "claire", since: "2026-10-02T06:00:00.000Z")
+                  ])
+              ])) else { return }
+
+        let model = FleetMapBuilder.build(fleet: fleet, activity: activity)
+        guard let claire = mapNode(model, "claire") else { return }
+
+        XCTAssertEqual(claire.state, .working)
+        XCTAssertTrue(claire.busy)
+        XCTAssertEqual(claire.dots, 1)
+        XCTAssertEqual(model.sentOut, 1)
+        XCTAssertEqual(model.activeCount, 1)
     }
 
     // MARK: - 2. Frank busy from the activity feed only
