@@ -13,6 +13,8 @@ import SwiftUI
 struct FleetClosedIndicator: View {
     @EnvironmentObject private var vm: BoringViewModel
     @ObservedObject private var store = FleetStore.shared
+    @Default(.fleetSkin) private var fleetSkin
+    private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulsing = false
 
@@ -27,7 +29,7 @@ struct FleetClosedIndicator: View {
                 HStack(spacing: 4) {
                     ForEach(store.orbitModel.lanes) { lane in
                         Circle()
-                            .fill(lane.state == .busy ? FleetPalette.sage : FleetPalette.off)
+                            .fill(lane.state == .busy ? theme.accent : theme.off)
                             .frame(width: 5, height: 5)
                             .opacity(pulsing && lane.state == .busy ? 0.35 : 1)
                     }
@@ -60,7 +62,7 @@ struct FleetClosedIndicator: View {
                 // Active count label
                 Text("\(store.activeCount) active")
                     .font(.system(size: 10))
-                    .foregroundColor(FleetPalette.muted)
+                    .foregroundColor(theme.muted)
             }
             .frame(height: vm.effectiveClosedNotchHeight)
         } else {
@@ -79,14 +81,15 @@ struct FleetClosedIndicator: View {
 
 struct FleetUpdatedLabel: View {
     @ObservedObject private var store = FleetStore.shared
-
+    @Default(.fleetSkin) private var fleetSkin
+    private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
     @ViewBuilder
     var body: some View {
         if Defaults[.showFleet], store.isReachable, let lastUpdated = store.lastUpdated {
             let age = max(0, Int(Date().timeIntervalSince(lastUpdated)))
             Text("updated \(age)s ago")
                 .font(.system(size: 11))
-                .foregroundColor(Color(red: 0x8A / 255, green: 0x8A / 255, blue: 0x80 / 255))
+                .foregroundColor(theme.muted)
                 .monospacedDigit()
         }
     }

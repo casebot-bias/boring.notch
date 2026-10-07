@@ -6,11 +6,14 @@
 //
 
 import SwiftUI
+import Defaults
 
 struct FleetOrbitView: View {
     let model: FleetOrbitModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var breathe = false
+    @Default(.fleetSkin) private var fleetSkin
+    private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
     @State private var flow = false
 
     // MARK: - Computed Spoke Paths
@@ -39,13 +42,13 @@ struct FleetOrbitView: View {
         ZStack {
             // 1. Ring
             Circle()
-                .stroke(FleetPalette.line, lineWidth: 1)
+                .stroke(theme.line, lineWidth: 1)
                 .frame(width: 116, height: 116)
 
             // 2. Spokes
             busySpokePath
                 .stroke(
-                    FleetPalette.sage,
+                    theme.accent,
                     style: StrokeStyle(
                         lineWidth: 1.5,
                         dash: [3, 4],
@@ -55,29 +58,29 @@ struct FleetOrbitView: View {
                 .frame(width: 150, height: 150)
 
             idleSpokePath
-                .stroke(FleetPalette.line, lineWidth: 1)
+                .stroke(theme.line, lineWidth: 1)
                 .frame(width: 150, height: 150)
 
             // 3. Core glow
             Circle()
-                .stroke(FleetPalette.sage.opacity(0.25), lineWidth: 2)
+                .stroke(theme.accent.opacity(0.25), lineWidth: 2)
                 .frame(width: 34, height: 34)
                 .scaleEffect(breathe && !reduceMotion ? 1.18 : 1)
                 .opacity(breathe && !reduceMotion ? 0 : 1)
 
             // 4. Core
             Circle()
-                .fill(FleetPalette.coreFill)
+                .fill(theme.coreFill)
                 .overlay(
                     Circle()
-                        .stroke(FleetPalette.sage, lineWidth: 2)
+                        .stroke(theme.accent, lineWidth: 2)
                 )
                 .frame(width: 34, height: 34)
 
             // 5. Core label
             Text("case")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundColor(FleetPalette.text)
+                .foregroundColor(theme.text)
 
             // 6. Satellites + Labels
             ForEach(Array(model.nodes.enumerated()), id: \.element.id) { index, lane in
@@ -107,8 +110,8 @@ struct FleetOrbitView: View {
         let busy = lane.busy
         let offline = lane.state == .offline
 
-        let fill: Color = busy ? FleetPalette.busyFill : (offline ? FleetPalette.offFill : FleetPalette.satFill)
-        let stroke: Color = busy ? FleetPalette.sage : (offline ? FleetPalette.offStroke : FleetPalette.off)
+        let fill: Color = busy ? theme.busyFill : (offline ? theme.offFill : theme.satFill)
+        let stroke: Color = busy ? theme.accent : (offline ? theme.offStroke : theme.off)
         let d: CGFloat = busy ? 14 : 12
 
         ZStack {
@@ -133,7 +136,7 @@ struct FleetOrbitView: View {
             // Label
             Text(lane.label)
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(lane.state == .busy ? FleetPalette.sage : FleetPalette.muted)
+                .foregroundColor(lane.state == .busy ? theme.accent : theme.muted)
                 .fixedSize()
                 .position(labelPos)
         }

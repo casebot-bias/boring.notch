@@ -141,6 +141,10 @@
 		B18654392C6F4990000B926A /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = B18654382C6F4990000B926A /* KeyboardShortcuts */; };
 		B186543C2C6F49AE000B926A /* ShortcutConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B186543B2C6F49AE000B926A /* ShortcutConstants.swift */; };
 		B19016222CC15B3D00E3F12E /* Defaults in Frameworks */ = {isa = PBXBuildFile; productRef = B19016212CC15B3D00E3F12E /* Defaults */; };
+		F7E0A1000000000000000007 /* Defaults in Frameworks */ = {isa = PBXBuildFile; productRef = F7E0A1000000000000000006 /* Defaults */; };
+		F7E0A1000000000000000002 /* FleetTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000001 /* FleetTheme.swift */; };
+		F7E0A1000000000000000003 /* FleetTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000001 /* FleetTheme.swift */; };
+		F7E0A1000000000000000005 /* FleetThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000004 /* FleetThemeTests.swift */; };
 		B19016242CC15B5000E3F12E /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B19016232CC15B4D00E3F12E /* Constants.swift */; };
 		B19424092CD0FF01003E5DC2 /* LottieAnimationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B19424082CD0FEFE003E5DC2 /* LottieAnimationView.swift */; };
 		B1A78C822C8BA08100BD51B0 /* FullscreenMediaDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A78C812C8BA08100BD51B0 /* FullscreenMediaDetection.swift */; };
@@ -342,9 +346,11 @@
 		CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetSectionView.swift; path = Fleet/FleetSectionView.swift; sourceTree = "<group>"; };
 		D1E3C7F860A060EDE8E06363 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DD4809E4B9876FEE672F1C96 /* FleetOrbitModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetOrbitModelTests.swift; path = boringNotchTests/FleetOrbitModelTests.swift; sourceTree = "<group>"; };
+		F7E0A1000000000000000004 /* FleetThemeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetThemeTests.swift; path = boringNotchTests/FleetThemeTests.swift; sourceTree = "<group>"; };
 		E0C96069DB9618E6644F69A3 /* FleetOrbitView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetOrbitView.swift; path = Fleet/FleetOrbitView.swift; sourceTree = "<group>"; };
 		F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryActivityManager.swift; sourceTree = "<group>"; };
 		FD3E45FB207CA856A28D20FF /* FleetFormat.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetFormat.swift; path = Fleet/FleetFormat.swift; sourceTree = "<group>"; };
+		F7E0A1000000000000000001 /* FleetTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetTheme.swift; path = Fleet/FleetTheme.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -416,6 +422,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				592C97DC89A1C2AADB9081F3 /* Cocoa.framework in Frameworks */,
+				F7E0A1000000000000000007 /* Defaults in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -713,6 +720,7 @@
 				8273CC303EF7BBAF5F641041 /* FleetDecodingTests.swift */,
 				A4F34CD9024D21FD870F3AD0 /* FleetFormatTests.swift */,
 				DD4809E4B9876FEE672F1C96 /* FleetOrbitModelTests.swift */,
+				F7E0A1000000000000000004 /* FleetThemeTests.swift */,
 				C013CA219D7597EB6A9F2104 /* Fixtures */,
 			);
 			name = boringNotchTests;
@@ -743,6 +751,7 @@
 			children = (
 				5104882A2AF59662ADF23254 /* FleetModels.swift */,
 				FD3E45FB207CA856A28D20FF /* FleetFormat.swift */,
+				F7E0A1000000000000000001 /* FleetTheme.swift */,
 				86ABA45CAEBA9FC4D2E8CF00 /* FleetOrbitModel.swift */,
 				19AB008892470D0C770D6C4A /* FleetClient.swift */,
 				51B263B9B9718A79CB57973D /* FleetStore.swift */,
@@ -944,6 +953,9 @@
 			dependencies = (
 			);
 			name = boringNotchTests;
+			packageProductDependencies = (
+				F7E0A1000000000000000006 /* Defaults */,
+			);
 			productName = boringNotchTests;
 			productReference = 34D5B32FB0523DD750BA1CF7 /* boringNotchTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -1039,6 +1051,8 @@
 			files = (
 				ECAFCF11E67C413CA9E34329 /* FleetModels.swift in Sources */,
 				37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */,
+				F7E0A1000000000000000003 /* FleetTheme.swift in Sources */,
+				F7E0A1000000000000000005 /* FleetThemeTests.swift in Sources */,
 				5E7E8A1FCBA76A6EE9F3284E /* FleetOrbitModel.swift in Sources */,
 				B3392077C15FAF55C7DD3094 /* FleetDecodingTests.swift in Sources */,
 				5411D456ED82369EDE9D5BB1 /* FleetFormatTests.swift in Sources */,
@@ -1174,6 +1188,7 @@
 				B1F0A0022E60000100000001 /* BrightnessManager.swift in Sources */,
 				32255A267D8C447B0440C85E /* FleetModels.swift in Sources */,
 				9902B4AC044E0C08108A4AC6 /* FleetFormat.swift in Sources */,
+				F7E0A1000000000000000002 /* FleetTheme.swift in Sources */,
 				646EABE3BD7B602CC4D6F80A /* FleetOrbitModel.swift in Sources */,
 				446035086F943DA68902F0D4 /* FleetClient.swift in Sources */,
 				FBD3015DA3435EF4D90C5BF7 /* FleetStore.swift in Sources */,
@@ -1708,6 +1723,11 @@
 			productName = KeyboardShortcuts;
 		};
 		B19016212CC15B3D00E3F12E /* Defaults */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B19016202CC15B3D00E3F12E /* XCRemoteSwiftPackageReference "Defaults" */;
+			productName = Defaults;
+		};
+		F7E0A1000000000000000006 /* Defaults */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = B19016202CC15B3D00E3F12E /* XCRemoteSwiftPackageReference "Defaults" */;
 			productName = Defaults;

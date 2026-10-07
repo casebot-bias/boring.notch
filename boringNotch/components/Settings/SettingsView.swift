@@ -148,6 +148,7 @@ struct GeneralSettings: View {
     @Default(.enableGestures) var enableGestures
     @Default(.openNotchOnHover) var openNotchOnHover
     @Default(.showFleet) var showFleet
+    @Default(.fleetSkin) var fleetSkin
     @Default(.fleetBaseURL) var fleetBaseURL
     
 
@@ -201,6 +202,14 @@ struct GeneralSettings: View {
                 .onChange(of: showFleet) {
                     FleetStore.shared.settingsDidChange()
                 }
+                Picker("Skin", selection: $fleetSkin) {
+                    ForEach(FleetSkin.allCases) { skin in
+                        Text(skin.title).tag(skin)
+                    }
+                }
+                Text("Colours the fleet panel and the notch itself.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 TextField(
                     "Base URL",
                     text: $fleetBaseURL

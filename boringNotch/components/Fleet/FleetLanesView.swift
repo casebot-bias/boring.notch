@@ -5,9 +5,13 @@
 //  Column of lane rows (name dot + label, CPU+RAM bars, right metric).
 
 import SwiftUI
+import Defaults
 
 struct FleetLanesView: View {
     let lanes: [FleetLane]
+
+    @Default(.fleetSkin) private var fleetSkin
+    private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -31,16 +35,16 @@ struct FleetLanesView: View {
             // 1. Name column
             HStack(spacing: 6) {
                 Circle()
-                    .fill(lane.state == .busy ? FleetPalette.sage : FleetPalette.off)
+                    .fill(lane.state == .busy ? theme.accent : theme.off)
                     .frame(width: 6, height: 6)
                     .shadow(
-                        color: lane.state == .busy ? FleetPalette.sage : .clear,
+                        color: lane.state == .busy ? theme.accent : .clear,
                         radius: 3
                     )
                 Text(lane.label)
                     .font(.system(size: 12))
                     .foregroundColor(
-                        busy ? FleetPalette.text : (offline ? FleetPalette.nameOff : FleetPalette.nameText)
+                        busy ? theme.text : (offline ? theme.nameOff : theme.nameText)
                     )
                     .lineLimit(1)
             }
@@ -49,18 +53,18 @@ struct FleetLanesView: View {
             // 2. Bar column
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3).fill(FleetPalette.barTrack)
+                    RoundedRectangle(cornerRadius: 3).fill(theme.barTrack)
                     RoundedRectangle(cornerRadius: 3)
                         .fill(
                             FleetFormat.isRAMWarning(lane.ram)
-                                ? FleetPalette.hot.opacity(0.7)
-                                : FleetPalette.olive.opacity(0.55)
+                                ? theme.hot.opacity(0.7)
+                                : theme.ram.opacity(0.55)
                         )
                         .frame(
                             width: geo.size.width * CGFloat(FleetFormat.barFraction(lane.ram))
                         )
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(FleetPalette.sage)
+                        .fill(theme.accent)
                         .frame(
                             width: geo.size.width * CGFloat(FleetFormat.barFraction(lane.cpu))
                         )
@@ -73,7 +77,7 @@ struct FleetLanesView: View {
                 .font(.system(size: 11))
                 .monospacedDigit()
                 .lineLimit(1)
-                .foregroundColor(busy ? FleetPalette.sage : FleetPalette.dim)
+                .foregroundColor(busy ? theme.accent : theme.dim)
                 .frame(width: 48, alignment: .trailing)
         }
         .frame(height: 16)
