@@ -1,15 +1,14 @@
 //
-//  FleetOrbitModel.swift
+//  FleetPanelModel.swift
 //  boringNotch
 //
-//  Data model for the fleet orbit: the case origin plus six satellites on one ring
-//  (frank, claire, dali, nova, ciri, macbook), matching the approved fleet-notch-v2
-//  design. Foundation + CoreGraphics only (no SwiftUI) so it compiles into both the
-//  app target and the test target.
+//  Data model for the opened fleet panel: the case origin plus the six machines
+//  (frank, claire, dali, nova, ciri, macbook) as butterfly rows, plus the "Now" jobs.
+//  Foundation only (no SwiftUI) so it compiles into both the app target and the test
+//  target.
 //
 
 import Foundation
-import CoreGraphics
 
 /// What a lane represents; drives palette and the right-hand metric.
 enum FleetNodeKind: Equatable { case gpu, cloud, agent, mac, host }
@@ -27,7 +26,7 @@ struct FleetJob: Identifiable, Equatable {
     var id: String { key }
 }
 
-/// One orbit box: the case origin or a satellite, with its bars and jobs.
+/// One row: the case origin or a machine, with its bars and jobs.
 struct FleetLane: Identifiable, Equatable {
     var id: String
     var label: String
@@ -41,14 +40,14 @@ struct FleetLane: Identifiable, Equatable {
     var busy: Bool { state == .busy }
 }
 
-struct FleetOrbitModel: Equatable {
+struct FleetPanelModel: Equatable {
     var origin: FleetLane          // id "case"
-    var nodes: [FleetLane]         // ring order: frank, claire, dali, nova, ciri, macbook
+    var nodes: [FleetLane]         // row order: frank, claire, dali, nova, ciri, macbook
     var activeCount: Int
 
     var isBusy: Bool { activeCount > 0 }
 
-    /// case first, then the ring.
+    /// case first, then the machines.
     var lanes: [FleetLane] { [origin] + nodes }
 
     /// Jobs of the busy lanes, newest-first, deduped by key keeping the first
@@ -74,11 +73,8 @@ struct FleetOrbitModel: Equatable {
     }
 }
 
-enum FleetOrbitBuilder {
+enum FleetPanelModelBuilder {
     static let nodeIds = ["frank", "claire", "dali", "nova", "ciri", "macbook"]
-    static let orbitCanvas: CGFloat = 150
-    static let ringRadius: CGFloat = 58
-    static let orbitCenter = CGPoint(x: 75, y: 75)
 
     /// "openrouter" | "qwencloud" | "other" (nil/empty/unknown model -> "other").
     static func cloudProvider(_ model: String?) -> String {
@@ -88,7 +84,7 @@ enum FleetOrbitBuilder {
         return "other"
     }
 
-    static func build(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetOrbitModel {
+    static func build(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetPanelModel {
         // case runs its own jobs AND the delegated ones routed to frank/claire/dali.
         let origin = machineLane(id: "case", kind: .host, fleet: fleet, activity: activity)
         let nodes: [FleetLane] = [
@@ -100,7 +96,7 @@ enum FleetOrbitBuilder {
             machineLane(id: "macbook", kind: .mac, fleet: fleet, activity: activity),
         ]
         let activeCount = ([origin] + nodes).filter { $0.state == .busy }.count
-        return FleetOrbitModel(origin: origin, nodes: nodes, activeCount: activeCount)
+        return FleetPanelModel(origin: origin, nodes: nodes, activeCount: activeCount)
     }
 
     // MARK: - Lane builders
@@ -193,26 +189,5 @@ enum FleetOrbitBuilder {
     private static func pill(for item: ActivityItem) -> String {
         guard item.device == "cloud" else { return item.device }
         return cloudProvider(item.model) == "openrouter" ? "nova" : "case"
-    }
-
-    // MARK: - Geometry
-
-    /// Ring point for satellite `index` of `count`; index 0 is the top.
-    static func position(index: Int, count: Int) -> CGPoint {
-        guard let a = angle(index: index, count: count) else { return orbitCenter }
-        return CGPoint(x: orbitCenter.x + ringRadius * cos(a), y: orbitCenter.y + ringRadius * sin(a))
-    }
-
-    /// Label point just outside the ring, baseline nudged down 3pt.
-    static func labelPosition(index: Int, count: Int) -> CGPoint {
-        guard let a = angle(index: index, count: count) else { return orbitCenter }
-        return CGPoint(x: orbitCenter.x + 78 * cos(a), y: orbitCenter.y + 74 * sin(a) + 3)
-    }
-
-    /// i = 0 sits at the top; index clamped to 0..<count; nil when nothing to place.
-    private static func angle(index: Int, count: Int) -> CGFloat? {
-        guard count > 0 else { return nil }
-        let i = min(max(index, 0), count - 1)
-        return -CGFloat.pi / 2 + 2 * CGFloat.pi * CGFloat(i) / CGFloat(count)
     }
 }

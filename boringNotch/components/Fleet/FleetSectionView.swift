@@ -3,7 +3,8 @@
 //  boringNotch
 //
 //  Right-hand fleet column of the opened notch:
-//  1 px divider, "FLEET" header readout, orbit + lanes side-by-side, fixed Now block.
+//  1 px divider, "FLEET" header readout, butterfly rows
+//  (processor bar | name | memory bar | metric), fixed Now block.
 //  Colours are driven by FleetTheme (skin: FleetSkin).
 
 import SwiftUI
@@ -24,11 +25,8 @@ struct FleetSectionView: View {
                 .frame(maxHeight: .infinity)
             VStack(alignment: .leading, spacing: 10) {
                 header
-                HStack(alignment: .center, spacing: 14) {
-                    FleetOrbitView(model: store.orbitModel)
-                    FleetLanesView(lanes: store.orbitModel.lanes)
-                }
-                FleetNowView(jobs: store.orbitModel.nowJobs)
+                FleetButterflyView(lanes: store.panelModel.lanes)
+                FleetNowView(jobs: store.panelModel.nowJobs)
             }
             .padding(.leading, 18)
         }

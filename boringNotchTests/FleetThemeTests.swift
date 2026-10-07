@@ -38,18 +38,13 @@ final class FleetThemeTests: XCTestCase {
         assertColor(t.dim,       0x7D7A62, "olive dim")
         assertColor(t.text,      0xECE4D2, "olive text")
         assertColor(t.accent,    0xC9A77C, "olive accent")
-        assertColor(t.ram,       0x4F5D34, "olive ram")
+        assertColor(t.memory,    0x8FA6B4, "olive memory")
         assertColor(t.hot,       0xD9824B, "olive hot")
         assertColor(t.off,       0x3B4230, "olive off")
         assertColor(t.muted,     0x9A9478, "olive muted")
         assertColor(t.nameText,  0xB9BCB1, "olive nameText")
         assertColor(t.nameOff,   0x4A4C47, "olive nameOff")
         assertColor(t.jobText,   0xD4D6CB, "olive jobText")
-        assertColor(t.busyFill,  0x2B2A1C, "olive busyFill")
-        assertColor(t.satFill,   0x1D2415, "olive satFill")
-        assertColor(t.offFill,   0x0B0B0A, "olive offFill")
-        assertColor(t.offStroke, 0x262724, "olive offStroke")
-        assertColor(t.coreFill,  0x232B18, "olive coreFill")
         assertColor(t.barTrack,  0x0E120A, "olive barTrack")
         assertColor(t.pillBorder, 0x4A3F2C, "olive pillBorder")
     }
@@ -64,18 +59,13 @@ final class FleetThemeTests: XCTestCase {
         assertColor(t.dim,       0x5B5F55, "black dim")
         assertColor(t.text,      0xE8EADF, "black text")
         assertColor(t.accent,    0x9FB38A, "black accent")
-        assertColor(t.ram,       0x6D7F4F, "black ram")
+        assertColor(t.memory,    0x7F9BB5, "black memory")
         assertColor(t.hot,       0xD9824B, "black hot")
         assertColor(t.off,       0x3A3C37, "black off")
         assertColor(t.muted,     0x8A8D85, "black muted")
         assertColor(t.nameText,  0xB9BCB1, "black nameText")
         assertColor(t.nameOff,   0x4A4C47, "black nameOff")
         assertColor(t.jobText,   0xD4D6CB, "black jobText")
-        assertColor(t.busyFill,  0x1B2016, "black busyFill")
-        assertColor(t.satFill,   0x161714, "black satFill")
-        assertColor(t.offFill,   0x0B0B0A, "black offFill")
-        assertColor(t.offStroke, 0x262724, "black offStroke")
-        assertColor(t.coreFill,  0x141611, "black coreFill")
         assertColor(t.barTrack,  0x141513, "black barTrack")
         assertColor(t.pillBorder, 0x2C3324, "black pillBorder")
         XCTAssertEqual(components(t.panelEdge).a, 0, accuracy: 0.001, "black panelEdge is clear")
@@ -128,10 +118,10 @@ final class FleetThemeTests: XCTestCase {
 
     // MARK: - Settings default & persistence
 
-    func testSkinDefaultIsOlive() {
-        XCTAssertEqual(Defaults.Keys.fleetSkin.defaultValue, .olive)
+    func testSkinDefaultIsBlack() {
+        XCTAssertEqual(Defaults.Keys.fleetSkin.defaultValue, .black)
         Defaults.reset(.fleetSkin)
-        XCTAssertEqual(Defaults[.fleetSkin], .olive)
+        XCTAssertEqual(Defaults[.fleetSkin], .black)
     }
 
     func testSkinPersists() {

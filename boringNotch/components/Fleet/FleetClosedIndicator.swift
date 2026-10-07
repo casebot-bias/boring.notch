@@ -15,8 +15,6 @@ struct FleetClosedIndicator: View {
     @ObservedObject private var store = FleetStore.shared
     @Default(.fleetSkin) private var fleetSkin
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulsing = false
 
     private var visible: Bool {
         return Defaults[.showFleet] && store.isReachable && vm.effectiveClosedNotchHeight > 0
@@ -27,27 +25,10 @@ struct FleetClosedIndicator: View {
             HStack(spacing: 8) {
                 // Dot row: one 5-pt dot per lane
                 HStack(spacing: 4) {
-                    ForEach(store.orbitModel.lanes) { lane in
+                    ForEach(store.panelModel.lanes) { lane in
                         Circle()
                             .fill(lane.state == .busy ? theme.accent : theme.off)
                             .frame(width: 5, height: 5)
-                            .opacity(pulsing && lane.state == .busy ? 0.35 : 1)
-                    }
-                }
-                .task(id: store.isBusy && !reduceMotion) {
-                    guard store.isBusy, !reduceMotion else {
-                        pulsing = false
-                        return
-                    }
-                    pulsing = true
-                    while !Task.isCancelled {
-                        do {
-                            try await Task.sleep(nanoseconds: UInt64(0.8 * 1_000_000_000))
-                            if Task.isCancelled { return }
-                            pulsing = !pulsing
-                        } catch {
-                            return
-                        }
                     }
                 }
 
