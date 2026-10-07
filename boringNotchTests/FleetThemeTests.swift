@@ -118,10 +118,10 @@ final class FleetThemeTests: XCTestCase {
 
     // MARK: - Settings default & persistence
 
-    func testSkinDefaultIsOlive() {
-        XCTAssertEqual(Defaults.Keys.fleetSkin.defaultValue, .olive)
+    func testSkinDefaultIsBlack() {
+        XCTAssertEqual(Defaults.Keys.fleetSkin.defaultValue, .black)
         Defaults.reset(.fleetSkin)
-        XCTAssertEqual(Defaults[.fleetSkin], .olive)
+        XCTAssertEqual(Defaults[.fleetSkin], .black)
     }
 
     func testSkinPersists() {

@@ -91,5 +91,5 @@ struct FleetTheme {
 }
 
 extension Defaults.Keys {
-    static let fleetSkin = Key<FleetSkin>("fleetSkin", default: .olive)
+    static let fleetSkin = Key<FleetSkin>("fleetSkin", default: .black)
 }
