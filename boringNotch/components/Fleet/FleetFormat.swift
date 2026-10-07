@@ -2,7 +2,7 @@
 //  FleetFormat.swift
 //  boringNotch
 //
-//  Pure formatting functions for fleet data.
+//  Pure formatting/normalising functions for fleet data.
 //  Depends only on Foundation and the model types (Reading, FleetMachine, DeviceActivity)
 //  declared in the same target.
 //
@@ -72,5 +72,19 @@ enum FleetFormat {
     /// isAvailable && value > 80
     static func isRAMWarning(_ r: Reading) -> Bool {
         r.isAvailable && (r.value ?? 0) > 80
+    }
+
+    // MARK: - fleetBaseURL
+
+    /// Normalises `Defaults[.fleetBaseURL]` into the URL used to reach the fleet:
+    /// surrounding whitespace trimmed, every trailing slash dropped, `nil` when
+    /// nothing is left. Shared by FleetStore polling and the "Open Fleet" link.
+    static func fleetBaseURL(_ raw: String) -> URL? {
+        var base = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        while base.hasSuffix("/") {
+            base = String(base.dropLast())
+        }
+        guard !base.isEmpty else { return nil }
+        return URL(string: base)
     }
 }

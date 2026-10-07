@@ -144,4 +144,37 @@ final class FleetFormatTests: XCTestCase {
     func testRAMWarningIgnoredWhenUnavailable() {
         XCTAssertFalse(FleetFormat.isRAMWarning(unavailable(99)))
     }
+    // MARK: - fleetBaseURL
+
+    func testFleetBaseURLStripsOneTrailingSlash() {
+        XCTAssertEqual(FleetFormat.fleetBaseURL("https://case.tail2f9fd5.ts.net/")?.absoluteString,
+                       "https://case.tail2f9fd5.ts.net")
+    }
+
+    func testFleetBaseURLStripsAllTrailingSlashes() {
+        XCTAssertEqual(FleetFormat.fleetBaseURL("https://example.com///")?.absoluteString,
+                       "https://example.com")
+    }
+
+    func testFleetBaseURLTrimsSurroundingWhitespace() {
+        XCTAssertEqual(FleetFormat.fleetBaseURL("  https://case.tail2f9fd5.ts.net/ \n")?.absoluteString,
+                       "https://case.tail2f9fd5.ts.net")
+    }
+
+    func testFleetBaseURLKeepsPlainURL() {
+        XCTAssertEqual(FleetFormat.fleetBaseURL("https://example.com")?.absoluteString,
+                       "https://example.com")
+    }
+
+    func testFleetBaseURLKeepsPathAndDropsOnlyTrailingSlash() {
+        XCTAssertEqual(FleetFormat.fleetBaseURL("https://example.com/fleet/")?.absoluteString,
+                       "https://example.com/fleet")
+    }
+
+    func testFleetBaseURLIsNilWhenBlank() {
+        XCTAssertNil(FleetFormat.fleetBaseURL(""))
+        XCTAssertNil(FleetFormat.fleetBaseURL("   "))
+        XCTAssertNil(FleetFormat.fleetBaseURL("\n\t"))
+        XCTAssertNil(FleetFormat.fleetBaseURL("/"))
+    }
 }
