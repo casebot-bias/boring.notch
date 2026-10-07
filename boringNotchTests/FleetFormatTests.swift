@@ -177,4 +177,53 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertNil(FleetFormat.fleetBaseURL("\n\t"))
         XCTAssertNil(FleetFormat.fleetBaseURL("/"))
     }
+
+    // MARK: - metaParts
+
+    private func meta(_ tokPerSec: Double?, _ temp: Double?, _ label: String? = nil) -> FleetMeta {
+        FleetMeta(tokPerSec: tokPerSec,
+                  temp: temp.map { Reading(value: $0, state: "ok", note: nil) }
+                        ?? Reading(value: nil, state: "unavailable", note: nil),
+                  label: label)
+    }
+
+    func testMetaBothTokensAndTemperature() {
+        XCTAssertEqual(FleetFormat.metaParts(meta(40, 51)),
+                       [FleetMetaPart(text: "40 t/s", accent: true),
+                        FleetMetaPart(text: "51°", accent: false)])
+        XCTAssertEqual(meta(40, 51).text, "40 t/s · 51°")
+    }
+
+    func testMetaOnlyTemperature() {
+        XCTAssertEqual(FleetFormat.metaParts(meta(nil, 51)), [FleetMetaPart(text: "51°", accent: false)])
+        XCTAssertEqual(meta(nil, 51).text, "51°")
+    }
+
+    func testMetaOnlyTokens() {
+        XCTAssertEqual(FleetFormat.metaParts(meta(40, nil)), [FleetMetaPart(text: "40 t/s", accent: true)])
+        XCTAssertEqual(meta(40, nil).text, "40 t/s")
+    }
+
+    func testMetaIdleLabel() {
+        XCTAssertEqual(FleetFormat.metaParts(meta(nil, nil, "idle")), [FleetMetaPart(text: "idle", accent: false)])
+        XCTAssertEqual(meta(nil, nil, "idle").text, "idle")
+    }
+
+    func testMetaZeroTokensFallBackToTemperature() {
+        XCTAssertEqual(meta(0, 51).text, "51°")
+    }
+
+    func testMetaLabelIgnoredWhenAValueExists() {
+        XCTAssertEqual(meta(40, 51, "—").text, "40 t/s · 51°")
+    }
+
+    func testMetaOfflineIsDash() {
+        XCTAssertEqual(meta(nil, nil, "—").text, "—")
+    }
+
+    func testMetaTokensPartIsTheOnlyAccentPart() {
+        XCTAssertEqual(FleetFormat.metaParts(meta(40, 51)).filter(\.accent).map(\.text), ["40 t/s"])
+        XCTAssertTrue(FleetFormat.metaParts(meta(nil, 51)).allSatisfy { !$0.accent })
+        XCTAssertTrue(FleetFormat.metaParts(meta(nil, nil, "2 jobs")).allSatisfy { !$0.accent })
+    }
 }

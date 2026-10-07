@@ -26,6 +26,14 @@ struct FleetJob: Identifiable, Equatable {
     var id: String { key }
 }
 
+/// Right-hand metric of a lane, kept split so the view can colour each part:
+/// tok/s is the accent part, the temperature and the label are dim.
+struct FleetMeta: Equatable {
+    var tokPerSec: Double?   // "42 t/s"; nil or <= 0 -> not shown
+    var temp: Reading        // "38°"; unavailable -> not shown
+    var label: String?       // dim fallback when there is no value: "live" | "idle" | "2 jobs" | "—"
+}
+
 /// One row: the case origin or a machine, with its bars and jobs.
 struct FleetLane: Identifiable, Equatable {
     var id: String
@@ -35,7 +43,7 @@ struct FleetLane: Identifiable, Equatable {
     var cpu: Reading
     var ram: Reading
     var temp: Reading
-    var right: String      // right-column metric: t/s, °, "live", job count, or "—"
+    var meta: FleetMeta    // right-column metric: t/s in accent, ° and labels in dim
     var jobs: [FleetJob]
     var busy: Bool { state == .busy }
 }
@@ -112,7 +120,7 @@ enum FleetPanelModelBuilder {
         return FleetLane(id: id, label: id == "macbook" ? "mac" : id, kind: kind, state: state,
                          cpu: machine?.cpuLoadPct ?? unavailableReading,
                          ram: machine?.ramUsedPct ?? unavailableReading, temp: temp,
-                         right: rightLabel(kind: kind, state: state, temp: temp,
+                         meta: laneMeta(kind: kind, state: state, temp: temp,
                                            tokPerSec: device?.tokPerSec, jobCount: jobs.count),
                          jobs: jobs)
     }
@@ -126,23 +134,29 @@ enum FleetPanelModelBuilder {
         let jobs = toJobs(openrouterItems)
         return FleetLane(id: "nova", label: "nova", kind: .cloud, state: state,
                          cpu: unavailableReading, ram: unavailableReading, temp: unavailableReading,
-                         right: rightLabel(kind: .cloud, state: state, temp: unavailableReading,
+                         meta: laneMeta(kind: .cloud, state: state, temp: unavailableReading,
                                            tokPerSec: nil, jobCount: jobs.count),
                          jobs: jobs)
     }
 
-    /// Right-column metric; temperature is the fallback, so idle GPU boxes, case and
-    /// mac show degrees. tokPerSec comes from the lane's own device (nil for cloud/ciri).
-    private static func rightLabel(kind: FleetNodeKind, state: FleetNodeState, temp: Reading,
-                                   tokPerSec: Double?, jobCount: Int) -> String {
-        if state == .offline { return FleetFormat.unknown }
-        if kind == .gpu, state == .busy, let tokPerSec = tokPerSec, tokPerSec > 0 {
-            return FleetFormat.tokensPerSecond(tokPerSec)
+    /// Right-column metric, split for the two-colour render: tok/s (accent) and the
+    /// temperature (dim) show side by side; the label covers the lanes that report
+    /// neither. tokPerSec comes from the lane's own device (nil for cloud/ciri), so
+    /// case and mac stay temperature-only.
+    private static func laneMeta(kind: FleetNodeKind, state: FleetNodeState, temp: Reading,
+                                 tokPerSec: Double?, jobCount: Int) -> FleetMeta {
+        if state == .offline {
+            return FleetMeta(tokPerSec: nil, temp: unavailableReading, label: FleetFormat.unknown)
         }
-        if kind == .cloud { return state == .busy ? "live" : "idle" }
-        if kind == .agent { return state == .busy ? FleetFormat.jobs(max(jobCount, 1)) : "idle" }
-        if temp.isAvailable { return FleetFormat.degrees(temp) }
-        return FleetFormat.unknown
+        if kind == .cloud {
+            return FleetMeta(tokPerSec: nil, temp: unavailableReading, label: state == .busy ? "live" : "idle")
+        }
+        if kind == .agent {
+            return FleetMeta(tokPerSec: nil, temp: unavailableReading,
+                             label: state == .busy ? FleetFormat.jobs(max(jobCount, 1)) : "idle")
+        }
+        let tokens = (kind == .gpu && state == .busy) ? tokPerSec : nil
+        return FleetMeta(tokPerSec: tokens, temp: temp, label: FleetFormat.unknown)
     }
 
     // MARK: - Lookup helpers

@@ -2,8 +2,8 @@
 //  FleetFormat.swift
 //  boringNotch
 //
-//  Pure formatting/normalising functions for fleet data.
-//  Depends only on Foundation and the model types (Reading, FleetMachine, DeviceActivity)
+//  Pure formatting/normalising helpers for fleet data.
+//  Depends only on Foundation and the model types (Reading, FleetMeta, DeviceActivity)
 //  declared in the same target.
 //
 import Foundation
@@ -86,5 +86,38 @@ enum FleetFormat {
         }
         guard !base.isEmpty else { return nil }
         return URL(string: base)
+    }
+
+    // MARK: - metaParts
+
+    /// Right column of a lane, split for two-colour rendering: tok/s first (only
+    /// when > 0), then the temperature, otherwise the lane's label. Empty when the
+    /// lane reports nothing at all.
+    static func metaParts(_ meta: FleetMeta) -> [FleetMetaPart] {
+        var parts: [FleetMetaPart] = []
+        if let tokPerSec = meta.tokPerSec, tokPerSec > 0 {
+            parts.append(FleetMetaPart(text: tokensPerSecond(tokPerSec), accent: true))
+        }
+        if meta.temp.isAvailable {
+            parts.append(FleetMetaPart(text: degrees(meta.temp), accent: false))
+        }
+        if parts.isEmpty, let label = meta.label {
+            parts.append(FleetMetaPart(text: label, accent: false))
+        }
+        return parts
+    }
+}
+
+
+/// One hunk of a lane's right column; `accent` parts use the theme accent colour.
+struct FleetMetaPart: Equatable {
+    var text: String
+    var accent: Bool
+}
+
+extension FleetMeta {
+    /// The right column as one string: "40 t/s · 51°", "51°", "idle", "—".
+    var text: String {
+        FleetFormat.metaParts(self).map(\.text).joined(separator: " · ")
     }
 }
