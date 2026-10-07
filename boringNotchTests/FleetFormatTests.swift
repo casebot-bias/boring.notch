@@ -13,74 +13,74 @@ final class FleetFormatTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// An available reading (`state == "ok"`) carrying a value.
     private func ok(_ value: Double) -> Reading {
         Reading(value: value, state: "ok", note: nil)
     }
 
-    /// An unavailable reading; the value may still be present, which must not
-    /// make it usable.
     private func unavailable(_ value: Double?) -> Reading {
         Reading(value: value, state: "unavailable", note: nil)
     }
-
-    // MARK: - percent
-
-    func testPercentAvailableValueRoundsToNearestWhole() {
-        XCTAssertEqual(FleetFormat.percent(ok(38.6)), "39%")
+    // MARK: - unknown
+    func testUnknownRendersDash() {
+        XCTAssertEqual(FleetFormat.unknown, "—")
+    }
+    // MARK: - degrees
+    func testDegreesAvailableValueRoundsDown() {
+        XCTAssertEqual(FleetFormat.degrees(ok(38.37)), "38°")
     }
 
-    func testPercentAvailableValueRoundsDown() {
-        XCTAssertEqual(FleetFormat.percent(ok(7.25)), "7%")
+    func testDegreesAvailableValueRoundsUp() {
+        XCTAssertEqual(FleetFormat.degrees(ok(40.8)), "41°")
     }
 
-    func testPercentRealZeroRendersAsZeroNeverDash() {
-        XCTAssertEqual(FleetFormat.percent(ok(0)), "0%")
+    func testDegreesRealZeroRendersAsZeroNeverDash() {
+        XCTAssertEqual(FleetFormat.degrees(ok(0)), "0°")
     }
 
-    func testPercentUnavailableNilValueRendersDash() {
-        XCTAssertEqual(FleetFormat.percent(unavailable(nil)), "—")
+    func testDegreesUnavailableNilValueRendersDash() {
+        XCTAssertEqual(FleetFormat.degrees(unavailable(nil)), "—")
     }
 
-    func testPercentUnavailableWithNumberStillRendersDash() {
-        // State, not just a nil value, gates availability.
-        XCTAssertEqual(FleetFormat.percent(unavailable(12.5)), "—")
+    func testDegreesUnavailableWithNumberStillRendersDash() {
+        XCTAssertEqual(FleetFormat.degrees(unavailable(12.5)), "—")
     }
-
-    // MARK: - celsius
-
-    func testCelsiusAvailableValueRoundsDown() {
-        XCTAssertEqual(FleetFormat.celsius(ok(32.2607)), "32°C")
-    }
-
-    func testCelsiusAvailableValueRoundsUp() {
-        XCTAssertEqual(FleetFormat.celsius(ok(40.8)), "41°C")
-    }
-
-    func testCelsiusUnavailableRendersDash() {
-        XCTAssertEqual(FleetFormat.celsius(unavailable(nil)), "—")
-    }
-
     // MARK: - tokensPerSecond
-
     func testTokensPerSecondNilRendersDash() {
         XCTAssertEqual(FleetFormat.tokensPerSecond(nil), "—")
     }
 
-    func testTokensPerSecondZeroRendersZeroWithOneDecimal() {
-        XCTAssertEqual(FleetFormat.tokensPerSecond(0), "0.0 tok/s")
+    func testTokensPerSecondZeroRendersZeroWithoutDecimal() {
+        XCTAssertEqual(FleetFormat.tokensPerSecond(0), "0 t/s")
     }
 
-    func testTokensPerSecondRendersOneDecimalPlace() {
-        XCTAssertEqual(FleetFormat.tokensPerSecond(12.34), "12.3 tok/s")
+    func testTokensPerSecondRoundsToWholeTokenPerSecond() {
+        XCTAssertEqual(FleetFormat.tokensPerSecond(12.34), "12 t/s")
     }
 
-    func testTokensPerSecondSmallValueRoundsToOneDecimal() {
-        XCTAssertEqual(FleetFormat.tokensPerSecond(0.05), "0.1 tok/s")
+    func testTokensPerSecondSmallValueRoundsToZero() {
+        XCTAssertEqual(FleetFormat.tokensPerSecond(0.4), "0 t/s")
+    }
+    // MARK: - jobs
+    func testJobsZeroReturnsIdle() {
+        XCTAssertEqual(FleetFormat.jobs(0), "idle")
     }
 
+    func testJobsNegativeReturnsIdle() {
+        XCTAssertEqual(FleetFormat.jobs(-1), "idle")
+    }
+
+    func testJobsSingleIsOneJob() {
+        XCTAssertEqual(FleetFormat.jobs(1), "1 job")
+    }
+
+    func testJobsPluralIsJobs() {
+        XCTAssertEqual(FleetFormat.jobs(2), "2 jobs")
+    }
+
+    func testJobsMultipleIsJobs() {
+        XCTAssertEqual(FleetFormat.jobs(5), "5 jobs")
+    }
     // MARK: - elapsed
-
     func testElapsedNilRendersDash() {
         XCTAssertEqual(FleetFormat.elapsed(nil), "—")
     }
@@ -112,14 +112,12 @@ final class FleetFormatTests: XCTestCase {
     func testElapsedTwoHoursRendersHoursAndMinutes() {
         XCTAssertEqual(FleetFormat.elapsed(7200), "2h 00m")
     }
-
     // MARK: - barFraction
-
     func testBarFractionUnavailableIsZero() {
         XCTAssertEqual(FleetFormat.barFraction(unavailable(nil)), 0.0, accuracy: 0.0001)
     }
 
-    func testBarFractionMapsPercentOntoUnitRange() {
+    func testBarFractionMapsValueOntoUnitRange() {
         XCTAssertEqual(FleetFormat.barFraction(ok(38.6)), 0.386, accuracy: 0.0001)
     }
 
@@ -131,8 +129,10 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.barFraction(ok(-10)), 0.0, accuracy: 0.0001)
     }
 
+    func testBarFractionRealZeroMapsToZero() {
+        XCTAssertEqual(FleetFormat.barFraction(ok(0)), 0.0, accuracy: 0.0001)
+    }
     // MARK: - isRAMWarning
-
     func testRAMWarningAtEightyIsNotAWarning() {
         XCTAssertFalse(FleetFormat.isRAMWarning(ok(80)))
     }
@@ -143,19 +143,5 @@ final class FleetFormatTests: XCTestCase {
 
     func testRAMWarningIgnoredWhenUnavailable() {
         XCTAssertFalse(FleetFormat.isRAMWarning(unavailable(99)))
-    }
-
-    // MARK: - gpuOrTokens
-
-    func testGpuOrTokensFallsBackToGPUWhenTokensAbsent() {
-        XCTAssertEqual(FleetFormat.gpuOrTokens(gpu: ok(12.0), tokPerSec: nil), "GPU 12%")
-    }
-
-    func testGpuOrTokensPrefersTokensEvenWhenZero() {
-        XCTAssertEqual(FleetFormat.gpuOrTokens(gpu: ok(12.0), tokPerSec: 0), "0.0 tok/s")
-    }
-
-    func testGpuOrTokensRendersDashWhenNeitherAvailable() {
-        XCTAssertEqual(FleetFormat.gpuOrTokens(gpu: unavailable(nil), tokPerSec: nil), "—")
     }
 }

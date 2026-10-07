@@ -21,16 +21,16 @@ final class FleetStore: ObservableObject {
     @Published private(set) var isReachable: Bool = false
     @Published private(set) var lastUpdated: Date?
 
-    var mapModel: FleetMapModel {
-        return FleetMapBuilder.build(fleet: fleet, activity: activity)
+    var orbitModel: FleetOrbitModel {
+        return FleetOrbitBuilder.build(fleet: fleet, activity: activity)
     }
 
     var activeCount: Int {
-        return mapModel.activeCount
+        return orbitModel.activeCount
     }
 
     var isBusy: Bool {
-        return mapModel.isBusy
+        return orbitModel.isBusy
     }
 
     // MARK: - Tunables
@@ -98,16 +98,6 @@ final class FleetStore: ObservableObject {
         if Defaults[.showFleet] {
             startPolling()
         }
-    }
-
-    // MARK: - Queries
-
-    func tokPerSec(forMachineId id: String) -> Double? {
-        return device(id)?.tokPerSec
-    }
-
-    func device(_ id: String) -> DeviceActivity? {
-        return activity?.devices.first { $0.device == id }
     }
 
     // MARK: - Polling
