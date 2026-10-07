@@ -97,7 +97,9 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(frank.jobs.map(\.label), ["frank-b", "frank-a"])
         XCTAssertEqual(frank.jobs.first?.key, "frank-b-2026-10-02T06:30:00.000Z")
         XCTAssertEqual(frank.jobs.first?.pill, "frank")
-        XCTAssertEqual(frank.right, "42 t/s")
+        XCTAssertEqual(frank.meta.tokPerSec, 42)
+        XCTAssertTrue(frank.meta.temp.isAvailable)
+        XCTAssertEqual(frank.meta.text, "42 t/s · 38°")
         XCTAssertEqual(model.activeCount, 1)
     }
 
@@ -110,9 +112,9 @@ final class FleetPanelModelTests: XCTestCase {
         let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
         guard let frank = lane(model, "frank"), let dali = lane(model, "dali") else { return }
         XCTAssertEqual(frank.state, .idle)
-        XCTAssertEqual(frank.right, "38°")                       // 37.5 rounds up
+        XCTAssertEqual(frank.meta.text, "38°")                 // 37.5 rounds up
         XCTAssertEqual(dali.state, .busy)
-        XCTAssertEqual(dali.right, "51°")                         // never "0 t/s"
+        XCTAssertEqual(dali.meta.text, "51°")                   // never "0 t/s"
     }
 
     func testCiriLaneJobCountsAndEmptyBars() {
@@ -126,17 +128,17 @@ final class FleetPanelModelTests: XCTestCase {
               let empty = ciriLane([], true, of), let idle = ciriLane([], false, of) else { return }
         XCTAssertEqual(ciri.kind, .agent)
         XCTAssertEqual(ciri.state, .busy)
-        XCTAssertEqual(ciri.right, "3 jobs")
+        XCTAssertEqual(ciri.meta.text, "3 jobs")
         XCTAssertEqual(FleetFormat.barFraction(ciri.cpu), 0)      // ciri reports no readings
         XCTAssertEqual(FleetFormat.barFraction(ciri.ram), 0)
-        XCTAssertEqual(one.right, "1 job")
-        XCTAssertEqual(empty.right, "1 job")                      // busy with no items is max(count, 1)
+        XCTAssertEqual(one.meta.text, "1 job")
+        XCTAssertEqual(empty.meta.text, "1 job")                // busy with no items is max(count, 1)
         XCTAssertEqual(idle.state, .idle)
-        XCTAssertEqual(idle.right, "idle")
+        XCTAssertEqual(idle.meta.text, "idle")
         let noCiri = fleetJSON(["case", "frank", "claire", "dali", "macbook"].map { machineJSON($0) })
         guard let off = ciriLane([], true, noCiri) else { return }
         XCTAssertEqual(off.state, .offline)
-        XCTAssertEqual(off.right, "—")
+        XCTAssertEqual(off.meta.text, "—")
     }
 
     func testOfflineMachineBeatsBusyDevice() {
@@ -148,7 +150,7 @@ final class FleetPanelModelTests: XCTestCase {
         guard let daliLane = lane(model, "dali") else { return }
         XCTAssertEqual(daliLane.state, .offline)
         XCTAssertFalse(daliLane.busy)
-        XCTAssertEqual(daliLane.right, "—")
+        XCTAssertEqual(daliLane.meta.text, "—")
         XCTAssertEqual(model.activeCount, 0)
     }
 
@@ -161,13 +163,13 @@ final class FleetPanelModelTests: XCTestCase {
         let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
         guard let nova = lane(model, "nova") else { return }
         XCTAssertEqual(nova.state, .busy)
-        XCTAssertEqual(nova.right, "live")
+        XCTAssertEqual(nova.meta.text, "live")
         XCTAssertEqual(nova.jobs.map(\.label), ["or-job"])        // qwen job excluded
         XCTAssertEqual(model.activeCount, 2)                      // case + nova
         guard let a2 = activity(activityJSON([deviceJSON("case", busy: true, items: [qwen])])) else { return }
         guard let nova2 = lane(FleetPanelModelBuilder.build(fleet: f, activity: a2), "nova") else { return }
         XCTAssertEqual(nova2.state, .idle)
-        XCTAssertEqual(nova2.right, "idle")
+        XCTAssertEqual(nova2.meta.text, "idle")
     }
 
     func testNovaIsOfflineWithoutFleet() {
@@ -175,7 +177,7 @@ final class FleetPanelModelTests: XCTestCase {
         guard let a = activity(activityJSON([deviceJSON("case", busy: true, items: [orItem])])) else { return }
         guard let nova = lane(FleetPanelModelBuilder.build(fleet: nil, activity: a), "nova") else { return }
         XCTAssertEqual(nova.state, .offline)
-        XCTAssertEqual(nova.right, "—")
+        XCTAssertEqual(nova.meta.text, "—")
     }
 
     func testCaseOriginCountsOnceAndShowsTemperature() {
@@ -190,7 +192,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.origin.state, .busy)
         XCTAssertEqual(model.origin.kind, .host)
         XCTAssertEqual(model.origin.jobs.count, 2)
-        XCTAssertEqual(model.origin.right, "38°")
+        XCTAssertEqual(model.origin.meta.text, "38°")
         XCTAssertEqual(model.activeCount, 1)                      // case counts once only
         XCTAssertEqual(model.nodes.map(\.state), [.idle, .idle, .idle, .idle, .idle, .idle])
     }
@@ -217,7 +219,7 @@ final class FleetPanelModelTests: XCTestCase {
         guard let mac = lane(FleetPanelModelBuilder.build(fleet: f, activity: a), "macbook") else { return }
         XCTAssertEqual(mac.label, "mac")
         XCTAssertEqual(mac.state, .busy)
-        XCTAssertEqual(mac.right, "68°")
+        XCTAssertEqual(mac.meta.text, "68°")
         guard let a2 = activity(activityJSON([deviceJSON("frank", busy: false, slotsUsed: 2)])) else { return }
         let model2 = FleetPanelModelBuilder.build(fleet: f, activity: a2)
         guard let frank = lane(model2, "frank") else { return }

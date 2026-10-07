@@ -4,7 +4,8 @@
 //
 //  Butterfly rows for the opened fleet panel: the processor bar grows from the right
 //  edge leftwards, the name sits centred, the memory bar grows from the left edge
-//  rightwards, then the right-hand metric. Columns and gaps follow the approved
+//  rightwards, then the right-hand metric (tok/s in the accent colour, temperature
+//  and labels in dim). Columns and gaps follow the approved
 //  "B - Butterfly" design (mock: 1fr | 70 | 1fr | 50 with 8 pt gaps); both bars are
 //  15 % shorter than the mock and the freed width goes to the name (70 -> 100) and
 //  metric (50 -> 80) columns.
@@ -21,14 +22,15 @@ struct FleetButterflyView: View {
 
     // MARK: - Layout constants
 
-    /// Derived from mock columns 1fr | 70 | 1fr | 50 with 8 pt gaps: both bars are
-    /// 15 % shorter than the mock, freed width goes to name (70 -> 100) and meta
-    /// (50 -> 80) columns.
+    /// Derived from mock columns 1fr | 70 | 1fr | 50 with 8 pt gaps. Each bar is a
+    /// further 15 % shorter than the butterfly layout (168.5 -> 143 pt at the real
+    /// 541 pt row width) and the freed width joined the name (70 -> 100) and meta
+    /// (80 -> 131) columns.
     private let rowHeight: CGFloat = 15
     private let rowGap: CGFloat = 7
     private let columnGap: CGFloat = 8
     private let nameWidth: CGFloat = 100
-    private let metaWidth: CGFloat = 80
+    private let metaWidth: CGFloat = 131
     private let barHeight: CGFloat = 7
     private let headRowHeight: CGFloat = 12
 
@@ -85,14 +87,30 @@ struct FleetButterflyView: View {
                 fill: FleetFormat.isRAMWarning(lane.ram) ? theme.hot : theme.memory,
                 fromRight: false
             )
-            Text(lane.right)
-                .font(.system(size: 11))
-                .monospacedDigit()
-                .lineLimit(1)
-                .foregroundColor(lane.busy ? theme.accent : theme.dim)
-                .frame(width: metaWidth, alignment: .trailing)
+            meta(lane.meta)
         }
         .frame(height: rowHeight)
+    }
+
+    // MARK: - Meta
+
+    /// Right column: tok/s in the accent colour, the temperature and the labels dim,
+    /// side by side with a middot between them, tabular figures, right aligned.
+    private func meta(_ meta: FleetMeta) -> some View {
+        let parts = FleetFormat.metaParts(meta)
+        return HStack(spacing: 4) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
+                    Text("·")
+                        .foregroundColor(theme.dim)
+                }
+                Text(part.text)
+                    .foregroundColor(part.accent ? theme.accent : theme.dim)
+            }
+        }
+        .font(.system(size: 11).monospacedDigit())
+        .lineLimit(1)
+        .frame(width: metaWidth, alignment: .trailing)
     }
 
     // MARK: - Bar helper

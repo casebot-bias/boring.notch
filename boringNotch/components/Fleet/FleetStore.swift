@@ -191,14 +191,7 @@ final class FleetStore: ObservableObject {
 
     /// Reads the base URL fresh on every fetch; an invalid/empty URL is a failure.
     private func baseURL() -> URL? {
-        var base = Defaults[.fleetBaseURL].trimmingCharacters(in: .whitespacesAndNewlines)
-        while base.hasSuffix("/") {
-            base = String(base.dropLast())
-        }
-        guard !base.isEmpty else {
-            return nil
-        }
-        return URL(string: base)
+        FleetFormat.fleetBaseURL(Defaults[.fleetBaseURL])
     }
 
     // MARK: - Reachability bookkeeping
