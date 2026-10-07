@@ -21,16 +21,16 @@ final class FleetStore: ObservableObject {
     @Published private(set) var isReachable: Bool = false
     @Published private(set) var lastUpdated: Date?
 
-    var orbitModel: FleetOrbitModel {
-        return FleetOrbitBuilder.build(fleet: fleet, activity: activity)
+    var panelModel: FleetPanelModel {
+        return FleetPanelModelBuilder.build(fleet: fleet, activity: activity)
     }
 
     var activeCount: Int {
-        return orbitModel.activeCount
+        return panelModel.activeCount
     }
 
     var isBusy: Bool {
-        return orbitModel.isBusy
+        return panelModel.isBusy
     }
 
     // MARK: - Tunables

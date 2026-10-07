@@ -36,18 +36,13 @@ struct FleetTheme {
             dim           = rgb(0x5B5F55)
             text          = rgb(0xE8EADF)
             accent        = rgb(0x9FB38A)
-            ram           = rgb(0x6D7F4F)
+            memory        = rgb(0x7F9BB5)
             hot           = rgb(0xD9824B)
             off           = rgb(0x3A3C37)
             muted         = rgb(0x8A8D85)
             nameText      = rgb(0xB9BCB1)
             nameOff       = rgb(0x4A4C47)
             jobText       = rgb(0xD4D6CB)
-            busyFill      = rgb(0x1B2016)
-            satFill       = rgb(0x161714)
-            offFill       = rgb(0x0B0B0A)
-            offStroke     = rgb(0x262724)
-            coreFill      = rgb(0x141611)
             barTrack      = rgb(0x141513)
             pillBorder    = rgb(0x2C3324)
         case .olive:
@@ -58,18 +53,13 @@ struct FleetTheme {
             dim           = rgb(0x7D7A62)
             text          = rgb(0xECE4D2)
             accent        = rgb(0xC9A77C)
-            ram           = rgb(0x4F5D34)
+            memory        = rgb(0x8FA6B4)
             hot           = rgb(0xD9824B)
             off           = rgb(0x3B4230)
             muted         = rgb(0x9A9478)
             nameText      = rgb(0xB9BCB1)
             nameOff       = rgb(0x4A4C47)
             jobText       = rgb(0xD4D6CB)
-            busyFill      = rgb(0x2B2A1C)
-            satFill       = rgb(0x1D2415)
-            offFill       = rgb(0x0B0B0A)
-            offStroke     = rgb(0x262724)
-            coreFill      = rgb(0x232B18)
             barTrack      = rgb(0x0E120A)
             pillBorder    = rgb(0x4A3F2C)
         }
@@ -84,18 +74,14 @@ struct FleetTheme {
     let dim: Color
     let text: Color
     let accent: Color
-    let ram: Color
+    /// Memory bar fill. Above 80 % the bar switches to `hot` instead.
+    let memory: Color
     let hot: Color
     let off: Color
     let muted: Color
     let nameText: Color
     let nameOff: Color
     let jobText: Color
-    let busyFill: Color
-    let satFill: Color
-    let offFill: Color
-    let offStroke: Color
-    let coreFill: Color
     let barTrack: Color
     let pillBorder: Color
 

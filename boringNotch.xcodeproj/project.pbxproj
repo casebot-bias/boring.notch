@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		0A026C5285A22320E55161C8 /* FleetNowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CA111D99EBAD7362EB7B5B /* FleetNowView.swift */; };
-		10FBE820163F391DBFB6DD4E /* FleetOrbitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C96069DB9618E6644F69A3 /* FleetOrbitView.swift */; };
 		1100290C2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */; };
 		110029272E84FD4C00035A57 /* TemporaryFileStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */; };
 		1100292A2E8691B400035A57 /* FileShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029292E8691B400035A57 /* FileShareView.swift */; };
@@ -108,7 +107,7 @@
 		14E9FEAA2C70BF610062E83F /* DownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEA92C70BF610062E83F /* DownloadView.swift */; };
 		14E9FEAE2C7325770062E83F /* Button+Bouncing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */; };
 		14FC6E502C7DED5600C7BEA5 /* DataTypes+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */; };
-		1FFC639F3F9E275F506106F0 /* FleetLanesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10D4356B8C14E68D8309B2A /* FleetLanesView.swift */; };
+		1FFC639F3F9E275F506106F0 /* FleetButterflyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10D4356B8C14E68D8309B2A /* FleetButterflyView.swift */; };
 		32255A267D8C447B0440C85E /* FleetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5104882A2AF59662ADF23254 /* FleetModels.swift */; };
 		347F1CBC62380DB1BEF363D4 /* FleetClosedIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */; };
 		37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3E45FB207CA856A28D20FF /* FleetFormat.swift */; };
@@ -120,10 +119,10 @@
 		592C97DC89A1C2AADB9081F3 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D1E3C7F860A060EDE8E06363 /* Cocoa.framework */; };
 		5955950D2E900ED800C66711 /* ApplicationRelauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5955950C2E900ED800C66711 /* ApplicationRelauncher.swift */; };
 		59D8C23C2E589FAA00147B33 /* VolumeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D8C23B2E589FAA00147B33 /* VolumeManager.swift */; };
-		5E7E8A1FCBA76A6EE9F3284E /* FleetOrbitModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86ABA45CAEBA9FC4D2E8CF00 /* FleetOrbitModel.swift */; };
+		5E7E8A1FCBA76A6EE9F3284E /* FleetPanelModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86ABA45CAEBA9FC4D2E8CF00 /* FleetPanelModel.swift */; };
 		63574F1621AD32135D662A9E /* FleetSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */; };
-		646EABE3BD7B602CC4D6F80A /* FleetOrbitModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86ABA45CAEBA9FC4D2E8CF00 /* FleetOrbitModel.swift */; };
-		6A043F09ECA359512A6D19DA /* FleetOrbitModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD4809E4B9876FEE672F1C96 /* FleetOrbitModelTests.swift */; };
+		646EABE3BD7B602CC4D6F80A /* FleetPanelModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86ABA45CAEBA9FC4D2E8CF00 /* FleetPanelModel.swift */; };
+		6A043F09ECA359512A6D19DA /* FleetPanelModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD4809E4B9876FEE672F1C96 /* FleetPanelModelTests.swift */; };
 		9902B4AC044E0C08108A4AC6 /* FleetFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3E45FB207CA856A28D20FF /* FleetFormat.swift */; };
 		9A0887322C7A693000C160EA /* TabButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0887312C7A693000C160EA /* TabButton.swift */; };
 		9A0887352C7AFF8E00C160EA /* TabSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0887342C7AFF8E00C160EA /* TabSelectionView.swift */; };
@@ -310,7 +309,7 @@
 		59D8C23B2E589FAA00147B33 /* VolumeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeManager.swift; sourceTree = "<group>"; };
 		62D329C358DFAA05D1AB63FC /* fleet.json */ = {isa = PBXFileReference; includeInIndex = 1; name = fleet.json; path = boringNotchTests/Fixtures/fleet.json; sourceTree = "<group>"; };
 		8273CC303EF7BBAF5F641041 /* FleetDecodingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetDecodingTests.swift; path = boringNotchTests/FleetDecodingTests.swift; sourceTree = "<group>"; };
-		86ABA45CAEBA9FC4D2E8CF00 /* FleetOrbitModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetOrbitModel.swift; path = Fleet/FleetOrbitModel.swift; sourceTree = "<group>"; };
+		86ABA45CAEBA9FC4D2E8CF00 /* FleetPanelModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetPanelModel.swift; path = Fleet/FleetPanelModel.swift; sourceTree = "<group>"; };
 		89CA111D99EBAD7362EB7B5B /* FleetNowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetNowView.swift; path = Fleet/FleetNowView.swift; sourceTree = "<group>"; };
 		9A0887312C7A693000C160EA /* TabButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabButton.swift; sourceTree = "<group>"; };
 		9A0887342C7AFF8E00C160EA /* TabSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabSelectionView.swift; sourceTree = "<group>"; };
@@ -341,13 +340,12 @@
 		B1F0A0012E60000100000001 /* BrightnessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessManager.swift; sourceTree = "<group>"; };
 		B1F747F82EC7E94000F841DB /* LottieView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LottieView.swift; sourceTree = "<group>"; };
 		B1FEB4982C7686630066EBBC /* PanGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanGesture.swift; sourceTree = "<group>"; };
-		C10D4356B8C14E68D8309B2A /* FleetLanesView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetLanesView.swift; path = Fleet/FleetLanesView.swift; sourceTree = "<group>"; };
+		C10D4356B8C14E68D8309B2A /* FleetButterflyView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetButterflyView.swift; path = Fleet/FleetButterflyView.swift; sourceTree = "<group>"; };
 		CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetClosedIndicator.swift; path = Fleet/FleetClosedIndicator.swift; sourceTree = "<group>"; };
 		CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetSectionView.swift; path = Fleet/FleetSectionView.swift; sourceTree = "<group>"; };
 		D1E3C7F860A060EDE8E06363 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
-		DD4809E4B9876FEE672F1C96 /* FleetOrbitModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetOrbitModelTests.swift; path = boringNotchTests/FleetOrbitModelTests.swift; sourceTree = "<group>"; };
+		DD4809E4B9876FEE672F1C96 /* FleetPanelModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetPanelModelTests.swift; path = boringNotchTests/FleetPanelModelTests.swift; sourceTree = "<group>"; };
 		F7E0A1000000000000000004 /* FleetThemeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetThemeTests.swift; path = boringNotchTests/FleetThemeTests.swift; sourceTree = "<group>"; };
-		E0C96069DB9618E6644F69A3 /* FleetOrbitView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetOrbitView.swift; path = Fleet/FleetOrbitView.swift; sourceTree = "<group>"; };
 		F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryActivityManager.swift; sourceTree = "<group>"; };
 		FD3E45FB207CA856A28D20FF /* FleetFormat.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetFormat.swift; path = Fleet/FleetFormat.swift; sourceTree = "<group>"; };
 		F7E0A1000000000000000001 /* FleetTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetTheme.swift; path = Fleet/FleetTheme.swift; sourceTree = "<group>"; };
@@ -719,7 +717,7 @@
 			children = (
 				8273CC303EF7BBAF5F641041 /* FleetDecodingTests.swift */,
 				A4F34CD9024D21FD870F3AD0 /* FleetFormatTests.swift */,
-				DD4809E4B9876FEE672F1C96 /* FleetOrbitModelTests.swift */,
+				DD4809E4B9876FEE672F1C96 /* FleetPanelModelTests.swift */,
 				F7E0A1000000000000000004 /* FleetThemeTests.swift */,
 				C013CA219D7597EB6A9F2104 /* Fixtures */,
 			);
@@ -752,11 +750,10 @@
 				5104882A2AF59662ADF23254 /* FleetModels.swift */,
 				FD3E45FB207CA856A28D20FF /* FleetFormat.swift */,
 				F7E0A1000000000000000001 /* FleetTheme.swift */,
-				86ABA45CAEBA9FC4D2E8CF00 /* FleetOrbitModel.swift */,
+				86ABA45CAEBA9FC4D2E8CF00 /* FleetPanelModel.swift */,
 				19AB008892470D0C770D6C4A /* FleetClient.swift */,
 				51B263B9B9718A79CB57973D /* FleetStore.swift */,
-				E0C96069DB9618E6644F69A3 /* FleetOrbitView.swift */,
-				C10D4356B8C14E68D8309B2A /* FleetLanesView.swift */,
+				C10D4356B8C14E68D8309B2A /* FleetButterflyView.swift */,
 				89CA111D99EBAD7362EB7B5B /* FleetNowView.swift */,
 				CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */,
 				CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */,
@@ -1053,10 +1050,10 @@
 				37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */,
 				F7E0A1000000000000000003 /* FleetTheme.swift in Sources */,
 				F7E0A1000000000000000005 /* FleetThemeTests.swift in Sources */,
-				5E7E8A1FCBA76A6EE9F3284E /* FleetOrbitModel.swift in Sources */,
+				5E7E8A1FCBA76A6EE9F3284E /* FleetPanelModel.swift in Sources */,
 				B3392077C15FAF55C7DD3094 /* FleetDecodingTests.swift in Sources */,
 				5411D456ED82369EDE9D5BB1 /* FleetFormatTests.swift in Sources */,
-				6A043F09ECA359512A6D19DA /* FleetOrbitModelTests.swift in Sources */,
+				6A043F09ECA359512A6D19DA /* FleetPanelModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1189,11 +1186,10 @@
 				32255A267D8C447B0440C85E /* FleetModels.swift in Sources */,
 				9902B4AC044E0C08108A4AC6 /* FleetFormat.swift in Sources */,
 				F7E0A1000000000000000002 /* FleetTheme.swift in Sources */,
-				646EABE3BD7B602CC4D6F80A /* FleetOrbitModel.swift in Sources */,
+				646EABE3BD7B602CC4D6F80A /* FleetPanelModel.swift in Sources */,
 				446035086F943DA68902F0D4 /* FleetClient.swift in Sources */,
 				FBD3015DA3435EF4D90C5BF7 /* FleetStore.swift in Sources */,
-				10FBE820163F391DBFB6DD4E /* FleetOrbitView.swift in Sources */,
-				1FFC639F3F9E275F506106F0 /* FleetLanesView.swift in Sources */,
+				1FFC639F3F9E275F506106F0 /* FleetButterflyView.swift in Sources */,
 				0A026C5285A22320E55161C8 /* FleetNowView.swift in Sources */,
 				63574F1621AD32135D662A9E /* FleetSectionView.swift in Sources */,
 				347F1CBC62380DB1BEF363D4 /* FleetClosedIndicator.swift in Sources */,
