@@ -5,37 +5,36 @@
 //  Pure formatting functions for fleet data.
 //  Depends only on Foundation and the model types (Reading, FleetMachine, DeviceActivity)
 //  declared in the same target.
-
+//
 import Foundation
 
 enum FleetFormat {
 
     static let unknown = "—"
 
-    // MARK: - percent
+    // MARK: - degrees
 
-    /// "38.6" -> "39%"; 0 -> "0%"; 7.25 -> "7%"; unavailable -> "—"
-    static func percent(_ r: Reading) -> String {
+    /// "38.37" -> "38°"; "40.8" -> "41°"; unavailable -> "—"
+    static func degrees(_ r: Reading) -> String {
         guard r.isAvailable, let value = r.value else { return unknown }
         let rounded = Int(value.rounded())
-        return "\(rounded)%"
-    }
-
-    // MARK: - celsius
-
-    /// "32.26" -> "32°C"; "40.8" -> "41°C"; unavailable -> "—"
-    static func celsius(_ r: Reading) -> String {
-        guard r.isAvailable, let value = r.value else { return unknown }
-        let rounded = Int(value.rounded())
-        return "\(rounded)°C"
+        return "\(rounded)°"
     }
 
     // MARK: - tokensPerSecond
 
-    /// nil -> "—"; 0 -> "0.0 tok/s"; 12.34 -> "12.3 tok/s"
+    /// nil -> "—"; 0 -> "0 t/s"; 12.34 -> "12 t/s"
     static func tokensPerSecond(_ v: Double?) -> String {
         guard let v = v else { return unknown }
-        return String(format: "%.1f tok/s", v)
+        return "\(Int(v.rounded())) t/s"
+    }
+
+    // MARK: - jobs
+
+    /// n <= 0 -> "idle"; 1 -> "1 job"; 2 -> "2 jobs"
+    static func jobs(_ n: Int) -> String {
+        guard n > 0 else { return "idle" }
+        return n == 1 ? "1 job" : "\(n) jobs"
     }
 
     // MARK: - elapsed
@@ -73,19 +72,5 @@ enum FleetFormat {
     /// isAvailable && value > 80
     static func isRAMWarning(_ r: Reading) -> Bool {
         r.isAvailable && (r.value ?? 0) > 80
-    }
-
-    // MARK: - gpuOrTokens
-
-    /// tokPerSec != nil -> tokensPerSecond(tokPerSec)
-    /// else gpu.isAvailable -> "GPU \(Int(round(value)))%" ; else "—"
-    static func gpuOrTokens(gpu: Reading, tokPerSec: Double?) -> String {
-        if tokPerSec != nil {
-            return tokensPerSecond(tokPerSec)
-        }
-        if gpu.isAvailable, let value = gpu.value {
-            return "GPU \(Int(value.rounded()))%"
-        }
-        return unknown
     }
 }

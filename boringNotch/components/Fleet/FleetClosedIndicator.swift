@@ -23,28 +23,31 @@ struct FleetClosedIndicator: View {
     var body: some View {
         if visible {
             HStack(spacing: 8) {
-                // Status dot
-                Circle()
-                    .fill(Color(red: 0x9F / 255, green: 0xB3 / 255, blue: 0x8A / 255))
-                    .frame(width: 8, height: 8)
-                    .shadow(color: Color(red: 0x9F / 255, green: 0xB3 / 255, blue: 0x8A / 255), radius: 4)
-                    .opacity(pulsing ? 0.35 : 1.0)
-                    .task(id: store.isBusy && !reduceMotion) {
-                        guard store.isBusy, !reduceMotion else {
-                            pulsing = false
+                // Dot row: one 5-pt dot per lane
+                HStack(spacing: 4) {
+                    ForEach(store.orbitModel.lanes) { lane in
+                        Circle()
+                            .fill(lane.state == .busy ? FleetPalette.sage : FleetPalette.off)
+                            .frame(width: 5, height: 5)
+                            .opacity(pulsing && lane.state == .busy ? 0.35 : 1)
+                    }
+                }
+                .task(id: store.isBusy && !reduceMotion) {
+                    guard store.isBusy, !reduceMotion else {
+                        pulsing = false
+                        return
+                    }
+                    pulsing = true
+                    while !Task.isCancelled {
+                        do {
+                            try await Task.sleep(nanoseconds: UInt64(0.8 * 1_000_000_000))
+                            if Task.isCancelled { return }
+                            pulsing = !pulsing
+                        } catch {
                             return
                         }
-                        pulsing = true
-                        while !Task.isCancelled {
-                            do {
-                                try await Task.sleep(nanoseconds: UInt64(0.8 * 1_000_000_000))
-                                if Task.isCancelled { return }
-                                pulsing = !pulsing
-                            } catch {
-                                return
-                            }
-                        }
                     }
+                }
 
                 // Hardware-notch gap spacer
                 Rectangle()
@@ -57,7 +60,7 @@ struct FleetClosedIndicator: View {
                 // Active count label
                 Text("\(store.activeCount) active")
                     .font(.system(size: 10))
-                    .foregroundColor(Color(red: 0x8A / 255, green: 0x8A / 255, blue: 0x80 / 255))
+                    .foregroundColor(FleetPalette.muted)
             }
             .frame(height: vm.effectiveClosedNotchHeight)
         } else {
