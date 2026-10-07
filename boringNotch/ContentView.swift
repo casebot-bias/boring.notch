@@ -38,6 +38,10 @@ struct ContentView: View {
 
     @Default(.showNotHumanFace) var showNotHumanFace
 
+    @Default(.fleetSkin) var fleetSkin
+
+    private var fleetTheme: FleetTheme { FleetTheme(skin: fleetSkin) }
+
     // Shared interactive spring for movement/resizing to avoid conflicting animations
     private let animationSpring = Animation.interactiveSpring(response: 0.38, dampingFraction: 0.8, blendDuration: 0)
 
@@ -101,11 +105,16 @@ struct ContentView: View {
                         : cornerRadiusInsets.closed.bottom
                     )
                     .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
-                    .background(.black)
+                    .background(fleetTheme.panel)
                     .clipShape(currentNotchShape)
+                    .overlay {
+                        currentNotchShape
+                            .stroke(fleetTheme.panelEdge, lineWidth: 1)
+                            .padding(0.5)
+                    }
                     .overlay(alignment: .top) {
                         Rectangle()
-                            .fill(.black)
+                            .fill(fleetTheme.panelTop)
                             .frame(height: 1)
                             .padding(.horizontal, topCornerRadius)
                     }
