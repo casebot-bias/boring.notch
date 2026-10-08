@@ -44,10 +44,11 @@ final class FleetPanelModelTests: XCTestCase {
         return "{\"generatedAt\":\"2026-10-02T07:00:00.000Z\",\"devices\":[\(devices.joined(separator: ","))]}"
     }
 
-    /// case, frank (37.5°, 85% RAM), claire, dali (51°), macbook (68.3°), ciri (no readings); all online.
+    /// case, frank (37.5°, 85% RAM), claire, dali (51°), macbook (68.3°), ciri (no readings), odin (no readings); all online.
     private func onlineFleetJSON() -> String {
         return fleetJSON([machineJSON("case"), machineJSON("frank", ram: 85, temp: 37.5), machineJSON("claire"),
-                          machineJSON("dali", temp: 51), machineJSON("macbook", temp: 68.3), machineJSON("ciri")])
+                          machineJSON("dali", temp: 51), machineJSON("macbook", temp: 68.3), machineJSON("ciri"),
+                          machineJSON("odin")])
     }
 
     private func fleet(_ json: String, file: StaticString = #file, line: UInt = #line) -> FleetSnapshot? {
@@ -71,15 +72,15 @@ final class FleetPanelModelTests: XCTestCase {
 
     func testNilSnapshotsGiveOfflineLanesAndCaseOrigin() {
         let model = FleetPanelModelBuilder.build(fleet: nil, activity: nil)
-        XCTAssertEqual(model.nodes.map(\.id), ["frank", "claire", "dali", "nova", "ciri", "macbook"])
-        XCTAssertEqual(model.nodes.map(\.label), ["frank", "claire", "dali", "nova", "ciri", "mac"])
-        XCTAssertEqual(model.nodes.map(\.kind), [.gpu, .gpu, .gpu, .cloud, .agent, .mac])
-        XCTAssertEqual(model.nodes.map(\.state), [.offline, .offline, .offline, .offline, .offline, .offline])
+        XCTAssertEqual(model.nodes.map(\.id), ["frank", "claire", "dali", "nova", "ciri", "odin", "macbook"])
+        XCTAssertEqual(model.nodes.map(\.label), ["frank", "claire", "dali", "nova", "ciri", "odin", "mac"])
+        XCTAssertEqual(model.nodes.map(\.kind), [.gpu, .gpu, .gpu, .cloud, .agent, .agent, .mac])
+        XCTAssertEqual(model.nodes.map(\.state), [.offline, .offline, .offline, .offline, .offline, .offline, .offline])
         XCTAssertEqual(model.origin.id, "case")
         XCTAssertEqual(model.origin.label, "case")
         XCTAssertEqual(model.origin.kind, .host)
         XCTAssertEqual(model.origin.state, .offline)
-        XCTAssertEqual(model.lanes.map(\.id), ["case", "frank", "claire", "dali", "nova", "ciri", "macbook"])
+        XCTAssertEqual(model.lanes.map(\.id), ["case", "frank", "claire", "dali", "nova", "ciri", "odin", "macbook"])
         XCTAssertEqual(model.activeCount, 0)
         XCTAssertFalse(model.isBusy)
         XCTAssertTrue(model.nowJobs.isEmpty)
@@ -182,7 +183,8 @@ final class FleetPanelModelTests: XCTestCase {
 
     func testCaseOriginCountsOnceAndShowsTemperature() {
         let json = fleetJSON([machineJSON("case", temp: 38.37), machineJSON("frank"), machineJSON("claire"),
-                              machineJSON("dali"), machineJSON("macbook"), machineJSON("ciri")])
+                              machineJSON("dali"), machineJSON("macbook"), machineJSON("ciri"),
+                              machineJSON("odin")])
         guard let f = fleet(json),
               let a = activity(activityJSON([deviceJSON("case", busy: true, items: [
                   itemJSON("case-a", device: "case", since: "2026-10-02T06:00:00.000Z", elapsedSec: 120),
@@ -194,7 +196,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.origin.jobs.count, 2)
         XCTAssertEqual(model.origin.meta.text, "38°")
         XCTAssertEqual(model.activeCount, 1)                      // case counts once only
-        XCTAssertEqual(model.nodes.map(\.state), [.idle, .idle, .idle, .idle, .idle, .idle])
+        XCTAssertEqual(model.nodes.map(\.state), [.idle, .idle, .idle, .idle, .idle, .idle, .idle])
     }
 
     func testNowJobsDedupAndNewestFirst() {
@@ -225,5 +227,43 @@ final class FleetPanelModelTests: XCTestCase {
         guard let frank = lane(model2, "frank") else { return }
         XCTAssertEqual(frank.state, .busy)                        // slots.used > 0 counts as busy
         XCTAssertEqual(model2.activeCount, 1)
+    }
+
+    func testOdinLaneJobCountsAndEmptyBars() {
+        func odinLane(_ items: [String], _ busy: Bool, _ json: String) -> FleetLane? {
+            guard let f = fleet(json), let a = activity(activityJSON([deviceJSON("odin", busy: busy, items: items)])) else { return nil }
+            return lane(FleetPanelModelBuilder.build(fleet: f, activity: a), "odin")
+        }
+        let of = onlineFleetJSON()
+        let three = (1...3).map { itemJSON("odin-\($0)", device: "odin", file: "/tmp/odin\($0).jsonl") }
+        guard let odin = odinLane(three, true, of), let one = odinLane([three[0]], true, of),
+              let empty = odinLane([], true, of), let idle = odinLane([], false, of) else { return }
+        XCTAssertEqual(odin.kind, .agent)
+        XCTAssertEqual(odin.label, "odin")
+        XCTAssertEqual(odin.state, .busy)
+        XCTAssertEqual(odin.meta.text, "3 jobs")
+        XCTAssertEqual(FleetFormat.barFraction(odin.cpu), 0)
+        XCTAssertEqual(FleetFormat.barFraction(odin.ram), 0)
+        XCTAssertEqual(one.meta.text, "1 job")
+        XCTAssertEqual(empty.meta.text, "1 job")
+        XCTAssertEqual(idle.state, .idle)
+        XCTAssertEqual(idle.meta.text, "idle")
+        let noOdin = fleetJSON(["case", "frank", "claire", "dali", "macbook"].map { machineJSON($0) })
+        guard let off = odinLane([], true, noOdin) else { return }
+        XCTAssertEqual(off.state, .offline)
+        XCTAssertEqual(off.meta.text, "—")
+    }
+
+    func testOdinCountsTowardActiveCount() {
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: true, items: [
+                  itemJSON("odin-job", device: "odin", since: "2026-10-02T06:00:00.000Z", elapsedSec: 120),
+              ])])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        guard let odin = lane(model, "odin") else { return }
+        XCTAssertEqual(odin.state, .busy)
+        XCTAssertEqual(odin.meta.text, "1 job")
+        XCTAssertEqual(model.activeCount, 1)
+        XCTAssertTrue(model.nowJobs.contains { $0.pill == "odin" })
     }
 }
