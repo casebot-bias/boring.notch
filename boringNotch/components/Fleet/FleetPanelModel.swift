@@ -2,8 +2,8 @@
 //  FleetPanelModel.swift
 //  boringNotch
 //
-//  Data model for the opened fleet panel: the case origin plus the six machines
-//  (frank, claire, dali, nova, ciri, macbook) as butterfly rows, plus the "Now" jobs.
+//  Data model for the opened fleet panel: the case origin plus the machines
+//  (frank, claire, dali, nova, ciri, odin, macbook) as butterfly rows, plus the "Now" jobs.
 //  Foundation only (no SwiftUI) so it compiles into both the app target and the test
 //  target.
 //
@@ -50,7 +50,7 @@ struct FleetLane: Identifiable, Equatable {
 
 struct FleetPanelModel: Equatable {
     var origin: FleetLane          // id "case"
-    var nodes: [FleetLane]         // row order: frank, claire, dali, nova, ciri, macbook
+    var nodes: [FleetLane]         // row order: frank, claire, dali, nova, ciri, odin, macbook
     var activeCount: Int
 
     var isBusy: Bool { activeCount > 0 }
@@ -82,7 +82,7 @@ struct FleetPanelModel: Equatable {
 }
 
 enum FleetPanelModelBuilder {
-    static let nodeIds = ["frank", "claire", "dali", "nova", "ciri", "macbook"]
+    static let nodeIds = ["frank", "claire", "dali", "nova", "ciri", "odin", "macbook"]
 
     /// "openrouter" | "qwencloud" | "other" (nil/empty/unknown model -> "other").
     static func cloudProvider(_ model: String?) -> String {
@@ -101,6 +101,9 @@ enum FleetPanelModelBuilder {
             machineLane(id: "dali", kind: .gpu, fleet: fleet, activity: activity),
             novaLane(fleet: fleet, activity: activity),
             machineLane(id: "ciri", kind: .agent, fleet: fleet, activity: activity),
+            // Odin is the QA reviewer that runs on case (Codex): same shape as ciri —
+            // activity device "odin", fleet machine "odin", no CPU/RAM/temp readings.
+            machineLane(id: "odin", kind: .agent, fleet: fleet, activity: activity),
             machineLane(id: "macbook", kind: .mac, fleet: fleet, activity: activity),
         ]
         let activeCount = ([origin] + nodes).filter { $0.state == .busy }.count
