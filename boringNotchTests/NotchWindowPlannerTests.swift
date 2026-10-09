@@ -225,4 +225,44 @@ final class NotchWindowPlannerTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Show Fleet: resize before positioning
+
+    /// The Show Fleet toggle changes `windowSize` (640x210 off, 836x320 on) without touching
+    /// windows that already exist. The window must therefore be resized to `windowSize` and then
+    /// centred from its real frame on every screen, or the notch drifts off centre.
+    func testShowFleetToggleThenHeightChangeKeepsWindowCentredOnEveryScreen() {
+        let fleetOff = CGSize(width: 640, height: 210)
+        let fleetOn = CGSize(width: 836, height: 320)
+        let screens = [macbook, external]
+
+        // Windows exist at the Show-Fleet-off size on every screen.
+        var frames: [String: CGRect] = [:]
+        for screen in screens {
+            frames[screen.uuid] = NotchWindowPlanner.frame(for: screen, windowSize: fleetOff)
+        }
+
+        // Show Fleet on: each window is resized to the new size ...
+        for screen in screens {
+            frames[screen.uuid] = NotchWindowPlanner.frame(for: screen, windowSize: fleetOn)
+        }
+
+        // ... and then, also when the notch height changes later, centred from its real frame.
+        for _ in 0..<2 {
+            for screen in screens {
+                var frame = frames[screen.uuid]!
+                frame.origin = NotchWindowPlanner.origin(for: screen, windowSize: frame.size)
+                frames[screen.uuid] = frame
+            }
+        }
+
+        for screen in screens {
+            let frame = frames[screen.uuid]!
+            XCTAssertEqual(frame.size, fleetOn, "\(screen.uuid): window must take the new notch size")
+            XCTAssertEqual(frame.midX, screen.frame.midX, accuracy: 0.001,
+                           "\(screen.uuid): notch must stay horizontally centred")
+            XCTAssertEqual(frame.maxY, screen.frame.maxY, accuracy: 0.001,
+                           "\(screen.uuid): notch must stay at the top edge")
+        }
+    }
 }

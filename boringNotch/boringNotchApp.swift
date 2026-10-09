@@ -276,13 +276,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.alphaValue = 0
         }
 
+        let notchedScreen = NotchScreen(
+            uuid: screen.displayUUID ?? "",
+            frame: screen.frame,
+            hasNotch: screen.safeAreaInsets.top > 0)
+
+        // Resize first: toggling Show Fleet changes `windowSize` without touching existing
+        // windows, so an un-resized window would be centred from the wrong size and drift.
+        let targetFrame = NotchWindowPlanner.frame(for: notchedScreen, windowSize: windowSize)
+        if window.frame != targetFrame {
+            window.setFrame(targetFrame, display: true)
+        }
+
+        // Centre from the window's real frame, never the logical `windowSize`.
         window.setFrameOrigin(
-            NotchWindowPlanner.origin(
-                for: NotchScreen(
-                    uuid: screen.displayUUID ?? "",
-                    frame: screen.frame,
-                    hasNotch: screen.safeAreaInsets.top > 0),
-                windowSize: windowSize))
+            NotchWindowPlanner.origin(for: notchedScreen, windowSize: window.frame.size))
         window.alphaValue = 1
     }
 
@@ -333,6 +341,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 guard let self = self else { return }
                 self.cleanupWindows(shouldInvert: true)
+                self.adjustWindowPosition(changeAlpha: true)
+                self.setupDragDetectors()
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name.showFleetChanged, object: nil, queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self else { return }
                 self.adjustWindowPosition(changeAlpha: true)
                 self.setupDragDetectors()
             }
@@ -624,6 +642,7 @@ extension Notification.Name {
     static let selectedScreenChanged = Notification.Name("SelectedScreenChanged")
     static let notchHeightChanged = Notification.Name("NotchHeightChanged")
     static let showOnAllDisplaysChanged = Notification.Name("showOnAllDisplaysChanged")
+    static let showFleetChanged = Notification.Name("showFleetChanged")
     static let automaticallySwitchDisplayChanged = Notification.Name("automaticallySwitchDisplayChanged")
     static let expandedDragDetectionChanged = Notification.Name("expandedDragDetectionChanged")
 }

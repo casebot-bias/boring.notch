@@ -45,6 +45,14 @@ enum NotchWindowPlanner {
             y: screen.frame.origin.y + screen.frame.height - windowSize.height
         )
     }
+    /// Frame a notch window must take on `screen`: the screen's top-centre rect of the current
+    /// logical notch size. Callers apply this frame so the window is resized and moved in one
+    /// step; a changed `windowSize` (Show Fleet on/off) can then never leave a window at its old
+    /// size while the origin is computed from the new one - the drift that pushed the notch off
+    /// centre.
+    static func frame(for screen: NotchScreen, windowSize: CGSize) -> CGRect {
+        CGRect(origin: origin(for: screen, windowSize: windowSize), size: windowSize)
+    }
 
     /// Screen list -> windows mapping.
     /// - `showOnAllDisplays == true`: every screen in the list gets a placement, in order.
