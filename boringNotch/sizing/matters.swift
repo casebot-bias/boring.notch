@@ -82,13 +82,21 @@ enum MusicPlayerImageSizes {
             if Defaults[.notchHeightMode] == .matchRealNotchSize {
                 notchHeight = screen.safeAreaInsets.top
             } else if Defaults[.notchHeightMode] == .matchMenuBar {
-                notchHeight = screen.frame.maxY - screen.visibleFrame.maxY
+                // A display with no menu bar of its own measures 0, which would collapse the notch
+                // to zero height; keep the configured height in that case.
+                notchHeight = NotchWindowPlanner.measuredOrConfiguredClosedHeight(
+                    measuredMenuBar: screen.frame.maxY - screen.visibleFrame.maxY,
+                    configured: Defaults[.notchHeight])
             }
         } else {
             // This is a display WITHOUT a notch - use non-notch height settings
             notchHeight = Defaults[.nonNotchHeight]
             if Defaults[.nonNotchHeightMode] == .matchMenuBar {
-                notchHeight = screen.frame.maxY - screen.visibleFrame.maxY
+                // The reported case: a secondary monitor with no menu bar of its own measures 0,
+                // which left the notch zero height - i.e. invisible - on that screen.
+                notchHeight = NotchWindowPlanner.measuredOrConfiguredClosedHeight(
+                    measuredMenuBar: screen.frame.maxY - screen.visibleFrame.maxY,
+                    configured: Defaults[.nonNotchHeight])
             }
         }
     }

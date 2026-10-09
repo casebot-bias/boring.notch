@@ -302,20 +302,84 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             window.alphaValue = 0
         }
-
-        logNotchWindow(window, on: screen, expected: placement.frame)
     }
 
-    /// `defaults write <bundle id> debugWindows -bool true`, then watch Console for
-    /// "[boringNotch]" to see whether every screen really has a visible notch window.
+    /// `defaults write theboringteam.boringnotch debugWindows -bool true`, then watch Console for
+    /// "[boringNotch]": one line per notch window per layout pass, saying whether the window is on
+    /// screen, what it draws, and which state is keeping the closed notch face empty. Enough to
+    /// settle on a real Mac why a display shows no notch.
     @MainActor
-    private func logNotchWindow(_ window: NSWindow, on screen: NSScreen, expected: CGRect) {
+    private func logNotchWindow(_ window: NSWindow, on screen: NSScreen, expected: CGRect,
+                                viewModel: BoringViewModel) {
         guard Defaults[.debugWindows] else { return }
-        NSLog("[boringNotch] screen=\(screen.localizedName) uuid=\(screen.displayUUID ?? "-") "
-              + "frame=\(NSStringFromRect(window.frame)) expected=\(NSStringFromRect(expected)) "
-              + "visible=\(window.isVisible) alpha=\(window.alphaValue) "
-              + "level=\(window.level.rawValue) number=\(window.windowNumber) "
-              + "screens=\(NSScreen.screens.count)")
+        let musicActive = MusicManager.shared.isPlaying || !MusicManager.shared.isPlayerIdle
+        let fleetRow = Defaults[.showFleet] && FleetStore.shared.isReachable
+            && viewModel.effectiveClosedNotchHeight > 0
+        // Same rule NotchLayout() uses to pick the closed face: no face means the window exists
+        // but nothing is drawn in it.
+        let faceDrawn = viewModel.notchState == .open
+            || musicActive
+            || (!viewModel.hideOnClosed && Defaults[.showNotHumanFace])
+            || fleetRow
+        let inventory = NSScreen.screens.map { screen in
+            let uuid = screen.displayUUID ?? "no-uuid"
+            let size = "\(Int(screen.frame.width))x\(Int(screen.frame.height))"
+            let origin = "\(Int(screen.frame.origin.x)),\(Int(screen.frame.origin.y))"
+            return "\(screen.localizedName):\(size)@\(origin):\(uuid):inset\(Int(screen.safeAreaInsets.top))"
+        }.joined(separator: " | ")
+        let parts: [String] = [
+            "screen=\(screen.localizedName)",
+            "uuid=\(screen.displayUUID ?? "-")",
+            "hasNotch=\(screen.safeAreaInsets.top > 0)",
+            "menuBar=\(screen.frame.maxY - screen.visibleFrame.maxY)",
+            "frame=\(NSStringFromRect(window.frame))",
+            "expected=\(NSStringFromRect(expected))",
+            "fits=\(NSStringFromSize(window.contentView?.fittingSize ?? .zero))",
+            "visible=\(window.isVisible)",
+            "alpha=\(window.alphaValue)",
+            "level=\(window.level.rawValue)",
+            "number=\(window.windowNumber)",
+            "state=\(viewModel.notchState)",
+            "hideOnClosed=\(viewModel.hideOnClosed)",
+            "closedNotch=\(viewModel.closedNotchSize)",
+            "effectiveClosed=\(viewModel.effectiveClosedNotchHeight)",
+            "faceDrawn=\(faceDrawn)",
+            "fleetRow=\(fleetRow)",
+            "fleetReachable=\(FleetStore.shared.isReachable)",
+            "music=\(musicActive)",
+            "showFace=\(Defaults[.showNotHumanFace])",
+            "showFleet=\(Defaults[.showFleet])",
+            "drawn=\(drawnContent(window))",
+            "mode=\(Defaults[.showOnAllDisplays] ? "all-displays" : "single-display")",
+            "windows=\(windows.count)",
+            "screens=\(NSScreen.screens.count)",
+            "sharing=\(window.sharingType.rawValue)",
+            "onActiveSpace=\(window.isOnActiveSpace)",
+            "inCgsSpace=\(NotchSpaceManager.shared.notchSpace.windows.contains(window))",
+            "allScreens=[\(inventory)]",
+        ]
+        NSLog("[boringNotch] %@", parts.joined(separator: " "))
+    }
+
+    /// Rasterises the window's own content and returns the bounding box and count of the pixels
+    /// that are actually drawn (alpha > 8), so the debug log says *what* is on a screen, not just
+    /// that a window exists. In-process, so it needs no screen-recording permission.
+    @MainActor
+    private func drawnContent(_ window: NSWindow) -> String {
+        guard let view = window.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return "none" }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        var minX = rep.pixelsWide, minY = rep.pixelsHigh, maxX = -1, maxY = -1, count = 0
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide {
+                guard let c = rep.colorAt(x: x, y: y), c.alphaComponent > 0.03 else { continue }
+                count += 1
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        guard count > 0 else { return "empty" }
+        return "\(maxX - minX + 1)x\(maxY - minY + 1)@\(minX),\(minY)px=\(count)"
     }
 
     private func removeWindowScreenObserver(forKey uuid: String) {
@@ -567,6 +631,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
                 if let window = windows[uuid], let viewModel = viewModels[uuid] {
                     applyPlacement(placement, to: window, on: nsScreen, changeAlpha: changeAlpha)
+                    logNotchWindow(window, on: nsScreen, expected: placement.frame, viewModel: viewModel)
 
                     if viewModel.notchState == .closed {
                         viewModel.close()
@@ -608,6 +673,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             if let window = window {
                 applyPlacement(selectedPlacement, to: window, on: selectedScreen, changeAlpha: changeAlpha)
+                logNotchWindow(window, on: selectedScreen, expected: selectedPlacement.frame, viewModel: vm)
 
                 if vm.notchState == .closed {
                     vm.close()

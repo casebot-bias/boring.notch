@@ -58,6 +58,15 @@ enum NotchWindowPlanner {
         CGRect(origin: origin(for: screen, windowSize: windowSize), size: windowSize)
     }
 
+    /// A display can measure its own menu bar as 0 (`frame.maxY - visibleFrame.maxY`): a secondary
+    /// monitor with no menu bar of its own reads 0. Used directly as a notch height, that 0
+    /// collapses the closed notch to nothing, so the display draws no notch at all - the "the notch
+    /// only shows on the primary screen" report. Keep the configured height instead. An explicitly
+    /// configured 0 is returned unchanged: that is the user's own choice.
+    static func measuredOrConfiguredClosedHeight(measuredMenuBar: CGFloat, configured: CGFloat) -> CGFloat {
+        measuredMenuBar > 0 ? measuredMenuBar : configured
+    }
+
     /// Screen list -> windows mapping.
     /// - `showOnAllDisplays == true`: every screen in the list gets a placement, in order.
     /// - `showOnAllDisplays == false`: only the screen whose uuid == `selectedUUID` (no placement when

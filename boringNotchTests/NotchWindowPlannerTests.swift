@@ -315,4 +315,34 @@ final class NotchWindowPlannerTests: XCTestCase {
                               width: size.width, height: size.height))
         XCTAssertEqual(plan.removals, [], "both screens keep their window")
     }
+
+    // MARK: - A menu bar that measures 0
+
+    /// A secondary display with no menu bar of its own measures
+    /// `frame.maxY - visibleFrame.maxY == 0`. Used directly as the closed-notch height that 0 made
+    /// the notch zero height, so the display drew nothing - the "notch only shows on the primary
+    /// screen" report. The configured height must win over a 0 measurement.
+    func testZeroMenuBarMeasurementFallsBackToTheConfiguredHeight() {
+        XCTAssertEqual(
+            NotchWindowPlanner.measuredOrConfiguredClosedHeight(measuredMenuBar: 0, configured: 32),
+            32, "no menu bar on that display: keep the configured height")
+        XCTAssertEqual(
+            NotchWindowPlanner.measuredOrConfiguredClosedHeight(measuredMenuBar: 30, configured: 32),
+            30, "a real menu bar still wins")
+        XCTAssertEqual(
+            NotchWindowPlanner.measuredOrConfiguredClosedHeight(measuredMenuBar: 0, configured: 0),
+            0, "an explicitly configured 0 stays 0")
+    }
+
+    /// The whole chain on such a display: a non-zero height survives the closed-notch rule, so the
+    /// spacer and the panel that draw the notch stay visible there.
+    func testNotchOnADisplayWithoutAMenuBarStillHasAHeight() {
+        let height = NotchWindowPlanner.measuredOrConfiguredClosedHeight(measuredMenuBar: 0,
+                                                                        configured: 32)
+        XCTAssertGreaterThan(height, 0)
+        XCTAssertEqual(
+            NotchWindowPlanner.closedNotchHeight(closedHeight: height, hideOnClosed: true,
+                                                 hasNotch: false, showOnAllDisplays: true),
+            height, "the closed notch keeps that height on an un-notched display")
+    }
 }
