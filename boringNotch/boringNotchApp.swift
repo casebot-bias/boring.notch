@@ -315,12 +315,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let musicActive = MusicManager.shared.isPlaying || !MusicManager.shared.isPlayerIdle
         let fleetRow = Defaults[.showFleet] && FleetStore.shared.isReachable
             && viewModel.effectiveClosedNotchHeight > 0
-        // Same rule NotchLayout() uses to pick the closed face: no face means the window exists
-        // but nothing is drawn in it.
-        let faceDrawn = viewModel.notchState == .open
-            || musicActive
-            || (!viewModel.hideOnClosed && Defaults[.showNotHumanFace])
-            || fleetRow
+        // Mirrors NotchLayout()'s closed branches, with the expanding-view gates folded into the
+        // inputs, so the log never claims a face the view would not draw.
+        let peek = coordinator.sneakPeek
+        let hudDrawn = peek.show && ((peek.type != .music && peek.type != .battery)
+                                     || (peek.type == .music && !viewModel.hideOnClosed))
+        let faceDrawn = NotchWindowPlanner.closedFaceDrawn(
+            NotchWindowPlanner.NotchFaceState(
+                isOpen: viewModel.notchState == .open,
+                helloAnimation: coordinator.helloAnimationRunning,
+                powerStatusRow: coordinator.expandingView.type == .battery
+                    && coordinator.expandingView.show && Defaults[.showPowerStatusNotifications],
+                systemHUD: hudDrawn,
+                musicActive: musicActive && (!coordinator.expandingView.show
+                                             || coordinator.expandingView.type == .music),
+                musicLiveActivityEnabled: coordinator.musicLiveActivityEnabled,
+                hideOnClosed: viewModel.hideOnClosed,
+                showFace: Defaults[.showNotHumanFace] && !coordinator.expandingView.show,
+                fleetRow: fleetRow))
         let inventory = NSScreen.screens.map { screen in
             let uuid = screen.displayUUID ?? "no-uuid"
             let size = "\(Int(screen.frame.width))x\(Int(screen.frame.height))"
@@ -632,6 +644,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                       let window = windows[placement.uuid],
                       let viewModel = viewModels[placement.uuid] else { continue }
 
+                // The window was just resized for the current settings; an open notch has to take the
+                // new content size too, or a Show Fleet toggle leaves it stale and clipped.
+                viewModel.refreshNotchSize()
                 applyPlacement(placement, to: window, on: nsScreen, changeAlpha: changeAlpha)
                 logNotchWindow(window, on: nsScreen, expected: placement.frame, viewModel: viewModel)
 
@@ -657,7 +672,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             vm.screenUUID = selectedScreen.displayUUID
-            vm.notchSize = getClosedNotchSize(screenUUID: selectedScreen.displayUUID)
+            // State-aware: an open notch keeps the open size after a Show Fleet toggle.
+            vm.refreshNotchSize()
 
             if window == nil {
                 window = createBoringNotchWindow(for: selectedScreen, with: vm)

@@ -68,6 +68,55 @@ enum NotchWindowPlanner {
     static func measuredOrConfiguredClosedHeight(measuredMenuBar: CGFloat, configured: CGFloat) -> CGFloat {
         measuredMenuBar > 0 ? measuredMenuBar : configured
     }
+    /// Sizes the current settings produce: the open notch content and the window that holds it
+    /// (open content plus the drop shadow). Show Fleet widens the open notch by the fleet section and
+    /// raises it to that section's height. Callers re-read these after a size-changing setting
+    /// changes, so content and window can never be derived from different settings.
+    struct NotchSizes: Equatable {
+        var open: CGSize
+        var window: CGSize
+    }
+
+    static func sizes(showFleet: Bool,
+                      baseOpen: CGSize,
+                      fleetMusicWidth: CGFloat,
+                      fleetSpacing: CGFloat,
+                      fleetSectionWidth: CGFloat,
+                      fleetSectionHeight: CGFloat,
+                      shadowPadding: CGFloat) -> NotchSizes {
+        let open = showFleet
+            ? CGSize(width: fleetMusicWidth + 40 + fleetSpacing + 1 + fleetSectionWidth,
+                     height: max(baseOpen.height, fleetSectionHeight))
+            : baseOpen
+        return NotchSizes(open: open,
+                          window: CGSize(width: open.width, height: open.height + shadowPadding))
+    }
+
+    /// What the closed notch shows, mirroring the branch order of `ContentView.NotchLayout()`: an
+    /// open notch, the hello animation, a power-status row, a system HUD, the music live activity
+    /// or the face animation (both suppressed while `hideOnClosed`), and finally the fleet row.
+    /// The debug log reports this, so it must not claim a face the view would not draw.
+    struct NotchFaceState: Equatable {
+        var isOpen = false
+        var helloAnimation = false
+        var powerStatusRow = false
+        var systemHUD = false
+        var musicActive = false
+        var musicLiveActivityEnabled = false
+        var hideOnClosed = false
+        var showFace = false
+        var fleetRow = false
+    }
+
+    static func closedFaceDrawn(_ state: NotchFaceState) -> Bool {
+        if state.isOpen { return true }
+        if state.helloAnimation { return true }
+        if state.powerStatusRow { return true }
+        if state.systemHUD { return true }
+        if state.musicActive { return state.musicLiveActivityEnabled && !state.hideOnClosed }
+        if state.showFace { return !state.hideOnClosed }
+        return state.fleetRow
+    }
 
     /// Screen list -> windows mapping.
     /// - `showOnAllDisplays == true`: every screen in the list gets a placement, in order.

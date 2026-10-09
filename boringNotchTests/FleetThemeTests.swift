@@ -196,7 +196,11 @@ final class FleetThemeTests: XCTestCase {
                                             "\(skin) \(name) is an accent colour: at least 4.5:1")
             }
             XCTAssertGreaterThanOrEqual(contrast(t.off, bg), 3.0, "\(skin) status dots at least 3:1")
-            XCTAssertGreaterThanOrEqual(contrast(t.wire, bg), 3.0, "\(skin) idle wires at least 3:1")
+            // `wire` is also what FleetMiniSignalMap draws the closed map's wires with:
+            XCTAssertGreaterThanOrEqual(contrast(t.wire, bg), 3.0,
+                                        "\(skin) idle wires, closed map included, at least 3:1")
+            XCTAssertLessThan(contrast(t.line, bg), 3.0,
+                              "\(skin) the line hairline is too dark for those wires - do not use it for them")
         }
     }
 

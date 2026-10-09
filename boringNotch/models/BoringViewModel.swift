@@ -188,10 +188,19 @@ class BoringViewModel: NSObject, ObservableObject {
         return false
     }
 
+    /// Re-read the notch's size for its current state. Show Fleet changes the open notch's size, so
+    /// a toggle while the notch is open must not leave the content at the size it had before; the
+    /// layout calls this on every pass so content and window always come from the same settings.
+    func refreshNotchSize() {
+        let closed = getClosedNotchSize(screenUUID: screenUUID)
+        closedNotchSize = closed
+        notchSize = notchState == .open ? openNotchSize : closed
+    }
+
     func open() {
-        self.notchSize = openNotchSize
         self.notchState = .open
-        
+        refreshNotchSize()
+
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
     }
@@ -201,9 +210,8 @@ class BoringViewModel: NSObject, ObservableObject {
         if SharingStateManager.shared.preventNotchClose {
             return
         }
-        self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)
-        self.closedNotchSize = self.notchSize
         self.notchState = .closed
+        refreshNotchSize()
         self.isBatteryPopoverActive = false
         self.coordinator.sneakPeek.show = false
         self.edgeAutoOpenActive = false

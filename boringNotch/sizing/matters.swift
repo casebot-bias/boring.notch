@@ -23,16 +23,20 @@ let fleetSectionSpacing: CGFloat = 15
 let fleetSectionHeight: CGFloat = 300
 private let baseOpenNotchSize: CGSize = .init(width: 640, height: 190)
 
-var openNotchSize: CGSize {
-    guard Defaults[.showFleet] else { return baseOpenNotchSize }
-    return .init(
-        width: fleetMusicWidth + 40 + fleetSectionSpacing + 1 + fleetSectionWidth,
-        height: max(baseOpenNotchSize.height, fleetSectionHeight)
-    )
-}
+var openNotchSize: CGSize { panelSizes.open }
 
-var windowSize: CGSize {
-    .init(width: openNotchSize.width, height: openNotchSize.height + shadowPadding)
+var windowSize: CGSize { panelSizes.window }
+
+/// The sizes the current settings produce, derived in `NotchWindowPlanner.sizes` so a Show Fleet
+/// toggle cannot leave the content and the window on different settings.
+private var panelSizes: NotchWindowPlanner.NotchSizes {
+    NotchWindowPlanner.sizes(showFleet: Defaults[.showFleet],
+                             baseOpen: baseOpenNotchSize,
+                             fleetMusicWidth: fleetMusicWidth,
+                             fleetSpacing: fleetSectionSpacing,
+                             fleetSectionWidth: fleetSectionWidth,
+                             fleetSectionHeight: fleetSectionHeight,
+                             shadowPadding: shadowPadding)
 }
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 

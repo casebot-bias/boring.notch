@@ -374,4 +374,70 @@ final class NotchWindowPlannerTests: XCTestCase {
         XCTAssertEqual(windows.mapValues { $0.moves.count }, movesAfterFirst)
         XCTAssertEqual(windows.mapValues { $0.shownFrontCount }, frontsAfterFirst)
     }
+
+    // MARK: - Panel sizes across a Show Fleet toggle
+
+    private func panelSizes(showFleet: Bool) -> NotchWindowPlanner.NotchSizes {
+        NotchWindowPlanner.sizes(showFleet: showFleet,
+                                 baseOpen: CGSize(width: 640, height: 190),
+                                 fleetMusicWidth: 220, fleetSpacing: 15, fleetSectionWidth: 560,
+                                 fleetSectionHeight: 300, shadowPadding: 20)
+    }
+
+    /// Toggling Show Fleet while the notch is open must move content and window together: the open
+    /// content takes the new size and the window is always that content plus the shadow. A content
+    /// size captured before the toggle would leave the two out of step.
+    func testShowFleetToggleWhileOpenKeepsContentAndWindowInStep() {
+        let off = panelSizes(showFleet: false)
+        let on = panelSizes(showFleet: true)
+
+        XCTAssertEqual(off.open, CGSize(width: 640, height: 190))
+        XCTAssertEqual(off.window, CGSize(width: 640, height: 210))
+        XCTAssertEqual(on.open, CGSize(width: 836, height: 300))
+        XCTAssertEqual(on.window, CGSize(width: 836, height: 320))
+        for (label, sizes) in [("off", off), ("on", on)] {
+            XCTAssertEqual(sizes.window.height - sizes.open.height, 20,
+                           "\(label): window is content plus the shadow")
+            XCTAssertEqual(sizes.window.width, sizes.open.width,
+                           "\(label): window width follows the content")
+        }
+        XCTAssertNotEqual(on.open, off.open, "the setting really changes the open content size")
+        XCTAssertNotEqual(off.open.height + 20, on.window.height,
+                          "a stale content size would not match the resized window")
+    }
+
+    // MARK: - What the closed notch actually draws
+
+    private func faceState(
+        _ configure: (inout NotchWindowPlanner.NotchFaceState) -> Void = { _ in }
+    ) -> NotchWindowPlanner.NotchFaceState {
+        var state = NotchWindowPlanner.NotchFaceState()
+        configure(&state)
+        return state
+    }
+
+    /// The debug log must not claim a face the view would not draw: the music branch needs the live
+    /// activity enabled and the notch not hidden, the face branch needs the notch not hidden.
+    func testClosedFaceDrawnMirrorsTheViewsGates() {
+        XCTAssertFalse(NotchWindowPlanner.closedFaceDrawn(faceState { $0.musicActive = true }),
+                       "music with the live activity disabled draws nothing")
+        XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState {
+            $0.musicActive = true; $0.musicLiveActivityEnabled = true }))
+        XCTAssertFalse(NotchWindowPlanner.closedFaceDrawn(faceState {
+            $0.musicActive = true; $0.musicLiveActivityEnabled = true; $0.hideOnClosed = true }),
+            "the live activity is suppressed while the notch is hidden")
+        XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState { $0.showFace = true }))
+        XCTAssertFalse(NotchWindowPlanner.closedFaceDrawn(faceState {
+            $0.showFace = true; $0.hideOnClosed = true }))
+        XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState {
+            $0.showFace = true; $0.musicActive = true; $0.musicLiveActivityEnabled = true }),
+            "music draws its live activity instead of the face branch")
+        XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState { $0.fleetRow = true }))
+        XCTAssertFalse(NotchWindowPlanner.closedFaceDrawn(faceState()),
+                       "nothing shown and no fleet row: nothing is drawn")
+        XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState { $0.isOpen = true }))
+        XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState { $0.helloAnimation = true }))
+        XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState { $0.powerStatusRow = true }))
+        XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState { $0.systemHUD = true }))
+    }
 }

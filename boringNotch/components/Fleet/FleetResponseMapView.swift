@@ -369,9 +369,11 @@ struct FleetMiniSignalMap: View {
             .opacity(state == .busy && !reduceMotion ? (pulsing ? 1 : 0.45) : 1)
     }
 
+    /// One wire segment. `wire`, not the `line` hairline: these are the closed map's idle wires and
+    /// must clear 3:1 against the panel in both skins.
     private var wire: some View {
         Rectangle()
-            .fill(theme.line)
+            .fill(theme.wire)
             .frame(width: wireLength, height: 1)
     }
 
