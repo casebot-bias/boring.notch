@@ -3,8 +3,9 @@
 //  boringNotchTests
 //
 //  Behaviour tests for FleetPanelModelBuilder.build: response-map lane order and
-//  states, current-work job order/dedup, nova's cloud routing, the fleet-wide tok/s
-//  sum and the cpu/gpu/ram peaks.
+//  states, current-work job order/dedup, the unique-key runningTaskCount, nova's
+//  cloud routing, the fleet-wide tok/s sum (a reported 0 stays 0) and the
+//  cpu/gpu/ram peaks.
 //
 import XCTest
 
@@ -139,6 +140,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.criticalCount, 0)
         XCTAssertTrue(model.isBusy)
         XCTAssertEqual(model.runningTaskCount, 2)                          // frank's two jobs, nothing else
+        XCTAssertEqual(model.runningTaskCount, model.nowJobs.count)            // unique keys, not a per-lane sum
         XCTAssertEqual(model.totalTokPerSec ?? 0, 42.4, accuracy: 0.001)
         XCTAssertEqual(model.nowJobs.map(\.key), ["frank-b-2026-10-02T06:30:00.000Z", "/tmp/frank-a.jsonl"])
     }
@@ -176,6 +178,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.criticalCount, 1)
         XCTAssertFalse(model.isBusy)
         XCTAssertNil(model.totalTokPerSec)
+        XCTAssertEqual(model.runningTaskCount, 0)                               // the offline lane's job adds nothing
     }
 
     // MARK: - Nova (openrouter cloud pool, not a machine)
@@ -205,7 +208,8 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.origin.jobs.map(\.label), ["to-frank", "or-job", "plain-job", "qwen-job"])
         XCTAssertEqual(model.origin.jobs.map(\.pill), ["frank", "nova", "case", "case"])
         XCTAssertEqual(model.workingCount, 1)                                // nova (agents only; case is origin)
-        XCTAssertEqual(model.runningTaskCount, 5)                             // case's 4 + nova's 1
+        XCTAssertEqual(model.runningTaskCount, 4)     // case's 4 items; nova's openrouter run is one of them, counted once
+        XCTAssertEqual(model.runningTaskCount, model.nowJobs.count)            // same keys as the deduped walk
         XCTAssertEqual(model.linkedCount, 6)
         XCTAssertEqual(model.criticalCount, 0)
         // Qwen-only activity leaves nova idle (case keeps working via its items).
@@ -234,6 +238,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.workingCount, 0)
         XCTAssertFalse(model.isBusy)
         XCTAssertTrue(model.nowJobs.isEmpty)                                 // offline lanes leak no jobs
+        XCTAssertEqual(model.runningTaskCount, 0)                               // offline lanes leak no tasks either
     }
 
     // MARK: - Case origin, dedup, nowJobs
@@ -253,7 +258,8 @@ final class FleetPanelModelTests: XCTestCase {
         let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
         XCTAssertEqual(model.origin.state, .busy)
         XCTAssertEqual(model.origin.jobs.count, 3)
-        XCTAssertEqual(model.runningTaskCount, 4)                              // case's 3 + frank's 1, counted per lane
+        XCTAssertEqual(model.runningTaskCount, 3)                              // unique keys: frank's copy of /tmp/a.jsonl counted once
+        XCTAssertEqual(model.runningTaskCount, model.nowJobs.count)            // matches the three keys asserted below
         guard let frank = lane(model, "frank") else { return }
         XCTAssertEqual(frank.jobs.first?.elapsedSec, 610)                      // the lane keeps its own copy
         // nowJobs walks case first: the shared key survives with the case lane's numbers;
@@ -274,7 +280,35 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.workingCount, 0)                                  // no *agent* is working
         XCTAssertTrue(model.isBusy)                                             // origin busy is enough
         XCTAssertEqual(model.runningTaskCount, 1)
+        XCTAssertEqual(model.runningTaskCount, model.nowJobs.count)
         XCTAssertEqual(model.nowJobs.map(\.key), ["/tmp/b.jsonl"])
+    }
+
+    func testRunningTaskCountCountsUniqueKeysAcrossBusyLanesAndSkipsOfflineLanes() {
+        // Delegated work reported under the same file by case and frank, plus one
+        // openrouter item nova derives from case; dali is offline but retains a job.
+        let shared = itemJSON("delegated", device: "frank", since: "2026-10-02T06:00:00.000Z",
+                              elapsedSec: 300, file: "/tmp/delegated.jsonl")
+        let openrouter = itemJSON("or-job", device: "cloud", model: "openrouter/deepseek",
+                                  since: "2026-10-02T06:05:00.000Z", elapsedSec: 60, file: "/tmp/or.jsonl")
+        let frankOwn = itemJSON("frank-own", device: "frank", since: "2026-10-02T06:10:00.000Z",
+                                elapsedSec: 120, file: "/tmp/frank-own.jsonl")
+        let retained = itemJSON("dali-job", device: "dali", since: "2026-10-02T05:00:00.000Z",
+                                file: "/tmp/dali-retained.jsonl")
+        let json = fleetJSON([machineJSON("case"), machineJSON("frank"), machineJSON("claire"),
+                              machineJSON("ciri"), machineJSON("dali", state: "unreachable"),
+                              machineJSON("macbook"), machineJSON("odin")])
+        guard let f = fleet(json),
+              let a = activity(activityJSON([deviceJSON("case", busy: true, items: [shared, openrouter]),
+                                             deviceJSON("frank", busy: true, items: [shared, frankOwn]),
+                                             deviceJSON("dali", busy: true, items: [retained])])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        guard let dali = lane(model, "dali") else { return }
+        XCTAssertEqual(dali.state, .offline)
+        XCTAssertEqual(dali.jobs.map(\.key), ["/tmp/dali-retained.jsonl"])     // jobs survive on the offline lane…
+        XCTAssertEqual(model.runningTaskCount, 3)   // delegated + or-job + frank-own; the offline lane adds nothing
+        XCTAssertEqual(model.runningTaskCount, model.nowJobs.count)
+        XCTAssertEqual(model.nowJobs.map(\.key), ["/tmp/or.jsonl", "/tmp/frank-own.jsonl", "/tmp/delegated.jsonl"])
     }
 
     // MARK: - Fleet output total
@@ -291,10 +325,30 @@ final class FleetPanelModelTests: XCTestCase {
         // No agent reports a rate: nil, not 0.
         let silent = [deviceJSON("case", busy: true), deviceJSON("frank", busy: false), deviceJSON("dali", busy: false)]
         guard let a2 = activity(activityJSON(silent)) else { return }
-        XCTAssertNil(FleetPanelModelBuilder.build(fleet: f, activity: a2).totalTokPerSec)
+        let silentModel = FleetPanelModelBuilder.build(fleet: f, activity: a2)
+        XCTAssertNil(silentModel.totalTokPerSec)                    // nil only when no agent reports a rate at all
+        XCTAssertEqual(FleetFormat.fleetOutput(silentModel.totalTokPerSec), FleetFormat.unknown)
         // One reporting agent: its rate alone is the total.
         guard let a3 = activity(activityJSON([deviceJSON("frank", busy: true, tokPerSec: 7)])) else { return }
         XCTAssertEqual(FleetPanelModelBuilder.build(fleet: f, activity: a3).totalTokPerSec ?? 0, 7, accuracy: 0.001)
+    }
+
+    func testAgentReportingZeroThroughputShowsZeroNotDash() {
+        let devices = [deviceJSON("case", busy: false),                        // origin: silent here
+                       deviceJSON("frank", busy: false, tokPerSec: 0),         // idle frank reports a real 0
+                       deviceJSON("dali", busy: false)]                         // no other agent reports a rate
+        guard let f = fleet(onlineFleetJSON()), let a = activity(activityJSON(devices)) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        XCTAssertFalse(model.isBusy)
+        XCTAssertEqual(model.totalTokPerSec, 0)                                  // 0, not nil
+        XCTAssertEqual(FleetFormat.fleetOutput(model.totalTokPerSec), "0")       // renders "0", not "—"
+        // Reported zeros don't mask a real rate.
+        let mixed = [deviceJSON("frank", busy: false, tokPerSec: 0),
+                     deviceJSON("dali", busy: true, tokPerSec: 12.4)]
+        guard let a2 = activity(activityJSON(mixed)) else { return }
+        let mixedModel = FleetPanelModelBuilder.build(fleet: f, activity: a2)
+        XCTAssertEqual(mixedModel.totalTokPerSec ?? 0, 12.4, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.fleetOutput(mixedModel.totalTokPerSec), "12")
     }
 
     // MARK: - Peaks
@@ -350,5 +404,6 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertNil(odin.jobs.last?.elapsedSec)
         XCTAssertEqual(model.workingCount, 1)
         XCTAssertEqual(model.runningTaskCount, 4)
+        XCTAssertEqual(model.runningTaskCount, model.nowJobs.count)
     }
 }

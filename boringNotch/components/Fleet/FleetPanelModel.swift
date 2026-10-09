@@ -57,9 +57,10 @@ struct FleetPeak: Identifiable, Equatable {
 struct FleetPanelModel: Equatable {
     var origin: FleetLane              // id/label "case"
     var agents: [FleetLane]            // frank, claire, ciri, dali, nova, odin
-    var totalTokPerSec: Double?        // sum of the agents' reported rates; nil when none
+    /// Sum of the agents' reported rates; nil only when no agent reports a rate;
+    /// a reported 0 counts as 0.
+    var totalTokPerSec: Double?
     var peaks: [FleetPeak]             // always cpu, gpu, ram in this order
-    var runningTaskCount: Int          // jobs reported across origin + agents
 
     /// case first, then the agents.
     var lanes: [FleetLane] { [origin] + agents }
@@ -70,9 +71,16 @@ struct FleetPanelModel: Equatable {
     var criticalCount: Int { agents.filter { !$0.isLinked }.count }
     var isBusy: Bool { workingCount > 0 || origin.state == .busy }
 
-    /// Jobs of the busy lanes (case first), newest-first, deduped by key keeping the
-    /// first occurrence while walking `lanes`.
-    var nowJobs: [FleetJob] {
+    /// Jobs of the busy lanes (case first) in walk order, deduped by key keeping the
+    /// first occurrence; an offline lane keeps its last-reported jobs visible in the
+    /// map, but they are not running.
+    ///
+    /// One source of truth for both `runningTaskCount` and `nowJobs`, so the health-row
+    /// count and the "+N jobs in Fleet" link always match the preview list. Summing
+    /// per-lane counts would double-count: case reports the jobs it delegated (they
+    /// appear on frank/claire/dali too) and the OpenRouter runs nova is derived from,
+    /// so nova's jobs are a duplicate subset of case's.
+    private var runningJobs: [FleetJob] {
         var seen = Set<String>()
         var collected: [FleetJob] = []
         for lane in lanes where lane.state == .busy {
@@ -80,8 +88,16 @@ struct FleetPanelModel: Equatable {
                 collected.append(job)
             }
         }
+        return collected
+    }
+
+    /// Unique running jobs across the busy lanes; matches the `nowJobs` preview list.
+    var runningTaskCount: Int { runningJobs.count }
+
+    /// The busy lanes' deduped jobs, newest-first.
+    var nowJobs: [FleetJob] {
         // Smallest elapsed = newest; nil (unknown start) last; ties keep walk order.
-        return collected.enumerated().sorted { lhs, rhs in
+        runningJobs.enumerated().sorted { lhs, rhs in
             switch (lhs.element.elapsedSec, rhs.element.elapsedSec) {
             case (nil, nil): return lhs.offset < rhs.offset
             case (nil, _?): return false
@@ -119,14 +135,12 @@ enum FleetPanelModelBuilder {
             // "odin", fleet machine "odin".
             machineLane(id: "odin", fleet: fleet, activity: activity),
         ]
-        let rates = agentIds.compactMap { device(id: $0, in: activity)?.tokPerSec }.filter { $0 > 0 }
+        let rates = agentIds.compactMap { device(id: $0, in: activity)?.tokPerSec }
         let totalTokPerSec = rates.isEmpty ? nil : rates.reduce(0, +)
-        let runningTaskCount = origin.jobs.count + agents.reduce(0) { $0 + $1.jobs.count }
         return FleetPanelModel(origin: origin,
                                agents: agents,
                                totalTokPerSec: totalTokPerSec,
-                               peaks: peaks(from: fleet),
-                               runningTaskCount: runningTaskCount)
+                               peaks: peaks(from: fleet))
     }
 
     // MARK: - Lane builders
