@@ -7,7 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0A026C5285A22320E55161C8 /* FleetNowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CA111D99EBAD7362EB7B5B /* FleetNowView.swift */; };
+		0A026C5285A22320E55161C8 /* FleetWorkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CA111D99EBAD7362EB7B5B /* FleetWorkView.swift */; };
+		F7E0A1000000000000000106 /* FleetPressureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000107 /* FleetPressureView.swift */; };
 		1100290C2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */; };
 		110029272E84FD4C00035A57 /* TemporaryFileStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */; };
 		1100292A2E8691B400035A57 /* FileShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029292E8691B400035A57 /* FileShareView.swift */; };
@@ -107,7 +108,7 @@
 		14E9FEAA2C70BF610062E83F /* DownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEA92C70BF610062E83F /* DownloadView.swift */; };
 		14E9FEAE2C7325770062E83F /* Button+Bouncing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */; };
 		14FC6E502C7DED5600C7BEA5 /* DataTypes+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */; };
-		1FFC639F3F9E275F506106F0 /* FleetButterflyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10D4356B8C14E68D8309B2A /* FleetButterflyView.swift */; };
+		1FFC639F3F9E275F506106F0 /* FleetResponseMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10D4356B8C14E68D8309B2A /* FleetResponseMapView.swift */; };
 		32255A267D8C447B0440C85E /* FleetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5104882A2AF59662ADF23254 /* FleetModels.swift */; };
 		347F1CBC62380DB1BEF363D4 /* FleetClosedIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */; };
 		37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3E45FB207CA856A28D20FF /* FleetFormat.swift */; };
@@ -310,7 +311,8 @@
 		62D329C358DFAA05D1AB63FC /* fleet.json */ = {isa = PBXFileReference; includeInIndex = 1; name = fleet.json; path = boringNotchTests/Fixtures/fleet.json; sourceTree = "<group>"; };
 		8273CC303EF7BBAF5F641041 /* FleetDecodingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetDecodingTests.swift; path = boringNotchTests/FleetDecodingTests.swift; sourceTree = "<group>"; };
 		86ABA45CAEBA9FC4D2E8CF00 /* FleetPanelModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetPanelModel.swift; path = Fleet/FleetPanelModel.swift; sourceTree = "<group>"; };
-		89CA111D99EBAD7362EB7B5B /* FleetNowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetNowView.swift; path = Fleet/FleetNowView.swift; sourceTree = "<group>"; };
+		89CA111D99EBAD7362EB7B5B /* FleetWorkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetWorkView.swift; path = Fleet/FleetWorkView.swift; sourceTree = "<group>"; };
+		F7E0A1000000000000000107 /* FleetPressureView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetPressureView.swift; path = Fleet/FleetPressureView.swift; sourceTree = "<group>"; };
 		9A0887312C7A693000C160EA /* TabButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabButton.swift; sourceTree = "<group>"; };
 		9A0887342C7AFF8E00C160EA /* TabSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabSelectionView.swift; sourceTree = "<group>"; };
 		9A987A032C73CA66005CA465 /* ShelfView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfView.swift; sourceTree = "<group>"; };
@@ -340,7 +342,7 @@
 		B1F0A0012E60000100000001 /* BrightnessManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessManager.swift; sourceTree = "<group>"; };
 		B1F747F82EC7E94000F841DB /* LottieView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LottieView.swift; sourceTree = "<group>"; };
 		B1FEB4982C7686630066EBBC /* PanGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanGesture.swift; sourceTree = "<group>"; };
-		C10D4356B8C14E68D8309B2A /* FleetButterflyView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetButterflyView.swift; path = Fleet/FleetButterflyView.swift; sourceTree = "<group>"; };
+		C10D4356B8C14E68D8309B2A /* FleetResponseMapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetResponseMapView.swift; path = Fleet/FleetResponseMapView.swift; sourceTree = "<group>"; };
 		CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetClosedIndicator.swift; path = Fleet/FleetClosedIndicator.swift; sourceTree = "<group>"; };
 		CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetSectionView.swift; path = Fleet/FleetSectionView.swift; sourceTree = "<group>"; };
 		D1E3C7F860A060EDE8E06363 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
@@ -753,8 +755,9 @@
 				86ABA45CAEBA9FC4D2E8CF00 /* FleetPanelModel.swift */,
 				19AB008892470D0C770D6C4A /* FleetClient.swift */,
 				51B263B9B9718A79CB57973D /* FleetStore.swift */,
-				C10D4356B8C14E68D8309B2A /* FleetButterflyView.swift */,
-				89CA111D99EBAD7362EB7B5B /* FleetNowView.swift */,
+				C10D4356B8C14E68D8309B2A /* FleetResponseMapView.swift */,
+				89CA111D99EBAD7362EB7B5B /* FleetWorkView.swift */,
+				F7E0A1000000000000000107 /* FleetPressureView.swift */,
 				CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */,
 				CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */,
 			);
@@ -1189,8 +1192,9 @@
 				646EABE3BD7B602CC4D6F80A /* FleetPanelModel.swift in Sources */,
 				446035086F943DA68902F0D4 /* FleetClient.swift in Sources */,
 				FBD3015DA3435EF4D90C5BF7 /* FleetStore.swift in Sources */,
-				1FFC639F3F9E275F506106F0 /* FleetButterflyView.swift in Sources */,
-				0A026C5285A22320E55161C8 /* FleetNowView.swift in Sources */,
+				1FFC639F3F9E275F506106F0 /* FleetResponseMapView.swift in Sources */,
+				0A026C5285A22320E55161C8 /* FleetWorkView.swift in Sources */,
+				F7E0A1000000000000000106 /* FleetPressureView.swift in Sources */,
 				63574F1621AD32135D662A9E /* FleetSectionView.swift in Sources */,
 				347F1CBC62380DB1BEF363D4 /* FleetClosedIndicator.swift in Sources */,
 			);

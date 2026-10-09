@@ -22,13 +22,25 @@ struct FleetClosedIndicator: View {
 
     var body: some View {
         if visible {
-            HStack(spacing: 8) {
-                // Dot row: one 5-pt dot per lane
-                HStack(spacing: 4) {
-                    ForEach(store.panelModel.lanes) { lane in
-                        Circle()
-                            .fill(lane.state == .busy ? theme.accent : theme.off)
-                            .frame(width: 5, height: 5)
+            let model = store.panelModel
+            HStack(spacing: 10) {
+                // Compact six-signal map of the agents
+                FleetMiniSignalMap(lanes: model.agents, origin: model.origin)
+
+                // Working count over link / critical status
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(model.workingCount) working")
+                        .font(.system(size: 10))
+                        .monospacedDigit()
+                        .foregroundColor(theme.text)
+                    if model.criticalCount == 0 {
+                        Text(FleetFormat.linked(model.linkedCount, of: model.agentCount))
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundColor(theme.dim)
+                    } else {
+                        Text(FleetFormat.status(model.criticalCount))
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundColor(theme.hot)
                     }
                 }
 
@@ -40,10 +52,17 @@ struct FleetClosedIndicator: View {
                         height: vm.effectiveClosedNotchHeight
                     )
 
-                // Active count label
-                Text("\(store.activeCount) active")
-                    .font(.system(size: 10))
-                    .foregroundColor(theme.muted)
+                // Total output on the right of the camera gap
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    let total = FleetFormat.fleetOutput(model.totalTokPerSec)
+                    Text(total)
+                        .font(.system(size: 20, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundColor(model.totalTokPerSec == nil ? theme.dim : theme.accent)
+                    Text("tok/s")
+                        .font(.system(size: 7, design: .monospaced))
+                        .foregroundColor(theme.dim)
+                }
             }
             .frame(height: vm.effectiveClosedNotchHeight)
         } else {
