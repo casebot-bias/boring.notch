@@ -435,4 +435,19 @@ final class FleetPanelModelTests: XCTestCase {
         let down = FleetPanelModelBuilder.build(fleet: offlineFleet, activity: nil)
         XCTAssertEqual(down.lanes.first { $0.id == "pika" }?.state, .offline)
     }
+
+    /// The API promises a pika *device*: a busy one with no matching fleet machine row must still
+    /// be busy, and its run must appear in the working count and in the current-work list.
+    func testPikaBusyDeviceWithoutAMachineRowCountsAsWorking() {
+        let job = itemJSON("pika-run", device: "pika", since: "2026-10-02T06:00:00.000Z", elapsedSec: 30)
+        guard let act = activity(activityJSON([deviceJSON("pika", busy: true, items: [job])])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: nil, activity: act)
+
+        XCTAssertEqual(model.lanes.first { $0.id == "pika" }?.state, .busy,
+                       "a busy pika device with no machine row is busy, not idle")
+        XCTAssertEqual(model.workingCount, 1, "the busy pika lane counts as working")
+        XCTAssertEqual(model.runningTaskCount, 1, "its run is one running task")
+        XCTAssertEqual(model.nowJobs.count, 1, "its run is the current work")
+        XCTAssertEqual(model.nowJobs.map(\.key), ["pika-run-2026-10-02T06:00:00.000Z"])
+    }
 }

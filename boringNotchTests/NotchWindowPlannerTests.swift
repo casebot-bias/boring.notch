@@ -2,9 +2,8 @@
 //  NotchWindowPlannerTests.swift
 //  boringNotchTests
 //
-//  Pure screen -> notch-window planning: two-screen (MacBook + external) placement,
-//  window removals, and the closed-notch height rule that keeps the synthetic notch
-//  on displays without a hardware notch while the user asked for all displays.
+//  Pure screen -> notch-window planning: two-screen (MacBook + external) placement and
+//  window removals.
 //
 
 import XCTest
@@ -31,7 +30,6 @@ final class NotchWindowPlannerTests: XCTestCase {
     )
 
     private let windowSize = CGSize(width: 280, height: 32)
-    private let closedHeight: CGFloat = 38
 
     // MARK: - Helpers
 
@@ -181,59 +179,6 @@ final class NotchWindowPlannerTests: XCTestCase {
         assertPlacementsAndRemovalsDisjoint(plan)
     }
 
-    // MARK: - Closed-notch height
-
-    func testNotchedScreenKeepsClosedHeightOnEveryFlagCombination() {
-        for hideOnClosed in [false, true] {
-            for showOnAllDisplays in [false, true] {
-                XCTAssertEqual(
-                    NotchWindowPlanner.closedNotchHeight(closedHeight: closedHeight,
-                                                         hideOnClosed: hideOnClosed,
-                                                         hasNotch: true,
-                                                         showOnAllDisplays: showOnAllDisplays),
-                    closedHeight,
-                    "hardware-notch screens never collapse: hideOnClosed=\(hideOnClosed), "
-                        + "showOnAllDisplays=\(showOnAllDisplays)")
-            }
-        }
-    }
-
-    func testScreenWithoutNotchCollapsesOnlyWhenHidingAndNotShowingOnAllDisplays() {
-        XCTAssertEqual(
-            NotchWindowPlanner.closedNotchHeight(closedHeight: closedHeight,
-                                                 hideOnClosed: true,
-                                                 hasNotch: false,
-                                                 showOnAllDisplays: false),
-            0,
-            "upstream fullscreen-hide rule still applies in single-display mode")
-    }
-
-    func testScreenWithoutNotchKeepsClosedHeightWhenShowingOnAllDisplays() {
-        // Regression: the external monitor used to collapse to 0 while a fullscreen app
-        // was running, so its fleet glance / media player could never render.
-        XCTAssertEqual(
-            NotchWindowPlanner.closedNotchHeight(closedHeight: closedHeight,
-                                                 hideOnClosed: true,
-                                                 hasNotch: false,
-                                                 showOnAllDisplays: true),
-            closedHeight,
-            "multi-display mode must not drop the notch on screens without a hardware notch")
-    }
-
-    func testWhenNotHidingOnClosedEveryScreenKeepsClosedHeight() {
-        for hasNotch in [false, true] {
-            for showOnAllDisplays in [false, true] {
-                XCTAssertEqual(
-                    NotchWindowPlanner.closedNotchHeight(closedHeight: closedHeight,
-                                                         hideOnClosed: false,
-                                                         hasNotch: hasNotch,
-                                                         showOnAllDisplays: showOnAllDisplays),
-                    closedHeight,
-                    "hasNotch=\(hasNotch), showOnAllDisplays=\(showOnAllDisplays)")
-            }
-        }
-    }
-
     // MARK: - Show Fleet: resize before positioning
 
     /// The Show Fleet toggle changes `windowSize` (640x210 off, 836x320 on) without touching
@@ -332,18 +277,6 @@ final class NotchWindowPlannerTests: XCTestCase {
         XCTAssertEqual(
             NotchWindowPlanner.measuredOrConfiguredClosedHeight(measuredMenuBar: 0, configured: 0),
             0, "an explicitly configured 0 stays 0")
-    }
-
-    /// The whole chain on such a display: a non-zero height survives the closed-notch rule, so the
-    /// spacer and the panel that draw the notch stay visible there.
-    func testNotchOnADisplayWithoutAMenuBarStillHasAHeight() {
-        let height = NotchWindowPlanner.measuredOrConfiguredClosedHeight(measuredMenuBar: 0,
-                                                                        configured: 32)
-        XCTAssertGreaterThan(height, 0)
-        XCTAssertEqual(
-            NotchWindowPlanner.closedNotchHeight(closedHeight: height, hideOnClosed: true,
-                                                 hasNotch: false, showOnAllDisplays: true),
-            height, "the closed notch keeps that height on an un-notched display")
     }
 
     // MARK: - Window sync (create, move, show, close)

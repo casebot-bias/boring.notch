@@ -102,18 +102,11 @@ class BoringViewModel: NSObject, ObservableObject {
             .store(in: &cancellables)
     }
 
-    // A display without a hardware notch still draws the synthetic notch. In multi-display mode it
-    // must stay visible even while a fullscreen app hides the notch on notched screens; that is what
-    // makes the fleet panel and media player reachable on every screen.
-    var effectiveClosedNotchHeight: CGFloat {
-        let currentScreen = screenUUID.flatMap { NSScreen.screen(withUUID: $0) }
-        return NotchWindowPlanner.closedNotchHeight(
-            closedHeight: closedNotchSize.height,
-            hideOnClosed: hideOnClosed,
-            hasNotch: (currentScreen?.safeAreaInsets.top ?? 0) > 0,
-            showOnAllDisplays: Defaults[.showOnAllDisplays]
-        )
-    }
+    /// Height the closed notch occupies: the screen's own closed height. A display without a
+    /// hardware notch shows its synthetic notch exactly like a notched one - it used to collapse to
+    /// zero height on such a screen while `hideOnClosed` was true, which left that screen with no
+    /// notch at all. Zero only when the configured height is zero.
+    var effectiveClosedNotchHeight: CGFloat { closedNotchSize.height }
 
     var chinHeight: CGFloat {
         if !Defaults[.hideTitleBar] {

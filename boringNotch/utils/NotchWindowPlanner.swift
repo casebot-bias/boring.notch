@@ -32,10 +32,10 @@ struct NotchWindowPlan: Equatable {
 /// only the screen matching `selectedUUID` does. Windows for screens that disappeared, or that are
 /// no longer selected, are reported as removals.
 ///
-/// Closed-notch height rule: upstream hides the synthetic notch on a display without a hardware
-/// notch while a fullscreen app is running (`hideOnClosed`). In multi-display mode that rule is
-/// dropped, because every screen must keep its notch: the fleet glance and media player have to be
-/// reachable on every display, including external monitors that have no hardware notch.
+/// Closed-notch height: every display keeps its synthetic notch at the height
+/// `getClosedNotchSize` computes for it - the hardware inset on a notched display, the non-notch
+/// height elsewhere. A display without a hardware notch used to collapse to zero height while
+/// `hideOnClosed` was true, which left that screen with no notch at all; it no longer does.
 enum NotchWindowPlanner {
     /// Top-centre origin for a window of `windowSize` on `screen`:
     /// x = frame.origin.x + frame.width/2 - windowSize.width/2,
@@ -112,16 +112,6 @@ enum NotchWindowPlanner {
             .sorted()
 
         return NotchWindowPlan(placements: placements, removals: removals)
-    }
-
-    /// Height of the closed notch on a screen. Upstream hides the synthetic notch on a display
-    /// without a hardware notch while a fullscreen app is running (`hideOnClosed`); in
-    /// multi-display mode every screen must keep its notch, so that rule is dropped when the user
-    /// asked for all displays:
-    /// `(hideOnClosed && !hasNotch && !showOnAllDisplays) ? 0 : closedHeight`
-    static func closedNotchHeight(closedHeight: CGFloat, hideOnClosed: Bool, hasNotch: Bool,
-                                  showOnAllDisplays: Bool) -> CGFloat {
-        (hideOnClosed && !hasNotch && !showOnAllDisplays) ? 0 : closedHeight
     }
 }
 

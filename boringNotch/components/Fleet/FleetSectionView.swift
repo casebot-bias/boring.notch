@@ -109,12 +109,13 @@ struct FleetSectionView: View {
 
     // MARK: - Main
 
-    /// Response map and current work share the column evenly, split by a 1 px
-    /// hairline; this row absorbs whatever height the fixed rows leave.
+    /// Response map and current work split the row with a 1 px hairline; the
+    /// map takes at least `responseMapWidth` and the work column takes the
+    /// remainder. This row absorbs whatever height the fixed rows leave.
     private var main: some View {
         HStack(alignment: .top, spacing: 20) {
             FleetResponseMapView(lanes: store.panelModel.agents, origin: store.panelModel.origin)
-                .frame(maxWidth: .infinity)
+                .frame(minWidth: FleetPanelMetrics.responseMapWidth, maxWidth: .infinity)
             theme.line
                 .frame(width: 1)
                 .frame(maxHeight: .infinity)

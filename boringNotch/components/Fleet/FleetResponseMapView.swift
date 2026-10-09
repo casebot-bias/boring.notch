@@ -87,13 +87,17 @@ struct FleetResponseMapView: View {
     // MARK: - Map
 
     /// Two agent columns and the case box in an HStack. Each column is sized
-    /// from the fixed `wireGap` to the box, so it can never overlap the box;
-    /// the Canvas wire anchors sit on the columns' inner edges.
+    /// from the fixed `wireGap` to the box, and also keeps
+    /// `FleetPanelMetrics.responseMapColumnWidth` as a floor, so it can never
+    /// overlap the box; the Canvas wire anchors sit on the columns' inner edges.
     private var map: some View {
         GeometryReader { geo in
             let gridRows = max(leftIndexes.count, rightIndexes.count)
             let rowHeight = geo.size.height / CGFloat(max(1, gridRows))
-            let colWidth = max(52, (geo.size.width - caseSize) / 2 - wireGap - 6)
+            // The column floor leaves room for the name and detail lines, so no status truncates
+            // at 11 pt; a wider map still gets the freed space.
+            let colWidth = max(FleetPanelMetrics.responseMapColumnWidth,
+                               (geo.size.width - caseSize) / 2 - wireGap - 6)
             ZStack {
                 if reduceMotion || !hasBusyLane {
                     Canvas { context, size in
@@ -309,7 +313,7 @@ struct FleetMiniSignalMap: View {
     @State private var pulsing = false
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
 
-    // 2 side pads + 2 × (signal + wire) + 2 gaps + case square = 46 pt wide.
+    // 2 side pads + 2 × (signal + wire) + 2 gaps + case square = FleetPanelMetrics.closedRowMapWidth pt wide.
     private let caseSize: CGFloat = 8
     private let signalSize: CGFloat = 3
     private let wireLength: CGFloat = 11
@@ -324,7 +328,7 @@ struct FleetMiniSignalMap: View {
             signals(indexes: rightIndexes, leading: false)
         }
         .padding(.horizontal, sidePad)
-        .frame(width: 46, height: 24)
+        .frame(width: FleetPanelMetrics.closedRowMapWidth, height: 24)
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {

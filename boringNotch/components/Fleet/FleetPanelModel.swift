@@ -131,8 +131,9 @@ enum FleetPanelModelBuilder {
             // nova is not a fleet machine: it is the pool of openrouter cloud jobs
             // the case runs.
             novaLane(fleet: fleet, activity: activity),
-            // pika is the cloud helper (Claude Haiku). The fleet API reports device
-            // "pika"; while it does not yet, the lane stays idle/grey, never a red node.
+            // pika is the cloud helper (Claude Haiku). The fleet API reports device "pika":
+            // a row that says offline is offline, a busy device with no row is busy, and no data
+            // at all leaves the lane idle/grey - never a red node for missing data.
             pikaLane(fleet: fleet, activity: activity),
             // Odin is the QA reviewer that runs on case (Codex): activity device
             // "odin", fleet machine "odin".
@@ -165,13 +166,15 @@ enum FleetPanelModelBuilder {
         return FleetLane(id: "nova", label: "nova", state: state, jobs: toJobs(openrouterItems))
     }
 
-    /// pika's state: a fleet row that exists but is not online means offline; with no row at all
-    /// (the API does not know pika yet) the lane is idle/grey rather than a red node, and its jobs
-    /// come from the activity device when one is present. Missing data must never crash.
+    /// pika's state: a fleet row that exists but is not online means offline; with no fleet row at
+    /// all the activity device decides - a busy device is busy, otherwise idle/grey. Its jobs always
+    /// come from the activity device, so a run with no machine record still counts in the working
+    /// total and the current-work list. Missing data must never crash.
     private static func pikaLane(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetLane {
         let device = device(id: "pika", in: activity)
         let state: FleetNodeState = machine(id: "pika", in: fleet)
-            .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline } ?? .idle
+            .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
+            ?? (deviceBusy(device) ? .busy : .idle)
         return FleetLane(id: "pika", label: "pika", state: state, jobs: toJobs(device?.items ?? []))
     }
 

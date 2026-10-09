@@ -39,7 +39,7 @@ final class FleetThemeTests: XCTestCase {
         assertColor(t.text,      0xECE4D2, "olive text")
         assertColor(t.accent,    0xC9A77C, "olive accent")
         assertColor(t.memory,    0x8FA6B4, "olive memory")
-        assertColor(t.hot,       0xE9975C, "olive hot")
+        assertColor(t.hot,       0xD9824B, "olive hot")
         assertColor(t.off,       0x75865C, "olive off")
         assertColor(t.muted,     0xBFB78F, "olive muted")
         assertColor(t.nameText,  0xB9BCB1, "olive nameText")
@@ -175,18 +175,25 @@ final class FleetThemeTests: XCTestCase {
 
     /// The owner could not read the panel: grey on black was too dark. Every text colour must clear
     /// its floor against the lighter end of that skin's panel gradient (the worst case for light
-    /// text): 7:1 for text under 12 pt, at least 3:1 for status dots and idle wires.
+    /// text): 7:1 for text under 12 pt, at least 3:1 for status dots and idle wires. The owner exempted
+    /// the accent colours (`accent`, `hot`) from the 7:1 text floor, so they are held to 4.5:1 instead.
     func testEveryTextColourClearsItsContrastFloor() {
         for skin in FleetSkin.allCases {
             let t = FleetTheme(skin: skin)
             let bg = t.panelTop
             let textRoles: [(String, Color)] = [
                 ("text", t.text), ("jobText", t.jobText), ("nameText", t.nameText),
-                ("muted", t.muted), ("dim", t.dim), ("nameOff", t.nameOff), ("hot", t.hot),
+                ("muted", t.muted), ("dim", t.dim), ("nameOff", t.nameOff),
             ]
             for (name, colour) in textRoles {
                 XCTAssertGreaterThanOrEqual(contrast(colour, bg), 7.0,
                                             "\(skin) \(name) must reach 7:1 for text under 12 pt")
+            }
+            // accent and hot are the approved design's accent colours: the owner exempted them from
+            // the text floor, but they still have to read as text.
+            for (name, colour) in [("accent", t.accent), ("hot", t.hot)] {
+                XCTAssertGreaterThanOrEqual(contrast(colour, bg), 4.5,
+                                            "\(skin) \(name) is an accent colour: at least 4.5:1")
             }
             XCTAssertGreaterThanOrEqual(contrast(t.off, bg), 3.0, "\(skin) status dots at least 3:1")
             XCTAssertGreaterThanOrEqual(contrast(t.wire, bg), 3.0, "\(skin) idle wires at least 3:1")

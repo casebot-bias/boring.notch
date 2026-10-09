@@ -17,7 +17,9 @@ struct FleetClosedIndicator: View {
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
     // Both sides share one fixed width so the camera gap sits on the physical notch's
     // centre; unequal sides would push the gap off-centre and the notch would cover text.
-    private let sideWidth: CGFloat = 112
+    // Wide enough for the mini map, its gap and the full "3 critical" / "1 working" strings, so
+    // neither side block truncates at 11 pt.
+    private var sideWidth: CGFloat { FleetPanelMetrics.closedRowSideWidth }
 
     private var visible: Bool {
         return Defaults[.showFleet] && store.isReachable && vm.effectiveClosedNotchHeight > 0

@@ -56,7 +56,7 @@ struct FleetTheme {
             text          = rgb(0xECE4D2)
             accent        = rgb(0xC9A77C)
             memory        = rgb(0x8FA6B4)
-            hot           = rgb(0xE9975C)
+            hot           = rgb(0xD9824B)
             off           = rgb(0x75865C)
             muted         = rgb(0xBFB78F)
             nameText      = rgb(0xB9BCB1)
