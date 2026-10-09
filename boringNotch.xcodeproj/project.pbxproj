@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		0A026C5285A22320E55161C8 /* FleetWorkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CA111D99EBAD7362EB7B5B /* FleetWorkView.swift */; };
 		F7E0A1000000000000000106 /* FleetPressureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000107 /* FleetPressureView.swift */; };
+		F7E0A1000000000000000200 /* NotchWindowPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000201 /* NotchWindowPlanner.swift */; };
+		F7E0A1000000000000000202 /* NotchWindowPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000201 /* NotchWindowPlanner.swift */; };
+		F7E0A1000000000000000203 /* NotchWindowPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000204 /* NotchWindowPlannerTests.swift */; };
 		1100290C2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */; };
 		110029272E84FD4C00035A57 /* TemporaryFileStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */; };
 		1100292A2E8691B400035A57 /* FileShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029292E8691B400035A57 /* FileShareView.swift */; };
@@ -310,6 +313,8 @@
 		59D8C23B2E589FAA00147B33 /* VolumeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeManager.swift; sourceTree = "<group>"; };
 		62D329C358DFAA05D1AB63FC /* fleet.json */ = {isa = PBXFileReference; includeInIndex = 1; name = fleet.json; path = boringNotchTests/Fixtures/fleet.json; sourceTree = "<group>"; };
 		8273CC303EF7BBAF5F641041 /* FleetDecodingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetDecodingTests.swift; path = boringNotchTests/FleetDecodingTests.swift; sourceTree = "<group>"; };
+		F7E0A1000000000000000201 /* NotchWindowPlanner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchWindowPlanner.swift; sourceTree = "<group>"; };
+		F7E0A1000000000000000204 /* NotchWindowPlannerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NotchWindowPlannerTests.swift; path = boringNotchTests/NotchWindowPlannerTests.swift; sourceTree = "<group>"; };
 		86ABA45CAEBA9FC4D2E8CF00 /* FleetPanelModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetPanelModel.swift; path = Fleet/FleetPanelModel.swift; sourceTree = "<group>"; };
 		89CA111D99EBAD7362EB7B5B /* FleetWorkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetWorkView.swift; path = Fleet/FleetWorkView.swift; sourceTree = "<group>"; };
 		F7E0A1000000000000000107 /* FleetPressureView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetPressureView.swift; path = Fleet/FleetPressureView.swift; sourceTree = "<group>"; };
@@ -643,6 +648,7 @@
 				B186543A2C6F49A4000B926A /* Shortcuts */,
 				1443E7F12C609DB90027C1FC /* sizing */,
 				14D570C72C5F38760011E668 /* models */,
+				F7E0A1000000000000000205 /* utils */,
 				14D570BA2C5E98E30011E668 /* enums */,
 				14D570B72C5E98960011E668 /* animations */,
 				147163B52C5D804B0068B555 /* managers */,
@@ -714,6 +720,14 @@
 			path = models;
 			sourceTree = "<group>";
 		};
+		F7E0A1000000000000000205 /* utils */ = {
+			isa = PBXGroup;
+			children = (
+				F7E0A1000000000000000201 /* NotchWindowPlanner.swift */,
+			);
+			path = utils;
+			sourceTree = "<group>";
+		};
 		6FEF99453C3A097BD7EEB6A6 /* boringNotchTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -721,6 +735,7 @@
 				A4F34CD9024D21FD870F3AD0 /* FleetFormatTests.swift */,
 				DD4809E4B9876FEE672F1C96 /* FleetPanelModelTests.swift */,
 				F7E0A1000000000000000004 /* FleetThemeTests.swift */,
+				F7E0A1000000000000000204 /* NotchWindowPlannerTests.swift */,
 				C013CA219D7597EB6A9F2104 /* Fixtures */,
 			);
 			name = boringNotchTests;
@@ -1057,6 +1072,8 @@
 				B3392077C15FAF55C7DD3094 /* FleetDecodingTests.swift in Sources */,
 				5411D456ED82369EDE9D5BB1 /* FleetFormatTests.swift in Sources */,
 				6A043F09ECA359512A6D19DA /* FleetPanelModelTests.swift in Sources */,
+				F7E0A1000000000000000202 /* NotchWindowPlanner.swift in Sources */,
+				F7E0A1000000000000000203 /* NotchWindowPlannerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1195,6 +1212,7 @@
 				1FFC639F3F9E275F506106F0 /* FleetResponseMapView.swift in Sources */,
 				0A026C5285A22320E55161C8 /* FleetWorkView.swift in Sources */,
 				F7E0A1000000000000000106 /* FleetPressureView.swift in Sources */,
+				F7E0A1000000000000000200 /* NotchWindowPlanner.swift in Sources */,
 				63574F1621AD32135D662A9E /* FleetSectionView.swift in Sources */,
 				347F1CBC62380DB1BEF363D4 /* FleetClosedIndicator.swift in Sources */,
 			);

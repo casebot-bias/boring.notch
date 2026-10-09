@@ -7,8 +7,8 @@
 //  wires drawn in a Canvas overlay tying every signal to the box, plus its
 //  compact companion for the closed notch. Colours come only from
 //  FleetTheme(skin:); nothing draws a background (the notch is already black).
-//  The one animation is the busy-pulse of the mini signals, honoured off under
-//  Reduce Motion.
+//  The animations are the busy-pulse of the mini signals and the dots
+//  travelling along the busy wires, both honoured off under Reduce Motion.
 //
 
 import Defaults
@@ -23,7 +23,11 @@ struct FleetResponseMapView: View {
     let origin: FleetLane
 
     @Default(.fleetSkin) private var fleetSkin
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
+
+    /// True while any lane runs; only then does the dot clock need to tick.
+    private var hasBusyLane: Bool { lanes.contains { $0.state == .busy } }
 
     // MARK: - Layout constants
 
@@ -33,6 +37,15 @@ struct FleetResponseMapView: View {
     private let caseSize: CGFloat = 60
     private let signalSize: CGFloat = 6
     private let wireGap: CGFloat = 22
+
+    /// Travelling-dot timing on busy wires: `t` runs 0 → 1 over
+    /// `busyDotCycle` seconds and repeats, offset per row by
+    /// `busyDotStagger` of a cycle; Reduce Motion parks the dot at
+    /// `busyDotStaticPhase`.
+    private let busyDotCycle: Double = 1.6
+    private let busyDotStagger: Double = 0.18
+    private let busyDotStaticPhase: CGFloat = 0.55
+    private let dotRadius: CGFloat = 2.5
 
     // MARK: - Body
 
@@ -77,8 +90,22 @@ struct FleetResponseMapView: View {
             let rowHeight = geo.size.height / 3
             let colWidth = max(52, (geo.size.width - caseSize) / 2 - wireGap - 6)
             ZStack {
-                Canvas { context, size in
-                    drawWires(in: context, size: size, rowHeight: rowHeight, colWidth: colWidth)
+                if reduceMotion || !hasBusyLane {
+                    Canvas { context, size in
+                        drawWires(in: context, size: size, rowHeight: rowHeight, colWidth: colWidth, clock: nil)
+                    }
+                } else {
+                    TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                        Canvas { context, size in
+                            drawWires(
+                                in: context,
+                                size: size,
+                                rowHeight: rowHeight,
+                                colWidth: colWidth,
+                                clock: timeline.date.timeIntervalSinceReferenceDate
+                            )
+                        }
+                    }
                 }
                 HStack(spacing: 0) {
                     column(indexes: [0, 1, 2], colWidth: colWidth, rowHeight: rowHeight)
@@ -94,14 +121,25 @@ struct FleetResponseMapView: View {
     /// One cubic per agent: starts at its column's inner edge on the row
     /// centre, ends on the case box's edge with the row fan offset (−12 / 0 /
     /// +12). Horizontal tangents at the midpoint x keep each wire a single
-    /// monotone curve running forward into the box. A 4 pt dot marks the box
-    /// end (accent while busy).
-    private func drawWires(in context: GraphicsContext, size: CGSize, rowHeight: CGFloat, colWidth: CGFloat) {
+    /// monotone curve running forward into the box. Idle wires stroke in
+    /// `wire` at 1 pt, busy wires in `accent` at 1.25 pt. A 4 pt square marks
+    /// the box end (`accent` while busy, `wire` otherwise); every busy wire
+    /// also carries one 2.5 pt `accent` dot travelling along the same cubic,
+    /// start → box, staggered per row. A nil `clock` draws the static frame
+    /// (Reduce Motion parks busy dots at `busyDotStaticPhase`).
+    private func drawWires(
+        in context: GraphicsContext,
+        size: CGSize,
+        rowHeight: CGFloat,
+        colWidth: CGFloat,
+        clock: Double?
+    ) {
         let fanOffsets: [CGFloat] = [-12, 0, 12]
         for index in 0..<6 {
             guard let lane = lane(at: index) else { continue }
             let isLeft = index < 3
             let row = index % 3
+            let busy = lane.state == .busy
             let start = CGPoint(
                 x: isLeft ? colWidth : size.width - colWidth,
                 y: rowHeight * (CGFloat(row) + 0.5)
@@ -111,20 +149,49 @@ struct FleetResponseMapView: View {
                 y: size.height / 2 + fanOffsets[row]
             )
             let midX = start.x + (end.x - start.x) * 0.5
+            let control1 = CGPoint(x: midX, y: start.y)
+            let control2 = CGPoint(x: midX, y: end.y)
 
             var wire = Path()
             wire.move(to: start)
-            wire.addCurve(
-                to: end,
-                control1: CGPoint(x: midX, y: start.y),
-                control2: CGPoint(x: midX, y: end.y)
-            )
-            context.stroke(wire, with: .color(theme.line), lineWidth: 1)
+            wire.addCurve(to: end, control1: control1, control2: control2)
+            context.stroke(wire, with: .color(busy ? theme.accent : theme.wire), lineWidth: busy ? 1.25 : 1)
 
             let marker = CGRect(x: end.x - 2, y: end.y - 2, width: 4, height: 4)
-            let markerColor = lane.state == .busy ? theme.accent : theme.off
+            let markerColor = busy ? theme.accent : theme.wire
             context.fill(Path(roundedRect: marker, cornerRadius: 1), with: .color(markerColor))
+
+            guard busy else { continue }
+            let t = dotPhase(clock: clock, row: row)
+            let mt = 1 - t
+            let w0 = mt * mt * mt
+            let w1 = 3 * mt * mt * t
+            let w2 = 3 * mt * t * t
+            let w3 = t * t * t
+            let dot = CGPoint(
+                x: w0 * start.x + w1 * control1.x + w2 * control2.x + w3 * end.x,
+                y: w0 * start.y + w1 * control1.y + w2 * control2.y + w3 * end.y
+            )
+            context.fill(
+                Path(ellipseIn: CGRect(
+                    x: dot.x - dotRadius,
+                    y: dot.y - dotRadius,
+                    width: 2 * dotRadius,
+                    height: 2 * dotRadius
+                )),
+                with: .color(theme.accent)
+            )
         }
+    }
+
+    /// Loop phase `t` in 0…1 for the dot on `row`: the clock drives it 0 → 1
+    /// over `busyDotCycle` seconds with a per-row stagger so the three wires
+    /// of a column do not move in lockstep; the static frame parks it at
+    /// `busyDotStaticPhase`.
+    private func dotPhase(clock: Double?, row: Int) -> CGFloat {
+        guard let clock else { return busyDotStaticPhase }
+        let cycles = clock / busyDotCycle + Double(row) * busyDotStagger
+        return CGFloat(cycles.truncatingRemainder(dividingBy: 1))
     }
 
     // MARK: - Columns and rows

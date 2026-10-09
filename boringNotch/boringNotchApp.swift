@@ -65,7 +65,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenLockedObserver: Any?
     private var screenUnlockedObserver: Any?
     private var isScreenLocked: Bool = false
-    private var windowScreenDidChangeObserver: Any?
+    /// Screen-change observers keyed by the window's screen uuid, one per created window,
+    /// removed when that window is closed.
+    private var windowScreenObservers: [String: Any] = [:]
     private var dragDetectors: [String: DragDetector] = [:] // UUID -> DragDetector
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -154,13 +156,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             windows.removeAll()
             viewModels.removeAll()
+            windowScreenObservers.values.forEach { NotificationCenter.default.removeObserver($0) }
+            windowScreenObservers.removeAll()
         } else if let window = window {
             window.close()
             NotchSpaceManager.shared.notchSpace.windows.remove(window)
-            if let obs = windowScreenDidChangeObserver {
-                NotificationCenter.default.removeObserver(obs)
-                windowScreenDidChangeObserver = nil
-            }
+            // Drop this window's screen-change observer. The window may have been recreated
+            // for another screen earlier, so purge any stale entries left behind too.
+            removeWindowScreenObserver(forKey: window.screen?.displayUUID ?? "")
+            windowScreenObservers.values.forEach { NotificationCenter.default.removeObserver($0) }
+            windowScreenObservers.removeAll()
             self.window = nil
         }
     }
@@ -253,7 +258,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotchSpaceManager.shared.notchSpace.windows.insert(window)
 
         // Observe when the window's screen changes so we can update drag detectors
-        windowScreenDidChangeObserver = NotificationCenter.default.addObserver(
+        let observer = NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeScreenNotification,
             object: window,
             queue: .main) { [weak self] _ in
@@ -261,6 +266,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.setupDragDetectors()
                 }
         }
+        windowScreenObservers[screen.displayUUID ?? ""] = observer
         return window
     }
 
@@ -270,13 +276,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.alphaValue = 0
         }
 
-        let screenFrame = screen.frame
         window.setFrameOrigin(
-            NSPoint(
-                x: screenFrame.origin.x + (screenFrame.width / 2) - window.frame.width / 2,
-                y: screenFrame.origin.y + screenFrame.height - window.frame.height
-            ))
+            NotchWindowPlanner.origin(
+                for: NotchScreen(
+                    uuid: screen.displayUUID ?? "",
+                    frame: screen.frame,
+                    hasNotch: screen.safeAreaInsets.top > 0),
+                windowSize: windowSize))
         window.alphaValue = 1
+    }
+
+    private func removeWindowScreenObserver(forKey uuid: String) {
+        guard let observer = windowScreenObservers.removeValue(forKey: uuid) else { return }
+        NotificationCenter.default.removeObserver(observer)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -476,32 +488,43 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func adjustWindowPosition(changeAlpha: Bool = false) {
         if Defaults[.showOnAllDisplays] {
-            let currentScreenUUIDs = Set(NSScreen.screens.compactMap { $0.displayUUID })
+            // Build the screen list once so the plan and the windows use the same snapshot.
+            let screens = NSScreen.screens.compactMap { screen in
+                screen.displayUUID.map {
+                    NotchScreen(uuid: $0, frame: screen.frame, hasNotch: screen.safeAreaInsets.top > 0)
+                }
+            }
+            let plan = NotchWindowPlanner.plan(
+                screens: screens,
+                windowSize: windowSize,
+                existingWindowUUIDs: Set(windows.keys),
+                showOnAllDisplays: true,
+                selectedUUID: coordinator.selectedScreenUUID)
 
-            // Remove windows for screens that no longer exist
-            for uuid in windows.keys where !currentScreenUUIDs.contains(uuid) {
+            // Close windows for screens that no longer exist (or are no longer selected) first.
+            for uuid in plan.removals {
                 if let window = windows[uuid] {
                     window.close()
                     NotchSpaceManager.shared.notchSpace.windows.remove(window)
                     windows.removeValue(forKey: uuid)
                     viewModels.removeValue(forKey: uuid)
+                    removeWindowScreenObserver(forKey: uuid)
                 }
             }
 
-            // Create or update windows for all screens
-            for screen in NSScreen.screens {
-                guard let uuid = screen.displayUUID else { continue }
-                
+            // Create or update one window per placement, in planner order.
+            for placement in plan.placements {
+                let uuid = placement.uuid
+                guard let nsScreen = NSScreen.screens.first(where: { $0.displayUUID == uuid }) else { continue }
+
                 if windows[uuid] == nil {
                     let viewModel = BoringViewModel(screenUUID: uuid)
-                    let window = createBoringNotchWindow(for: screen, with: viewModel)
-
-                    windows[uuid] = window
+                    windows[uuid] = createBoringNotchWindow(for: nsScreen, with: viewModel)
                     viewModels[uuid] = viewModel
                 }
 
                 if let window = windows[uuid], let viewModel = viewModels[uuid] {
-                    positionWindow(window, on: screen, changeAlpha: changeAlpha)
+                    positionWindow(window, on: nsScreen, changeAlpha: changeAlpha)
 
                     if viewModel.notchState == .closed {
                         viewModel.close()
