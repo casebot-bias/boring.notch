@@ -71,6 +71,30 @@ final class FleetThemeTests: XCTestCase {
         XCTAssertEqual(components(t.panelEdge).a, 0, accuracy: 0.001, "black panelEdge is clear")
     }
 
+    // MARK: - Response-map wire
+
+    func testBlackWireMatchesApprovedDesign() {
+        let t = FleetTheme(skin: .black)
+        assertColor(t.wire, 0x6A6A6A, "black wire")
+    }
+
+    func testOliveWireMatchesApprovedDesign() {
+        let t = FleetTheme(skin: .olive)
+        assertColor(t.wire, 0x6E6A57, "olive wire")
+    }
+
+    func testWireIsReadableAndBrighterThanLineOnEverySkin() {
+        for skin in FleetSkin.allCases {
+            let t = FleetTheme(skin: skin)
+            let wire = components(t.wire)
+            let line = components(t.line)
+            let wireMax = max(wire.r, wire.g, wire.b)
+            let lineMax = max(line.r, line.g, line.b)
+            XCTAssertGreaterThanOrEqual(wireMax, 0.35, "\(skin) wire is at least ~35% white")
+            XCTAssertGreaterThan(wireMax, lineMax, "\(skin) wire must be brighter than the hairline line colour")
+        }
+    }
+
     // MARK: - Panel gradient
 
     @MainActor

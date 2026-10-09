@@ -2,9 +2,9 @@
 //  FleetFormatTests.swift
 //  boringNotchTests
 //
-//  Unit tests for the pure formatters in `FleetFormat`. Both `FleetModels.swift`
-//  and `FleetFormat.swift` are compiled directly into this test module, so no
-//  `@testable import` is needed.
+//  Unit tests for the pure formatters in `FleetFormat`. `FleetModels.swift`,
+//  `FleetFormat.swift` and `FleetPanelModel.swift` are compiled directly into
+//  this test module, so no `@testable import` is needed.
 //
 
 import XCTest
@@ -13,54 +13,54 @@ final class FleetFormatTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func ok(_ value: Double) -> Reading {
-        Reading(value: value, state: "ok", note: nil)
+    private func job(_ key: String) -> FleetJob {
+        FleetJob(key: key, pill: "frank", label: "Reviewing the diff", step: nil, elapsedSec: nil)
     }
 
-    private func unavailable(_ value: Double?) -> Reading {
-        Reading(value: value, state: "unavailable", note: nil)
+    private func lane(_ state: FleetNodeState, jobs: [FleetJob] = []) -> FleetLane {
+        FleetLane(id: "frank", label: "frank", state: state, jobs: jobs)
     }
+
     // MARK: - unknown
+
     func testUnknownRendersDash() {
         XCTAssertEqual(FleetFormat.unknown, "—")
     }
-    // MARK: - degrees
-    func testDegreesAvailableValueRoundsDown() {
-        XCTAssertEqual(FleetFormat.degrees(ok(38.37)), "38°")
+
+    // MARK: - percent
+
+    func testPercentRoundsToWholePercent() {
+        XCTAssertEqual(FleetFormat.percent(72), "72%")
     }
 
-    func testDegreesAvailableValueRoundsUp() {
-        XCTAssertEqual(FleetFormat.degrees(ok(40.8)), "41°")
+    func testPercentRoundsFractionalValueDown() {
+        XCTAssertEqual(FleetFormat.percent(86.34), "86%")
     }
 
-    func testDegreesRealZeroRendersAsZeroNeverDash() {
-        XCTAssertEqual(FleetFormat.degrees(ok(0)), "0°")
+    func testPercentRealZeroRendersZeroPercentNotDash() {
+        XCTAssertEqual(FleetFormat.percent(0), "0%")
     }
 
-    func testDegreesUnavailableNilValueRendersDash() {
-        XCTAssertEqual(FleetFormat.degrees(unavailable(nil)), "—")
+    func testPercentRoundsUpToHundred() {
+        XCTAssertEqual(FleetFormat.percent(99.5), "100%")
     }
 
-    func testDegreesUnavailableWithNumberStillRendersDash() {
-        XCTAssertEqual(FleetFormat.degrees(unavailable(12.5)), "—")
-    }
-    // MARK: - tokensPerSecond
-    func testTokensPerSecondNilRendersDash() {
-        XCTAssertEqual(FleetFormat.tokensPerSecond(nil), "—")
+    // MARK: - fleetOutput
+
+    func testFleetOutputNilRendersDash() {
+        XCTAssertEqual(FleetFormat.fleetOutput(nil), FleetFormat.unknown)
     }
 
-    func testTokensPerSecondZeroRendersZeroWithoutDecimal() {
-        XCTAssertEqual(FleetFormat.tokensPerSecond(0), "0 t/s")
+    func testFleetOutputRoundsToWholeNumberWithoutUnit() {
+        XCTAssertEqual(FleetFormat.fleetOutput(401.4), "401")
     }
 
-    func testTokensPerSecondRoundsToWholeTokenPerSecond() {
-        XCTAssertEqual(FleetFormat.tokensPerSecond(12.34), "12 t/s")
+    func testFleetOutputZeroRendersZeroNotDash() {
+        XCTAssertEqual(FleetFormat.fleetOutput(0), "0")
     }
 
-    func testTokensPerSecondSmallValueRoundsToZero() {
-        XCTAssertEqual(FleetFormat.tokensPerSecond(0.4), "0 t/s")
-    }
     // MARK: - jobs
+
     func testJobsZeroReturnsIdle() {
         XCTAssertEqual(FleetFormat.jobs(0), "idle")
     }
@@ -74,76 +74,116 @@ final class FleetFormatTests: XCTestCase {
     }
 
     func testJobsPluralIsJobs() {
-        XCTAssertEqual(FleetFormat.jobs(2), "2 jobs")
+        XCTAssertEqual(FleetFormat.jobs(3), "3 jobs")
     }
 
-    func testJobsMultipleIsJobs() {
-        XCTAssertEqual(FleetFormat.jobs(5), "5 jobs")
-    }
-    // MARK: - elapsed
-    func testElapsedNilRendersDash() {
-        XCTAssertEqual(FleetFormat.elapsed(nil), "—")
+    // MARK: - jobBadge
+
+    func testJobBadgeZeroIsNil() {
+        XCTAssertNil(FleetFormat.jobBadge(0))
     }
 
-    func testElapsedNegativeRendersDash() {
-        XCTAssertEqual(FleetFormat.elapsed(-1), "—")
+    func testJobBadgeZeroPadsSingleDigits() {
+        XCTAssertEqual(FleetFormat.jobBadge(1), "01")
+        XCTAssertEqual(FleetFormat.jobBadge(4), "04")
     }
 
-    func testElapsedZeroRendersAsZeroSeconds() {
-        XCTAssertEqual(FleetFormat.elapsed(0), "0s")
+    func testJobBadgeKeepsTwoDigits() {
+        XCTAssertEqual(FleetFormat.jobBadge(12), "12")
     }
 
-    func testElapsedUnderOneMinuteRendersSeconds() {
-        XCTAssertEqual(FleetFormat.elapsed(44), "44s")
+    // MARK: - step
+
+    func testStepNilRendersNotReported() {
+        XCTAssertEqual(FleetFormat.step(nil), "Not reported")
     }
 
-    func testElapsedMinutesZeroPadSeconds() {
-        XCTAssertEqual(FleetFormat.elapsed(1444), "24m 04s")
+    func testStepBlankRendersNotReported() {
+        XCTAssertEqual(FleetFormat.step("  "), "Not reported")
     }
 
-    func testElapsedExactHourZeroPadsMinutes() {
-        XCTAssertEqual(FleetFormat.elapsed(3600), "1h 00m")
+    func testStepKeepsPlainTextUnchanged() {
+        XCTAssertEqual(FleetFormat.step("Viewing design PNG"), "Viewing design PNG")
     }
 
-    func testElapsedHoursZeroPadMinutesAndDropSeconds() {
-        XCTAssertEqual(FleetFormat.elapsed(3730), "1h 02m")
+    func testStepTrimsSurroundingWhitespace() {
+        XCTAssertEqual(FleetFormat.step("  Viewing design PNG \n"), "Viewing design PNG")
     }
 
-    func testElapsedTwoHoursRendersHoursAndMinutes() {
-        XCTAssertEqual(FleetFormat.elapsed(7200), "2h 00m")
-    }
-    // MARK: - barFraction
-    func testBarFractionUnavailableIsZero() {
-        XCTAssertEqual(FleetFormat.barFraction(unavailable(nil)), 0.0, accuracy: 0.0001)
+    // MARK: - status
+
+    func testStatusZeroIsAllClear() {
+        XCTAssertEqual(FleetFormat.status(0), "All clear")
     }
 
-    func testBarFractionMapsValueOntoUnitRange() {
-        XCTAssertEqual(FleetFormat.barFraction(ok(38.6)), 0.386, accuracy: 0.0001)
+    func testStatusOneIsSingularCritical() {
+        XCTAssertEqual(FleetFormat.status(1), "1 critical")
     }
 
-    func testBarFractionClampsAboveToOne() {
-        XCTAssertEqual(FleetFormat.barFraction(ok(150)), 1.0, accuracy: 0.0001)
+    func testStatusPluralIsNCritical() {
+        XCTAssertEqual(FleetFormat.status(3), "3 critical")
     }
 
-    func testBarFractionClampsBelowToZero() {
-        XCTAssertEqual(FleetFormat.barFraction(ok(-10)), 0.0, accuracy: 0.0001)
+    // MARK: - linked
+
+    func testLinkedAllOnline() {
+        XCTAssertEqual(FleetFormat.linked(6, of: 6), "6/6 linked")
     }
 
-    func testBarFractionRealZeroMapsToZero() {
-        XCTAssertEqual(FleetFormat.barFraction(ok(0)), 0.0, accuracy: 0.0001)
-    }
-    // MARK: - isRAMWarning
-    func testRAMWarningAtEightyIsNotAWarning() {
-        XCTAssertFalse(FleetFormat.isRAMWarning(ok(80)))
+    func testLinkedPartialReportsBothNumbers() {
+        XCTAssertEqual(FleetFormat.linked(5, of: 6), "5/6 linked")
     }
 
-    func testRAMWarningAboveEightyWarns() {
-        XCTAssertTrue(FleetFormat.isRAMWarning(ok(80.1)))
+    // MARK: - fraction
+
+    func testFractionMapsPercentOntoUnitRange() {
+        XCTAssertEqual(FleetFormat.fraction(50), 0.5, accuracy: 0.0001)
     }
 
-    func testRAMWarningIgnoredWhenUnavailable() {
-        XCTAssertFalse(FleetFormat.isRAMWarning(unavailable(99)))
+    func testFractionClampsAboveToOne() {
+        XCTAssertEqual(FleetFormat.fraction(150), 1.0, accuracy: 0.0001)
     }
+
+    func testFractionClampsBelowToZero() {
+        XCTAssertEqual(FleetFormat.fraction(-10), 0.0, accuracy: 0.0001)
+    }
+
+    func testFractionRealZeroMapsToZero() {
+        XCTAssertEqual(FleetFormat.fraction(0), 0.0, accuracy: 0.0001)
+    }
+
+    // MARK: - isHighPressure
+
+    func testHighPressureJustBelowNinetyFiveIsFalse() {
+        XCTAssertFalse(FleetFormat.isHighPressure(94.9))
+    }
+
+    func testHighPressureAtNinetyFiveIsTrue() {
+        XCTAssertTrue(FleetFormat.isHighPressure(95))
+    }
+
+    func testHighPressureAtFullIsTrue() {
+        XCTAssertTrue(FleetFormat.isHighPressure(100))
+    }
+
+    // MARK: - responseDetail
+
+    func testResponseDetailBusyCountsJobs() {
+        XCTAssertEqual(FleetFormat.responseDetail(lane(.busy, jobs: [job("a"), job("b")])), "2 jobs")
+    }
+
+    func testResponseDetailBusyWithoutJobsIsWorking() {
+        XCTAssertEqual(FleetFormat.responseDetail(lane(.busy)), "Working")
+    }
+
+    func testResponseDetailIdleIsIdle() {
+        XCTAssertEqual(FleetFormat.responseDetail(lane(.idle)), "Idle")
+    }
+
+    func testResponseDetailOfflineIsNotReported() {
+        XCTAssertEqual(FleetFormat.responseDetail(lane(.offline)), "Not reported")
+    }
+
     // MARK: - fleetBaseURL
 
     func testFleetBaseURLStripsOneTrailingSlash() {
@@ -176,54 +216,5 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertNil(FleetFormat.fleetBaseURL("   "))
         XCTAssertNil(FleetFormat.fleetBaseURL("\n\t"))
         XCTAssertNil(FleetFormat.fleetBaseURL("/"))
-    }
-
-    // MARK: - metaParts
-
-    private func meta(_ tokPerSec: Double?, _ temp: Double?, _ label: String? = nil) -> FleetMeta {
-        FleetMeta(tokPerSec: tokPerSec,
-                  temp: temp.map { Reading(value: $0, state: "ok", note: nil) }
-                        ?? Reading(value: nil, state: "unavailable", note: nil),
-                  label: label)
-    }
-
-    func testMetaBothTokensAndTemperature() {
-        XCTAssertEqual(FleetFormat.metaParts(meta(40, 51)),
-                       [FleetMetaPart(text: "40 t/s", accent: true),
-                        FleetMetaPart(text: "51°", accent: false)])
-        XCTAssertEqual(meta(40, 51).text, "40 t/s · 51°")
-    }
-
-    func testMetaOnlyTemperature() {
-        XCTAssertEqual(FleetFormat.metaParts(meta(nil, 51)), [FleetMetaPart(text: "51°", accent: false)])
-        XCTAssertEqual(meta(nil, 51).text, "51°")
-    }
-
-    func testMetaOnlyTokens() {
-        XCTAssertEqual(FleetFormat.metaParts(meta(40, nil)), [FleetMetaPart(text: "40 t/s", accent: true)])
-        XCTAssertEqual(meta(40, nil).text, "40 t/s")
-    }
-
-    func testMetaIdleLabel() {
-        XCTAssertEqual(FleetFormat.metaParts(meta(nil, nil, "idle")), [FleetMetaPart(text: "idle", accent: false)])
-        XCTAssertEqual(meta(nil, nil, "idle").text, "idle")
-    }
-
-    func testMetaZeroTokensFallBackToTemperature() {
-        XCTAssertEqual(meta(0, 51).text, "51°")
-    }
-
-    func testMetaLabelIgnoredWhenAValueExists() {
-        XCTAssertEqual(meta(40, 51, "—").text, "40 t/s · 51°")
-    }
-
-    func testMetaOfflineIsDash() {
-        XCTAssertEqual(meta(nil, nil, "—").text, "—")
-    }
-
-    func testMetaTokensPartIsTheOnlyAccentPart() {
-        XCTAssertEqual(FleetFormat.metaParts(meta(40, 51)).filter(\.accent).map(\.text), ["40 t/s"])
-        XCTAssertTrue(FleetFormat.metaParts(meta(nil, 51)).allSatisfy { !$0.accent })
-        XCTAssertTrue(FleetFormat.metaParts(meta(nil, nil, "2 jobs")).allSatisfy { !$0.accent })
     }
 }

@@ -25,14 +25,6 @@ final class FleetStore: ObservableObject {
         return FleetPanelModelBuilder.build(fleet: fleet, activity: activity)
     }
 
-    var activeCount: Int {
-        return panelModel.activeCount
-    }
-
-    var isBusy: Bool {
-        return panelModel.isBusy
-    }
-
     // MARK: - Tunables
 
     private static let activityIntervalOpen: TimeInterval = 2

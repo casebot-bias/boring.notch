@@ -15,6 +15,9 @@ struct FleetClosedIndicator: View {
     @ObservedObject private var store = FleetStore.shared
     @Default(.fleetSkin) private var fleetSkin
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
+    // Both sides share one fixed width so the camera gap sits on the physical notch's
+    // centre; unequal sides would push the gap off-centre and the notch would cover text.
+    private let sideWidth: CGFloat = 112
 
     private var visible: Bool {
         return Defaults[.showFleet] && store.isReachable && vm.effectiveClosedNotchHeight > 0
@@ -22,17 +25,35 @@ struct FleetClosedIndicator: View {
 
     var body: some View {
         if visible {
-            HStack(spacing: 8) {
-                // Dot row: one 5-pt dot per lane
-                HStack(spacing: 4) {
-                    ForEach(store.panelModel.lanes) { lane in
-                        Circle()
-                            .fill(lane.state == .busy ? theme.accent : theme.off)
-                            .frame(width: 5, height: 5)
+            let model = store.panelModel
+            HStack(spacing: 0) {
+                // Left block: mini map and working / status text, right-aligned toward the gap
+                HStack(spacing: 10) {
+                    // Compact six-signal map of the agents
+                    FleetMiniSignalMap(lanes: model.agents, origin: model.origin)
+
+                    // Working count over link / critical status
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(model.workingCount) working")
+                            .font(.system(size: 10))
+                            .monospacedDigit()
+                            .foregroundColor(theme.text)
+                        if model.criticalCount == 0 {
+                            Text(FleetFormat.linked(model.linkedCount, of: model.agentCount))
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundColor(theme.dim)
+                                .lineLimit(1)
+                        } else {
+                            Text(FleetFormat.status(model.criticalCount))
+                                .font(.system(size: 8, design: .monospaced))
+                                .foregroundColor(theme.hot)
+                                .lineLimit(1)
+                        }
                     }
                 }
+                .frame(width: sideWidth, alignment: .trailing)
 
-                // Hardware-notch gap spacer
+                // Hardware-notch gap spacer: notch width plus 5 pt clearance per side
                 Rectangle()
                     .fill(.clear)
                     .frame(
@@ -40,10 +61,19 @@ struct FleetClosedIndicator: View {
                         height: vm.effectiveClosedNotchHeight
                     )
 
-                // Active count label
-                Text("\(store.activeCount) active")
-                    .font(.system(size: 10))
-                    .foregroundColor(theme.muted)
+                // Right block: total output, left-aligned away from the gap
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    let total = FleetFormat.fleetOutput(model.totalTokPerSec)
+                    Text(total)
+                        .font(.system(size: 20, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundColor(model.totalTokPerSec == nil ? theme.dim : theme.accent)
+                        .lineLimit(1)
+                    Text("tok/s")
+                        .font(.system(size: 7, design: .monospaced))
+                        .foregroundColor(theme.dim)
+                }
+                .frame(width: sideWidth, alignment: .leading)
             }
             .frame(height: vm.effectiveClosedNotchHeight)
         } else {

@@ -16,7 +16,9 @@ let shadowPadding: CGFloat = 20
 let fleetSectionWidth: CGFloat = 560
 let fleetMusicWidth: CGFloat = 220
 /// Hard cap for the cover in the compact column, whatever the art size or shape.
-let fleetCoverMaxSide: CGFloat = 200
+/// 150 pt keeps the cover, the track block, the progress bar and the control
+/// toolbar inside the opened notch's 300 pt height.
+let fleetCoverMaxSide: CGFloat = 150
 let fleetSectionSpacing: CGFloat = 15
 let fleetSectionHeight: CGFloat = 300
 private let baseOpenNotchSize: CGSize = .init(width: 640, height: 190)

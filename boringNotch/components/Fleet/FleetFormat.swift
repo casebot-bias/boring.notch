@@ -2,9 +2,9 @@
 //  FleetFormat.swift
 //  boringNotch
 //
-//  Pure formatting/normalising helpers for fleet data.
-//  Depends only on Foundation and the model types (Reading, FleetMeta, DeviceActivity)
-//  declared in the same target.
+//  Pure formatting/normalising helpers for the Fleet panel: response map,
+//  signals, peaks and current work.
+//  Depends only on Foundation and the model types (FleetLane).
 //
 import Foundation
 
@@ -12,21 +12,19 @@ enum FleetFormat {
 
     static let unknown = "—"
 
-    // MARK: - degrees
+    // MARK: - percent
 
-    /// "38.37" -> "38°"; "40.8" -> "41°"; unavailable -> "—"
-    static func degrees(_ r: Reading) -> String {
-        guard r.isAvailable, let value = r.value else { return unknown }
-        let rounded = Int(value.rounded())
-        return "\(rounded)°"
+    /// 72 -> "72%"; 86.34 -> "86%" (rounds half away from zero).
+    static func percent(_ value: Double) -> String {
+        "\(Int(value.rounded()))%"
     }
 
-    // MARK: - tokensPerSecond
+    // MARK: - fleetOutput
 
-    /// nil -> "—"; 0 -> "0 t/s"; 12.34 -> "12 t/s"
-    static func tokensPerSecond(_ v: Double?) -> String {
-        guard let v = v else { return unknown }
-        return "\(Int(v.rounded())) t/s"
+    /// Big total token-rate readout: nil -> "—"; 401.4 -> "401" (rounds half away from zero).
+    static func fleetOutput(_ value: Double?) -> String {
+        guard let value else { return unknown }
+        return "\(Int(value.rounded()))"
     }
 
     // MARK: - jobs
@@ -37,41 +35,67 @@ enum FleetFormat {
         return n == 1 ? "1 job" : "\(n) jobs"
     }
 
-    // MARK: - elapsed
+    // MARK: - jobBadge
 
-    /// nil -> "—"; negatives -> "—"; 44 -> "44s"; 1444 -> "24m 04s"; 3730 -> "1h 02m"
-    static func elapsed(_ seconds: Int?) -> String {
-        guard let seconds = seconds, seconds >= 0 else { return unknown }
-
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        let secs = seconds % 60
-
-        if hours > 0 {
-            return String(format: "%dh %02dm", hours, minutes)
-        }
-
-        if minutes > 0 {
-            return String(format: "%dm %02ds", minutes, secs)
-        }
-
-        return "\(seconds)s"
+    /// n <= 0 -> nil; 4 -> "04"; 12 -> "12"
+    static func jobBadge(_ n: Int) -> String? {
+        guard n > 0 else { return nil }
+        return String(format: "%02d", n)
     }
 
-    // MARK: - barFraction
+    // MARK: - responseDetail
 
-    /// Clamped 0...1 of value/100; 0 when unavailable.
-    static func barFraction(_ r: Reading) -> Double {
-        guard r.isAvailable, let value = r.value else { return 0.0 }
-        let fraction = value / 100.0
-        return max(0.0, min(1.0, fraction))
+    /// A response-map agent's detail line: busy lanes show their job count (or
+    /// "Working" while busy with no reported jobs), idle lanes "Idle", offline
+    /// lanes "Not reported".
+    static func responseDetail(_ lane: FleetLane) -> String {
+        switch lane.state {
+        case .busy:
+            let count = lane.jobs.count
+            return count > 0 ? jobs(count) : "Working"
+        case .idle:
+            return "Idle"
+        case .offline:
+            return "Not reported"
+        }
     }
 
-    // MARK: - isRAMWarning
+    // MARK: - step
 
-    /// isAvailable && value > 80
-    static func isRAMWarning(_ r: Reading) -> Bool {
-        r.isAvailable && (r.value ?? 0) > 80
+    /// nil or blank -> "Not reported"; otherwise the whitespace-trimmed step.
+    static func step(_ step: String?) -> String {
+        guard let step else { return "Not reported" }
+        let trimmed = step.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Not reported" : trimmed
+    }
+
+    // MARK: - status
+
+    /// 0 -> "All clear"; 1 -> "1 critical"; n -> "n critical"
+    static func status(_ criticalCount: Int) -> String {
+        guard criticalCount > 0 else { return "All clear" }
+        return "\(criticalCount) critical"
+    }
+
+    // MARK: - linked
+
+    /// linked -> "6/6 linked" style counter.
+    static func linked(_ linked: Int, of total: Int) -> String {
+        "\(linked)/\(total) linked"
+    }
+
+    // MARK: - fraction
+
+    /// Clamped 0...1 of percent/100.
+    static func fraction(_ percent: Double) -> Double {
+        min(max(percent / 100, 0), 1)
+    }
+
+    // MARK: - isHighPressure
+
+    /// >= 95
+    static func isHighPressure(_ percent: Double) -> Bool {
+        percent >= 95
     }
 
     // MARK: - fleetBaseURL
@@ -86,38 +110,5 @@ enum FleetFormat {
         }
         guard !base.isEmpty else { return nil }
         return URL(string: base)
-    }
-
-    // MARK: - metaParts
-
-    /// Right column of a lane, split for two-colour rendering: tok/s first (only
-    /// when > 0), then the temperature, otherwise the lane's label. Empty when the
-    /// lane reports nothing at all.
-    static func metaParts(_ meta: FleetMeta) -> [FleetMetaPart] {
-        var parts: [FleetMetaPart] = []
-        if let tokPerSec = meta.tokPerSec, tokPerSec > 0 {
-            parts.append(FleetMetaPart(text: tokensPerSecond(tokPerSec), accent: true))
-        }
-        if meta.temp.isAvailable {
-            parts.append(FleetMetaPart(text: degrees(meta.temp), accent: false))
-        }
-        if parts.isEmpty, let label = meta.label {
-            parts.append(FleetMetaPart(text: label, accent: false))
-        }
-        return parts
-    }
-}
-
-
-/// One hunk of a lane's right column; `accent` parts use the theme accent colour.
-struct FleetMetaPart: Equatable {
-    var text: String
-    var accent: Bool
-}
-
-extension FleetMeta {
-    /// The right column as one string: "40 t/s · 51°", "51°", "idle", "—".
-    var text: String {
-        FleetFormat.metaParts(self).map(\.text).joined(separator: " · ")
     }
 }

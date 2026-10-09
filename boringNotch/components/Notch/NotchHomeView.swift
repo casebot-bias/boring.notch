@@ -14,17 +14,51 @@ import SwiftUI
 
 struct MusicPlayerView: View {
     @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject var musicManager = MusicManager.shared
     let albumArtNamespace: Namespace.ID
+
+    /// Same rule `ContentView` uses to decide media is active.
+    private var mediaActive: Bool {
+        musicManager.isPlaying || !musicManager.isPlayerIdle
+    }
+
+    /// Quiet stand-in for the artwork when nothing is playing.
+    private var idlePlaceholder: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.gray.opacity(0.22), lineWidth: 1)
+                .frame(width: 44, height: 44)
+                .overlay(
+                    Image(systemName: "music.note")
+                        .font(.system(size: 15))
+                        .foregroundColor(Color.gray.opacity(0.4))
+                )
+            Text("Nothing playing")
+                .font(.system(size: 11))
+                .foregroundColor(Color.gray.opacity(0.75))
+            Text("Start playback in your music app")
+                .font(.system(size: 9))
+                .foregroundColor(Color.gray.opacity(0.5))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     var body: some View {
         if Defaults[.showFleet] {
             // Compact column next to Fleet: small art sits above the controls.
+            // When no media is active, the artwork is replaced by a small placeholder.
             MusicControlsView(
                 albumArt: AnyView(
-                    AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace)
-                        .frame(maxWidth: fleetCoverMaxSide, maxHeight: fleetCoverMaxSide)
-                        .aspectRatio(1, contentMode: .fit)
-                        .frame(maxWidth: .infinity)
+                    Group {
+                        if mediaActive {
+                            AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace)
+                                .frame(maxWidth: fleetCoverMaxSide, maxHeight: fleetCoverMaxSide)
+                                .aspectRatio(1, contentMode: .fit)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            idlePlaceholder
+                        }
+                    }
                 )
             )
         } else {
@@ -136,8 +170,12 @@ struct MusicControlsView: View {
         VStack(alignment: .leading) {
             if let albumArt {
                 albumArt
-                songInfoAndSlider
-                    .frame(height: 64)
+                // Title, marquee and slider only apply while media is active;
+                // when idle, the placeholder and toolbar fill the column.
+                if musicManager.isPlaying || !musicManager.isPlayerIdle {
+                    songInfoAndSlider
+                        .frame(height: 64)
+                }
                 Spacer(minLength: 0)
             } else {
                 songInfoAndSlider

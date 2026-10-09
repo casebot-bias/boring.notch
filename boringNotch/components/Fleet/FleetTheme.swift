@@ -33,6 +33,7 @@ struct FleetTheme {
             panelBottom   = rgb(0x000000)
             panelEdge     = .clear
             line          = rgb(0x1D1F1A)
+            wire          = rgb(0x6A6A6A)
             dim           = rgb(0x5B5F55)
             text          = rgb(0xE8EADF)
             accent        = rgb(0x9FB38A)
@@ -50,6 +51,7 @@ struct FleetTheme {
             panelBottom   = rgb(0x12160D)
             panelEdge     = rgb(0x232A1A)
             line          = rgb(0x2A3220)
+            wire          = rgb(0x6E6A57)
             dim           = rgb(0x7D7A62)
             text          = rgb(0xECE4D2)
             accent        = rgb(0xC9A77C)
@@ -71,6 +73,8 @@ struct FleetTheme {
     let panelEdge: Color
 
     let line: Color
+    /// Idle response-map wires and idle endpoint dots. Readable on the panel background (~40 % white); the old `line` hairline is too dark for a map stroke.
+    let wire: Color
     let dim: Color
     let text: Color
     let accent: Color
