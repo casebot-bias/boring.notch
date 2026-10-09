@@ -72,6 +72,10 @@ extension Defaults.Keys {
     // MARK: General
     static let menubarIcon = Key<Bool>("menubarIcon", default: true)
     static let showOnAllDisplays = Key<Bool>("showOnAllDisplays", default: false)
+    /// Logs every notch window (screen, frame, visible) on each layout pass, so the owner can see
+    /// on a real Mac whether a screen got a visible window: `defaults write <bundle id>
+    /// debugWindows -bool true`, then watch Console for "[boringNotch]".
+    static let debugWindows = Key<Bool>("debugWindows", default: false)
     static let automaticallySwitchDisplay = Key<Bool>("automaticallySwitchDisplay", default: true)
     static let releaseName = Key<String>("releaseName", default: "Flying Rabbit 🐇🪽")
     

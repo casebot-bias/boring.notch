@@ -41,6 +41,14 @@ final class NotchWindowPlannerTests: XCTestCase {
                 y: screen.frame.maxY - windowSize.height)
     }
 
+    /// Expected placement for a screen: this file's own top-centre origin, the window size and
+    /// the fact that every placed screen must show its notch.
+    private func expectedPlacement(for screen: NotchScreen) -> NotchWindowPlacement {
+        NotchWindowPlacement(uuid: screen.uuid,
+                             frame: CGRect(origin: expectedOrigin(for: screen), size: windowSize),
+                             visible: true)
+    }
+
     /// A plan is only valid if no uuid is simultaneously getting a window and losing one.
     private func assertPlacementsAndRemovalsDisjoint(
         _ plan: NotchWindowPlan,
@@ -76,8 +84,8 @@ final class NotchWindowPlannerTests: XCTestCase {
                                            selectedUUID: nil)
 
         XCTAssertEqual(plan.placements, [
-            NotchWindowPlacement(uuid: macbook.uuid, origin: expectedOrigin(for: macbook)),
-            NotchWindowPlacement(uuid: external.uuid, origin: expectedOrigin(for: external)),
+            expectedPlacement(for: macbook),
+            expectedPlacement(for: external),
         ], "one window per screen, in screens order, each at its screen's top centre")
         XCTAssertEqual(plan.removals, [], "nothing to remove when no windows existed")
         assertPlacementsAndRemovalsDisjoint(plan)
@@ -92,7 +100,7 @@ final class NotchWindowPlannerTests: XCTestCase {
                                            selectedUUID: nil)
 
         XCTAssertEqual(plan.placements.map(\.uuid), [external.uuid, macbook.uuid])
-        XCTAssertEqual(plan.placements.map(\.origin),
+        XCTAssertEqual(plan.placements.map(\.frame.origin),
                        [expectedOrigin(for: external), expectedOrigin(for: macbook)])
         assertPlacementsAndRemovalsDisjoint(plan)
     }
@@ -108,8 +116,8 @@ final class NotchWindowPlannerTests: XCTestCase {
                        "the external window's screen is still present: keep the window")
         XCTAssertEqual(plan.removals, [])
         XCTAssertEqual(plan.placements, [
-            NotchWindowPlacement(uuid: macbook.uuid, origin: expectedOrigin(for: macbook)),
-            NotchWindowPlacement(uuid: external.uuid, origin: expectedOrigin(for: external)),
+            expectedPlacement(for: macbook),
+            expectedPlacement(for: external),
         ], "the kept window still gets its placement so it can be moved")
         assertPlacementsAndRemovalsDisjoint(plan)
     }
@@ -126,7 +134,7 @@ final class NotchWindowPlannerTests: XCTestCase {
         XCTAssertEqual(plan.removals, [external.uuid],
                        "the external screen is gone: close its window")
         XCTAssertEqual(plan.placements, [
-            NotchWindowPlacement(uuid: macbook.uuid, origin: expectedOrigin(for: macbook))
+            expectedPlacement(for: macbook)
         ])
         assertPlacementsAndRemovalsDisjoint(plan)
     }
@@ -141,7 +149,7 @@ final class NotchWindowPlannerTests: XCTestCase {
                                            selectedUUID: external.uuid)
 
         XCTAssertEqual(plan.placements, [
-            NotchWindowPlacement(uuid: external.uuid, origin: expectedOrigin(for: external))
+            expectedPlacement(for: external)
         ], "exactly one window, on the selected screen, at its top centre")
         XCTAssertEqual(plan.removals, [macbook.uuid],
                        "the now-unselected screen's window must close")
@@ -264,5 +272,47 @@ final class NotchWindowPlannerTests: XCTestCase {
             XCTAssertEqual(frame.maxY, screen.frame.maxY, accuracy: 0.001,
                            "\(screen.uuid): notch must stay at the top edge")
         }
+    }
+
+    // MARK: - Two screens: one visible window per screen
+
+    /// The owner's setup: a notched MacBook as main display plus a 5K monitor placed above and to
+    /// the left, so its frame origin is negative. Both screens must get a window with the right
+    /// frame, and both must be visible - a plan that only moves windows cannot say that.
+    func testExternalScreenAboveAndLeftGetsAVisibleWindowWithTheRightFrame() {
+        let main = NotchScreen(uuid: "main-notched",
+                               frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+                               hasNotch: true)
+        let external5K = NotchScreen(uuid: "external-5k",
+                                     frame: CGRect(x: -2560, y: 982, width: 2560, height: 1440),
+                                     hasNotch: false)
+        let size = CGSize(width: 836, height: 320)
+
+        let plan = NotchWindowPlanner.plan(screens: [main, external5K],
+                                           windowSize: size,
+                                           existingWindowUUIDs: [],
+                                           showOnAllDisplays: true,
+                                           selectedUUID: nil)
+
+        XCTAssertEqual(plan.placements.count, 2, "one window per screen")
+        for placement in plan.placements {
+            XCTAssertTrue(placement.visible, "\(placement.uuid) must be visible")
+            XCTAssertEqual(placement.frame.size, size)
+            XCTAssertEqual(placement.frame.midX,
+                           placement.uuid == main.uuid ? main.frame.midX : external5K.frame.midX,
+                           accuracy: 0.001)
+            XCTAssertEqual(placement.frame.maxY,
+                           placement.uuid == main.uuid ? main.frame.maxY : external5K.frame.maxY,
+                           accuracy: 0.001)
+        }
+        XCTAssertEqual(plan.placements[0].frame,
+                       CGRect(x: main.frame.midX - size.width / 2,
+                              y: main.frame.maxY - size.height,
+                              width: size.width, height: size.height))
+        XCTAssertEqual(plan.placements[1].frame,
+                       CGRect(x: external5K.frame.midX - size.width / 2,
+                              y: external5K.frame.maxY - size.height,
+                              width: size.width, height: size.height))
+        XCTAssertEqual(plan.removals, [], "both screens keep their window")
     }
 }

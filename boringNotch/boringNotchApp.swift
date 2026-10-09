@@ -270,28 +270,52 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return window
     }
 
+    /// Apply a plan placement to its window: resize and move it to the placement's frame,
+    /// re-anchor it from the window's real frame, and make sure it is actually on screen. A
+    /// window that is created but never ordered in looks exactly like "no notch on this screen".
     @MainActor
-    private func positionWindow(_ window: NSWindow, on screen: NSScreen, changeAlpha: Bool = false) {
+    private func applyPlacement(_ placement: NotchWindowPlacement,
+                                to window: NSWindow,
+                                on screen: NSScreen,
+                                changeAlpha: Bool = false) {
         if changeAlpha {
             window.alphaValue = 0
         }
 
-        let notchedScreen = NotchScreen(
-            uuid: screen.displayUUID ?? "",
-            frame: screen.frame,
-            hasNotch: screen.safeAreaInsets.top > 0)
-
-        // Resize first: toggling Show Fleet changes `windowSize` without touching existing
-        // windows, so an un-resized window would be centred from the wrong size and drift.
-        let targetFrame = NotchWindowPlanner.frame(for: notchedScreen, windowSize: windowSize)
-        if window.frame != targetFrame {
-            window.setFrame(targetFrame, display: true)
+        if window.frame != placement.frame {
+            window.setFrame(placement.frame, display: true)
         }
 
-        // Centre from the window's real frame, never the logical `windowSize`.
+        // Centre from the window's real frame, never from a size the window does not have.
+        let notchedScreen = NotchScreen(
+            uuid: placement.uuid,
+            frame: screen.frame,
+            hasNotch: screen.safeAreaInsets.top > 0)
         window.setFrameOrigin(
             NotchWindowPlanner.origin(for: notchedScreen, windowSize: window.frame.size))
-        window.alphaValue = 1
+
+        if placement.visible {
+            window.alphaValue = 1
+            if !window.isVisible {
+                window.orderFrontRegardless()
+            }
+        } else {
+            window.alphaValue = 0
+        }
+
+        logNotchWindow(window, on: screen, expected: placement.frame)
+    }
+
+    /// `defaults write <bundle id> debugWindows -bool true`, then watch Console for
+    /// "[boringNotch]" to see whether every screen really has a visible notch window.
+    @MainActor
+    private func logNotchWindow(_ window: NSWindow, on screen: NSScreen, expected: CGRect) {
+        guard Defaults[.debugWindows] else { return }
+        NSLog("[boringNotch] screen=\(screen.localizedName) uuid=\(screen.displayUUID ?? "-") "
+              + "frame=\(NSStringFromRect(window.frame)) expected=\(NSStringFromRect(expected)) "
+              + "visible=\(window.isVisible) alpha=\(window.alphaValue) "
+              + "level=\(window.level.rawValue) number=\(window.windowNumber) "
+              + "screens=\(NSScreen.screens.count)")
     }
 
     private func removeWindowScreenObserver(forKey uuid: String) {
@@ -542,7 +566,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 if let window = windows[uuid], let viewModel = viewModels[uuid] {
-                    positionWindow(window, on: nsScreen, changeAlpha: changeAlpha)
+                    applyPlacement(placement, to: window, on: nsScreen, changeAlpha: changeAlpha)
 
                     if viewModel.notchState == .closed {
                         viewModel.close()
@@ -573,8 +597,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 window = createBoringNotchWindow(for: selectedScreen, with: vm)
             }
 
+            let selectedPlacement = NotchWindowPlacement(
+                uuid: selectedScreen.displayUUID ?? "",
+                frame: NotchWindowPlanner.frame(
+                    for: NotchScreen(uuid: selectedScreen.displayUUID ?? "",
+                                     frame: selectedScreen.frame,
+                                     hasNotch: selectedScreen.safeAreaInsets.top > 0),
+                    windowSize: windowSize),
+                visible: true)
+
             if let window = window {
-                positionWindow(window, on: selectedScreen, changeAlpha: changeAlpha)
+                applyPlacement(selectedPlacement, to: window, on: selectedScreen, changeAlpha: changeAlpha)
 
                 if vm.notchState == .closed {
                     vm.close()

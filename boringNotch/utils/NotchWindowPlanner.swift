@@ -9,10 +9,14 @@ struct NotchScreen: Equatable {
     var hasNotch: Bool
 }
 
-/// A window to create or move: the top-centre of that screen's frame.
+/// A window to create or move on one screen: the exact frame it must take (the screen's
+/// top-centre rect of the current notch size) and whether the notch window must be visible
+/// there. The app applies both, so a window can never be moved to the right place and still
+/// stay ordered out (which looks like "no notch on this screen").
 struct NotchWindowPlacement: Equatable {
     var uuid: String
-    var origin: CGPoint
+    var frame: CGRect
+    var visible: Bool
 }
 
 struct NotchWindowPlan: Equatable {
@@ -61,6 +65,10 @@ enum NotchWindowPlanner {
     /// - `removals`: existing UUIDs that are not in `screens`, plus - when not showing on all
     ///   displays - existing UUIDs other than the selected one. Never contains a uuid that also
     ///   gets a placement. Sorted for determinism.
+    ///
+    /// Every placement is visible and carries the frame the window must take (see
+    /// `frame(for:windowSize:)`): resizing and moving in one step is what keeps the notch centred
+    /// and visible on every screen.
     static func plan(screens: [NotchScreen],
                      windowSize: CGSize,
                      existingWindowUUIDs: Set<String>,
@@ -76,7 +84,9 @@ enum NotchWindowPlanner {
         }
 
         let placements = targetScreens.map {
-            NotchWindowPlacement(uuid: $0.uuid, origin: origin(for: $0, windowSize: windowSize))
+            NotchWindowPlacement(uuid: $0.uuid,
+                                 frame: frame(for: $0, windowSize: windowSize),
+                                 visible: true)
         }
         let placedUUIDs = Set(placements.map(\.uuid))
 
