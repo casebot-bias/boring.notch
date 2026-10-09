@@ -270,20 +270,128 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return window
     }
 
+    /// Apply a plan placement to its window: resize and move it to the placement's frame, anchor
+    /// it from the window's real frame, and keep it on screen - the plan states that every placed
+    /// screen shows its notch, so a window that has been ordered out is put back.
     @MainActor
-    private func positionWindow(_ window: NSWindow, on screen: NSScreen, changeAlpha: Bool = false) {
+    private func applyPlacement(_ placement: NotchWindowPlacement,
+                                to window: NSWindow,
+                                on screen: NSScreen,
+                                changeAlpha: Bool = false) {
         if changeAlpha {
             window.alphaValue = 0
         }
 
+        if window.frame != placement.frame {
+            window.setFrame(placement.frame, display: true)
+        }
+
+        // Centre from the window's real frame, never from a size the window does not have.
+        let notchedScreen = NotchScreen(
+            uuid: placement.uuid,
+            frame: screen.frame,
+            hasNotch: screen.safeAreaInsets.top > 0)
         window.setFrameOrigin(
-            NotchWindowPlanner.origin(
-                for: NotchScreen(
-                    uuid: screen.displayUUID ?? "",
-                    frame: screen.frame,
-                    hasNotch: screen.safeAreaInsets.top > 0),
-                windowSize: windowSize))
-        window.alphaValue = 1
+            NotchWindowPlanner.origin(for: notchedScreen, windowSize: window.frame.size))
+
+        if placement.visible {
+            window.alphaValue = 1
+            if !window.isVisible {
+                window.orderFrontRegardless()
+            }
+        } else {
+            window.alphaValue = 0
+        }
+    }
+
+    /// `defaults write theboringteam.boringnotch debugWindows -bool true`, then watch Console for
+    /// "[boringNotch]": one line per notch window per layout pass, saying whether the window is on
+    /// screen, what it draws, and which state is keeping the closed notch face empty. Enough to
+    /// settle on a real Mac why a display shows no notch.
+    @MainActor
+    private func logNotchWindow(_ window: NSWindow, on screen: NSScreen, expected: CGRect,
+                                viewModel: BoringViewModel) {
+        guard Defaults[.debugWindows] else { return }
+        let musicActive = MusicManager.shared.isPlaying || !MusicManager.shared.isPlayerIdle
+        let fleetRow = Defaults[.showFleet] && FleetStore.shared.isReachable
+            && viewModel.effectiveClosedNotchHeight > 0
+        // Mirrors NotchLayout()'s closed branches, with the expanding-view gates folded into the
+        // inputs, so the log never claims a face the view would not draw.
+        let peek = coordinator.sneakPeek
+        let hudDrawn = peek.show && ((peek.type != .music && peek.type != .battery)
+                                     || (peek.type == .music && !viewModel.hideOnClosed))
+        let faceDrawn = NotchWindowPlanner.closedFaceDrawn(
+            NotchWindowPlanner.NotchFaceState(
+                isOpen: viewModel.notchState == .open,
+                helloAnimation: coordinator.helloAnimationRunning,
+                powerStatusRow: coordinator.expandingView.type == .battery
+                    && coordinator.expandingView.show && Defaults[.showPowerStatusNotifications],
+                systemHUD: hudDrawn,
+                musicActive: musicActive && (!coordinator.expandingView.show
+                                             || coordinator.expandingView.type == .music),
+                musicLiveActivityEnabled: coordinator.musicLiveActivityEnabled,
+                hideOnClosed: viewModel.hideOnClosed,
+                showFace: Defaults[.showNotHumanFace] && !coordinator.expandingView.show,
+                fleetRow: fleetRow))
+        let inventory = NSScreen.screens.map { screen in
+            let uuid = screen.displayUUID ?? "no-uuid"
+            let size = "\(Int(screen.frame.width))x\(Int(screen.frame.height))"
+            let origin = "\(Int(screen.frame.origin.x)),\(Int(screen.frame.origin.y))"
+            return "\(screen.localizedName):\(size)@\(origin):\(uuid):inset\(Int(screen.safeAreaInsets.top))"
+        }.joined(separator: " | ")
+        let parts: [String] = [
+            "screen=\(screen.localizedName)",
+            "uuid=\(screen.displayUUID ?? "-")",
+            "hasNotch=\(screen.safeAreaInsets.top > 0)",
+            "menuBar=\(screen.frame.maxY - screen.visibleFrame.maxY)",
+            "frame=\(NSStringFromRect(window.frame))",
+            "expected=\(NSStringFromRect(expected))",
+            "fits=\(NSStringFromSize(window.contentView?.fittingSize ?? .zero))",
+            "visible=\(window.isVisible)",
+            "alpha=\(window.alphaValue)",
+            "level=\(window.level.rawValue)",
+            "number=\(window.windowNumber)",
+            "state=\(viewModel.notchState)",
+            "hideOnClosed=\(viewModel.hideOnClosed)",
+            "closedNotch=\(viewModel.closedNotchSize)",
+            "effectiveClosed=\(viewModel.effectiveClosedNotchHeight)",
+            "faceDrawn=\(faceDrawn)",
+            "fleetRow=\(fleetRow)",
+            "fleetReachable=\(FleetStore.shared.isReachable)",
+            "music=\(musicActive)",
+            "showFace=\(Defaults[.showNotHumanFace])",
+            "showFleet=\(Defaults[.showFleet])",
+            "drawn=\(drawnContent(window))",
+            "mode=\(Defaults[.showOnAllDisplays] ? "all-displays" : "single-display")",
+            "windows=\(windows.count)",
+            "screens=\(NSScreen.screens.count)",
+            "sharing=\(window.sharingType.rawValue)",
+            "onActiveSpace=\(window.isOnActiveSpace)",
+            "inCgsSpace=\(NotchSpaceManager.shared.notchSpace.windows.contains(window))",
+            "allScreens=[\(inventory)]",
+        ]
+        NSLog("[boringNotch] %@", parts.joined(separator: " "))
+    }
+
+    /// Rasterises the window's own content and returns the bounding box and count of the pixels
+    /// that are actually drawn (alpha > 8), so the debug log says *what* is on a screen, not just
+    /// that a window exists. In-process, so it needs no screen-recording permission.
+    @MainActor
+    private func drawnContent(_ window: NSWindow) -> String {
+        guard let view = window.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return "none" }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        var minX = rep.pixelsWide, minY = rep.pixelsHigh, maxX = -1, maxY = -1, count = 0
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide {
+                guard let c = rep.colorAt(x: x, y: y), c.alphaComponent > 0.03 else { continue }
+                count += 1
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        guard count > 0 else { return "empty" }
+        return "\(maxX - minX + 1)x\(maxY - minY + 1)@\(minX),\(minY)px=\(count)"
     }
 
     private func removeWindowScreenObserver(forKey uuid: String) {
@@ -333,6 +441,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 guard let self = self else { return }
                 self.cleanupWindows(shouldInvert: true)
+                self.adjustWindowPosition(changeAlpha: true)
+                self.setupDragDetectors()
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name.showFleetChanged, object: nil, queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self else { return }
                 self.adjustWindowPosition(changeAlpha: true)
                 self.setupDragDetectors()
             }
@@ -501,34 +619,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 showOnAllDisplays: true,
                 selectedUUID: coordinator.selectedScreenUUID)
 
-            // Close windows for screens that no longer exist (or are no longer selected) first.
+            // Bookkeeping for the windows the plan drops; `NotchWindowSync` closes them.
             for uuid in plan.removals {
                 if let window = windows[uuid] {
-                    window.close()
                     NotchSpaceManager.shared.notchSpace.windows.remove(window)
-                    windows.removeValue(forKey: uuid)
-                    viewModels.removeValue(forKey: uuid)
-                    removeWindowScreenObserver(forKey: uuid)
                 }
+                viewModels.removeValue(forKey: uuid)
+                removeWindowScreenObserver(forKey: uuid)
             }
 
-            // Create or update one window per placement, in planner order.
+            // Create, move and show one window per placement; the same map is then walked to apply
+            // the per-window alpha/anchor/log work below.
+            NotchWindowSync.sync(plan: plan, windows: &windows) { placement in
+                let screen = NSScreen.screens.first { $0.displayUUID == placement.uuid }
+                    ?? NSScreen.main
+                    ?? NSScreen.screens[0]
+                let viewModel = BoringViewModel(screenUUID: placement.uuid)
+                viewModels[placement.uuid] = viewModel
+                return createBoringNotchWindow(for: screen, with: viewModel)
+            }
+
             for placement in plan.placements {
-                let uuid = placement.uuid
-                guard let nsScreen = NSScreen.screens.first(where: { $0.displayUUID == uuid }) else { continue }
+                guard let nsScreen = NSScreen.screens.first(where: { $0.displayUUID == placement.uuid }),
+                      let window = windows[placement.uuid],
+                      let viewModel = viewModels[placement.uuid] else { continue }
 
-                if windows[uuid] == nil {
-                    let viewModel = BoringViewModel(screenUUID: uuid)
-                    windows[uuid] = createBoringNotchWindow(for: nsScreen, with: viewModel)
-                    viewModels[uuid] = viewModel
-                }
+                // The window was just resized for the current settings; an open notch has to take the
+                // new content size too, or a Show Fleet toggle leaves it stale and clipped.
+                viewModel.refreshNotchSize()
+                applyPlacement(placement, to: window, on: nsScreen, changeAlpha: changeAlpha)
+                logNotchWindow(window, on: nsScreen, expected: placement.frame, viewModel: viewModel)
 
-                if let window = windows[uuid], let viewModel = viewModels[uuid] {
-                    positionWindow(window, on: nsScreen, changeAlpha: changeAlpha)
-
-                    if viewModel.notchState == .closed {
-                        viewModel.close()
-                    }
+                if viewModel.notchState == .closed {
+                    viewModel.close()
                 }
             }
         } else {
@@ -549,14 +672,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             vm.screenUUID = selectedScreen.displayUUID
-            vm.notchSize = getClosedNotchSize(screenUUID: selectedScreen.displayUUID)
+            // State-aware: an open notch keeps the open size after a Show Fleet toggle.
+            vm.refreshNotchSize()
 
             if window == nil {
                 window = createBoringNotchWindow(for: selectedScreen, with: vm)
             }
 
+            let selectedPlacement = NotchWindowPlacement(
+                uuid: selectedScreen.displayUUID ?? "",
+                frame: NotchWindowPlanner.frame(
+                    for: NotchScreen(uuid: selectedScreen.displayUUID ?? "",
+                                     frame: selectedScreen.frame,
+                                     hasNotch: selectedScreen.safeAreaInsets.top > 0),
+                    windowSize: windowSize),
+                visible: true)
+
             if let window = window {
-                positionWindow(window, on: selectedScreen, changeAlpha: changeAlpha)
+                applyPlacement(selectedPlacement, to: window, on: selectedScreen, changeAlpha: changeAlpha)
+                logNotchWindow(window, on: selectedScreen, expected: selectedPlacement.frame, viewModel: vm)
 
                 if vm.notchState == .closed {
                     vm.close()
@@ -620,10 +754,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// The only place the plan's window protocol meets AppKit: a notch window is a plain NSWindow.
+extension NSWindow: NotchWindowHandle {
+    var isOnScreen: Bool { isVisible }
+    func move(to frame: CGRect) { setFrame(frame, display: true) }
+    func showFront() { orderFrontRegardless() }
+    func closeNotchWindow() { close() }
+}
+
 extension Notification.Name {
     static let selectedScreenChanged = Notification.Name("SelectedScreenChanged")
     static let notchHeightChanged = Notification.Name("NotchHeightChanged")
     static let showOnAllDisplaysChanged = Notification.Name("showOnAllDisplaysChanged")
+    static let showFleetChanged = Notification.Name("showFleetChanged")
     static let automaticallySwitchDisplayChanged = Notification.Name("automaticallySwitchDisplayChanged")
     static let expandedDragDetectionChanged = Notification.Name("expandedDragDetectionChanged")
 }

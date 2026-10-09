@@ -201,6 +201,8 @@ struct GeneralSettings: View {
                 }
                 .onChange(of: showFleet) {
                     FleetStore.shared.settingsDidChange()
+                    NotificationCenter.default.post(
+                        name: Notification.Name.showFleetChanged, object: nil)
                 }
                 Picker("Skin", selection: $fleetSkin) {
                     ForEach(FleetSkin.allCases) { skin in

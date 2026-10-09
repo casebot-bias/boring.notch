@@ -102,18 +102,11 @@ class BoringViewModel: NSObject, ObservableObject {
             .store(in: &cancellables)
     }
 
-    // A display without a hardware notch still draws the synthetic notch. In multi-display mode it
-    // must stay visible even while a fullscreen app hides the notch on notched screens; that is what
-    // makes the fleet panel and media player reachable on every screen.
-    var effectiveClosedNotchHeight: CGFloat {
-        let currentScreen = screenUUID.flatMap { NSScreen.screen(withUUID: $0) }
-        return NotchWindowPlanner.closedNotchHeight(
-            closedHeight: closedNotchSize.height,
-            hideOnClosed: hideOnClosed,
-            hasNotch: (currentScreen?.safeAreaInsets.top ?? 0) > 0,
-            showOnAllDisplays: Defaults[.showOnAllDisplays]
-        )
-    }
+    /// Height the closed notch occupies: the screen's own closed height. A display without a
+    /// hardware notch shows its synthetic notch exactly like a notched one - it used to collapse to
+    /// zero height on such a screen while `hideOnClosed` was true, which left that screen with no
+    /// notch at all. Zero only when the configured height is zero.
+    var effectiveClosedNotchHeight: CGFloat { closedNotchSize.height }
 
     var chinHeight: CGFloat {
         if !Defaults[.hideTitleBar] {
@@ -195,10 +188,19 @@ class BoringViewModel: NSObject, ObservableObject {
         return false
     }
 
+    /// Re-read the notch's size for its current state. Show Fleet changes the open notch's size, so
+    /// a toggle while the notch is open must not leave the content at the size it had before; the
+    /// layout calls this on every pass so content and window always come from the same settings.
+    func refreshNotchSize() {
+        let closed = getClosedNotchSize(screenUUID: screenUUID)
+        closedNotchSize = closed
+        notchSize = notchState == .open ? openNotchSize : closed
+    }
+
     func open() {
-        self.notchSize = openNotchSize
         self.notchState = .open
-        
+        refreshNotchSize()
+
         // Force music information update when notch is opened
         MusicManager.shared.forceUpdate()
     }
@@ -208,9 +210,8 @@ class BoringViewModel: NSObject, ObservableObject {
         if SharingStateManager.shared.preventNotchClose {
             return
         }
-        self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)
-        self.closedNotchSize = self.notchSize
         self.notchState = .closed
+        refreshNotchSize()
         self.isBatteryPopoverActive = false
         self.coordinator.sneakPeek.show = false
         self.edgeAutoOpenActive = false

@@ -48,12 +48,12 @@ struct FleetWorkView: View {
     private var head: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("CURRENT WORK")
-                .font(.system(size: 6.5, design: .monospaced))
-                .tracking(1)
+                .font(.system(size: 11, design: .monospaced))
+                .tracking(0.5)
                 .foregroundColor(theme.dim)
             Spacer(minLength: 0)
             Text("\(runningTaskCount)")
-                .font(.system(size: 8, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(theme.muted)
         }
     }
@@ -65,7 +65,7 @@ struct FleetWorkView: View {
             Text("No tasks running.")
             Text("Ready for the next assignment.")
         }
-        .font(.system(size: 10))
+        .font(.system(size: 12))
         .foregroundColor(theme.dim)
         .padding(.top, 20)
     }
@@ -94,11 +94,11 @@ struct FleetWorkView: View {
                     .fill(theme.accent)
                     .frame(width: 4, height: 4)
                 Text(job.pill)
-                    .font(.system(size: 9))
+                    .font(.system(size: 12))
                     .foregroundColor(theme.nameText)
                 Spacer(minLength: 0)
                 Text("RUNNING")
-                    .font(.system(size: 7, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(theme.dim)
             }
             Text(job.label)
@@ -107,7 +107,7 @@ struct FleetWorkView: View {
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
             Text(FleetFormat.step(job.step))
-                .font(.system(size: 9.5))
+                .font(.system(size: 12))
                 .foregroundColor(theme.dim)
                 .lineLimit(1)
         }
@@ -118,7 +118,7 @@ struct FleetWorkView: View {
     private var moreLink: some View {
         Button(action: openFleet) {
             Text("+\(runningTaskCount - previewLimit) jobs in Fleet →")
-                .font(.system(size: 9))
+                .font(.system(size: 12))
                 .foregroundColor(linkHovered ? theme.accent : theme.dim)
         }
         .buttonStyle(.plain)

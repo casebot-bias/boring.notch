@@ -60,14 +60,14 @@ private struct PeakReading: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(peak.kind.title)
-                        .font(.system(size: 9))
+                        .font(.system(size: 12))
                         .foregroundColor(theme.muted)
                     Text(valueText)
-                        .font(.system(size: 9))
+                        .font(.system(size: 12))
                         .foregroundColor(valueColor)
                 }
                 Text(hostText)
-                    .font(.system(size: 7.5, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(theme.dim)
             }
         }

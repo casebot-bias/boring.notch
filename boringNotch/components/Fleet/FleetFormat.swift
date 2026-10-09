@@ -47,7 +47,8 @@ enum FleetFormat {
 
     /// A response-map agent's detail line: busy lanes show their job count (or
     /// "Working" while busy with no reported jobs), idle lanes "Idle", offline
-    /// lanes "Not reported".
+    /// lanes "Offline". Offline is deliberately short: at 11 pt the map's column
+    /// truncates anything longer.
     static func responseDetail(_ lane: FleetLane) -> String {
         switch lane.state {
         case .busy:
@@ -56,7 +57,7 @@ enum FleetFormat {
         case .idle:
             return "Idle"
         case .offline:
-            return "Not reported"
+            return "Offline"
         }
     }
 
@@ -111,4 +112,23 @@ enum FleetFormat {
         guard !base.isEmpty else { return nil }
         return URL(string: base)
     }
+}
+/// Widths the fleet panel's fixed blocks must give their text so no label truncates. The response
+/// map and the closed-notch row read these; the tests measure the real strings at `minTextSize`
+/// against them. Foundation/CoreGraphics only, so it compiles into the app and the test target.
+enum FleetPanelMetrics {
+    /// The smallest text size any fleet view may use.
+    static let minTextSize: CGFloat = 11
+    /// A response-map row's fixed furniture: signal square, its spacing, the trailing spacer and
+    /// the job badge. Everything left in the column is the text budget.
+    static let responseMapRowOverhead: CGFloat = 30
+    /// Response-map column floor: `responseMapRowOverhead` plus room for the longest detail line
+    /// ("Offline", "2 jobs").
+    static let responseMapColumnWidth: CGFloat = 84
+    /// The whole response map: two columns, the 60 pt case box and the two wire gaps.
+    static let responseMapWidth: CGFloat = 292
+    /// The closed-notch row: the mini map's width, the gap after it, and the text budget.
+    static let closedRowMapWidth: CGFloat = 46
+    static let closedRowTextWidth: CGFloat = 72
+    static var closedRowSideWidth: CGFloat { closedRowMapWidth + 10 + closedRowTextWidth }
 }

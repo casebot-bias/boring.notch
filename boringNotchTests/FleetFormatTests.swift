@@ -8,6 +8,7 @@
 //
 
 import XCTest
+import AppKit
 
 final class FleetFormatTests: XCTestCase {
 
@@ -180,8 +181,8 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.responseDetail(lane(.idle)), "Idle")
     }
 
-    func testResponseDetailOfflineIsNotReported() {
-        XCTAssertEqual(FleetFormat.responseDetail(lane(.offline)), "Not reported")
+    func testResponseDetailOfflineIsOffline() {
+        XCTAssertEqual(FleetFormat.responseDetail(lane(.offline)), "Offline")
     }
 
     // MARK: - fleetBaseURL
@@ -216,5 +217,41 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertNil(FleetFormat.fleetBaseURL("   "))
         XCTAssertNil(FleetFormat.fleetBaseURL("\n\t"))
         XCTAssertNil(FleetFormat.fleetBaseURL("/"))
+    }
+
+    // MARK: - Panel metrics: the strings must fit their blocks
+
+    private func monospacedWidth(_ text: String, size: CGFloat) -> CGFloat {
+        let font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        return (text as NSString).size(withAttributes: [.font: font]).width
+    }
+
+    /// The owner saw "Offli…" and "1 j…" once the text grew to 11 pt. The panel now gives the
+    /// response-map row `responseMapColumnWidth` minus its fixed furniture, and the closed row's
+    /// side block `closedRowTextWidth`; every string those blocks can hold has to fit.
+    func testMapAndClosedRowStringsFitTheirMetrics() {
+        let detailBudget = FleetPanelMetrics.responseMapColumnWidth - FleetPanelMetrics.responseMapRowOverhead
+        for detail in ["Idle", "Offline", "Working", "1 job", "2 jobs"] {
+            XCTAssertLessThanOrEqual(
+                monospacedWidth(detail, size: FleetPanelMetrics.minTextSize), detailBudget,
+                "\(detail) does not fit the response-map detail budget")
+        }
+        for status in ["1 working", "3 critical", FleetFormat.linked(7, of: 7)] {
+            XCTAssertLessThanOrEqual(
+                monospacedWidth(status, size: FleetPanelMetrics.minTextSize),
+                FleetPanelMetrics.closedRowTextWidth,
+                "\(status) does not fit the closed row's text budget")
+        }
+    }
+
+    /// A response-map column cannot be narrower than its furniture plus the detail budget, and the
+    /// closed row's side block cannot be narrower than its mini map, gap and text budget.
+    func testBlockWidthsCoverTheirContents() {
+        XCTAssertGreaterThanOrEqual(FleetPanelMetrics.responseMapColumnWidth,
+                                    FleetPanelMetrics.responseMapRowOverhead + 50)
+        XCTAssertGreaterThanOrEqual(FleetPanelMetrics.responseMapWidth,
+                                    2 * FleetPanelMetrics.responseMapColumnWidth + 60)
+        XCTAssertGreaterThanOrEqual(FleetPanelMetrics.closedRowSideWidth,
+                                    FleetPanelMetrics.closedRowMapWidth + 10 + FleetPanelMetrics.closedRowTextWidth)
     }
 }

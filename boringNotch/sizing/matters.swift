@@ -23,16 +23,20 @@ let fleetSectionSpacing: CGFloat = 15
 let fleetSectionHeight: CGFloat = 300
 private let baseOpenNotchSize: CGSize = .init(width: 640, height: 190)
 
-var openNotchSize: CGSize {
-    guard Defaults[.showFleet] else { return baseOpenNotchSize }
-    return .init(
-        width: fleetMusicWidth + 40 + fleetSectionSpacing + 1 + fleetSectionWidth,
-        height: max(baseOpenNotchSize.height, fleetSectionHeight)
-    )
-}
+var openNotchSize: CGSize { panelSizes.open }
 
-var windowSize: CGSize {
-    .init(width: openNotchSize.width, height: openNotchSize.height + shadowPadding)
+var windowSize: CGSize { panelSizes.window }
+
+/// The sizes the current settings produce, derived in `NotchWindowPlanner.sizes` so a Show Fleet
+/// toggle cannot leave the content and the window on different settings.
+private var panelSizes: NotchWindowPlanner.NotchSizes {
+    NotchWindowPlanner.sizes(showFleet: Defaults[.showFleet],
+                             baseOpen: baseOpenNotchSize,
+                             fleetMusicWidth: fleetMusicWidth,
+                             fleetSpacing: fleetSectionSpacing,
+                             fleetSectionWidth: fleetSectionWidth,
+                             fleetSectionHeight: fleetSectionHeight,
+                             shadowPadding: shadowPadding)
 }
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 
@@ -82,13 +86,21 @@ enum MusicPlayerImageSizes {
             if Defaults[.notchHeightMode] == .matchRealNotchSize {
                 notchHeight = screen.safeAreaInsets.top
             } else if Defaults[.notchHeightMode] == .matchMenuBar {
-                notchHeight = screen.frame.maxY - screen.visibleFrame.maxY
+                // A display with no menu bar of its own measures 0, which would collapse the notch
+                // to zero height; keep the configured height in that case.
+                notchHeight = NotchWindowPlanner.measuredOrConfiguredClosedHeight(
+                    measuredMenuBar: screen.frame.maxY - screen.visibleFrame.maxY,
+                    configured: Defaults[.notchHeight])
             }
         } else {
             // This is a display WITHOUT a notch - use non-notch height settings
             notchHeight = Defaults[.nonNotchHeight]
             if Defaults[.nonNotchHeightMode] == .matchMenuBar {
-                notchHeight = screen.frame.maxY - screen.visibleFrame.maxY
+                // The reported case: a secondary monitor with no menu bar of its own measures 0,
+                // which would leave the notch zero height - i.e. invisible - on that screen.
+                notchHeight = NotchWindowPlanner.measuredOrConfiguredClosedHeight(
+                    measuredMenuBar: screen.frame.maxY - screen.visibleFrame.maxY,
+                    configured: Defaults[.nonNotchHeight])
             }
         }
     }
