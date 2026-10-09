@@ -70,16 +70,16 @@ struct FleetResponseMapView: View {
         let working = lanes.filter { $0.state == .busy }.count
         return HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text("RESPONSE MAP")
-                .font(.system(size: 6.5, design: .monospaced))
-                .tracking(1)
+                .font(.system(size: 11, design: .monospaced))
+                .tracking(0.5)
                 .foregroundColor(theme.dim)
             Spacer(minLength: 0)
             (Text("\(working)")
-                .font(.system(size: 8, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(theme.muted)
              + Text(" WORKING")
-                .font(.system(size: 6.5, design: .monospaced))
-                .tracking(1)
+                .font(.system(size: 11, design: .monospaced))
+                .tracking(0.5)
                 .foregroundColor(theme.dim))
         }
     }
@@ -235,18 +235,18 @@ struct FleetResponseMapView: View {
                 .frame(width: signalSize, height: signalSize)
             VStack(alignment: .leading, spacing: 1) {
                 Text(lane.label)
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .foregroundColor(nameColor(lane.state))
                     .lineLimit(1)
                 Text(FleetFormat.responseDetail(lane))
-                    .font(.system(size: 7.5, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(theme.dim)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
             if let badge = FleetFormat.jobBadge(lane.jobs.count) {
                 Text(badge)
-                    .font(.system(size: 8, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(theme.muted)
                     .lineLimit(1)
             }
@@ -266,7 +266,7 @@ struct FleetResponseMapView: View {
                         .font(.system(size: 12))
                         .foregroundColor(theme.text)
                     Text(origin.state == .offline ? "Offline" : "Online")
-                        .font(.system(size: 6.5, design: .monospaced))
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(theme.dim)
                 }
             }

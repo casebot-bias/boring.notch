@@ -47,7 +47,8 @@ enum FleetFormat {
 
     /// A response-map agent's detail line: busy lanes show their job count (or
     /// "Working" while busy with no reported jobs), idle lanes "Idle", offline
-    /// lanes "Not reported".
+    /// lanes "Offline". Offline is deliberately short: at 11 pt the map's column
+    /// truncates anything longer.
     static func responseDetail(_ lane: FleetLane) -> String {
         switch lane.state {
         case .busy:
@@ -56,7 +57,7 @@ enum FleetFormat {
         case .idle:
             return "Idle"
         case .offline:
-            return "Not reported"
+            return "Offline"
         }
     }
 

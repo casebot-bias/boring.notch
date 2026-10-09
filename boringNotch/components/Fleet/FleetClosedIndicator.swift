@@ -35,17 +35,17 @@ struct FleetClosedIndicator: View {
                     // Working count over link / critical status
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(model.workingCount) working")
-                            .font(.system(size: 10))
+                            .font(.system(size: 12))
                             .monospacedDigit()
                             .foregroundColor(theme.text)
                         if model.criticalCount == 0 {
                             Text(FleetFormat.linked(model.linkedCount, of: model.agentCount))
-                                .font(.system(size: 8, design: .monospaced))
+                                .font(.system(size: 11, design: .monospaced))
                                 .foregroundColor(theme.dim)
                                 .lineLimit(1)
                         } else {
                             Text(FleetFormat.status(model.criticalCount))
-                                .font(.system(size: 8, design: .monospaced))
+                                .font(.system(size: 11, design: .monospaced))
                                 .foregroundColor(theme.hot)
                                 .lineLimit(1)
                         }
@@ -70,7 +70,7 @@ struct FleetClosedIndicator: View {
                         .foregroundColor(model.totalTokPerSec == nil ? theme.dim : theme.accent)
                         .lineLimit(1)
                     Text("tok/s")
-                        .font(.system(size: 7, design: .monospaced))
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(theme.dim)
                 }
                 .frame(width: sideWidth, alignment: .leading)

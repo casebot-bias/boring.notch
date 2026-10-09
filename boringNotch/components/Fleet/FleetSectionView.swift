@@ -49,18 +49,18 @@ struct FleetSectionView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("FLEET")
                     .font(.system(size: 11, weight: .semibold))
-                    .tracking(1.4)
+                    .tracking(0.7)
                     .foregroundColor(theme.muted)
-                Text("SIX AGENTS. ONE CASE.")
-                    .font(.system(size: 6, design: .monospaced))
-                    .tracking(1)
+                Text("SEVEN AGENTS. ONE CASE.")
+                    .font(.system(size: 11, design: .monospaced))
+                    .tracking(0.5)
                     .foregroundColor(theme.dim)
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 3) {
                 Text("FLEET OUTPUT")
-                    .font(.system(size: 6.5, design: .monospaced))
-                    .tracking(0.8)
+                    .font(.system(size: 11, design: .monospaced))
+                    .tracking(0.5)
                     .foregroundColor(theme.dim)
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     let output = FleetFormat.fleetOutput(store.panelModel.totalTokPerSec)
@@ -69,7 +69,7 @@ struct FleetSectionView: View {
                         .monospacedDigit()
                         .foregroundColor(output == FleetFormat.unknown ? theme.dim : theme.accent)
                     Text("tok/s")
-                        .font(.system(size: 8, design: .monospaced))
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(theme.dim)
                 }
             }
@@ -90,17 +90,17 @@ struct FleetSectionView: View {
                     .foregroundColor(theme.text)
                  + Text(" tasks")
                     .foregroundColor(theme.dim))
-                    .font(.system(size: 9))
+                    .font(.system(size: 12))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(FleetFormat.linked(store.panelModel.linkedCount, of: store.panelModel.agentCount))
-                .font(.system(size: 9, design: .monospaced))
+                .font(.system(size: 12, design: .monospaced))
                 .foregroundColor(theme.dim)
                 .frame(maxWidth: .infinity, alignment: .center)
 
             Text(FleetFormat.status(store.panelModel.criticalCount))
-                .font(.system(size: 9))
+                .font(.system(size: 12))
                 .foregroundColor(store.panelModel.criticalCount == 0 ? theme.accent : theme.hot)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }

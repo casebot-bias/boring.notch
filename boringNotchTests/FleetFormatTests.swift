@@ -180,8 +180,8 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.responseDetail(lane(.idle)), "Idle")
     }
 
-    func testResponseDetailOfflineIsNotReported() {
-        XCTAssertEqual(FleetFormat.responseDetail(lane(.offline)), "Not reported")
+    func testResponseDetailOfflineIsOffline() {
+        XCTAssertEqual(FleetFormat.responseDetail(lane(.offline)), "Offline")
     }
 
     // MARK: - fleetBaseURL
