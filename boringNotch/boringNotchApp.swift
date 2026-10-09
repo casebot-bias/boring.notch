@@ -270,9 +270,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return window
     }
 
-    /// Apply a plan placement to its window: resize and move it to the placement's frame,
-    /// re-anchor it from the window's real frame, and make sure it is actually on screen. A
-    /// window that is created but never ordered in looks exactly like "no notch on this screen".
+    /// Apply a plan placement to its window: resize and move it to the placement's frame, anchor
+    /// it from the window's real frame, and keep it on screen - the plan states that every placed
+    /// screen shows its notch, so a window that has been ordered out is put back.
     @MainActor
     private func applyPlacement(_ placement: NotchWindowPlacement,
                                 to window: NSWindow,
