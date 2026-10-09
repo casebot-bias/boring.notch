@@ -93,7 +93,7 @@ enum MusicPlayerImageSizes {
             notchHeight = Defaults[.nonNotchHeight]
             if Defaults[.nonNotchHeightMode] == .matchMenuBar {
                 // The reported case: a secondary monitor with no menu bar of its own measures 0,
-                // which left the notch zero height - i.e. invisible - on that screen.
+                // which would leave the notch zero height - i.e. invisible - on that screen.
                 notchHeight = NotchWindowPlanner.measuredOrConfiguredClosedHeight(
                     measuredMenuBar: screen.frame.maxY - screen.visibleFrame.maxY,
                     configured: Defaults[.nonNotchHeight])

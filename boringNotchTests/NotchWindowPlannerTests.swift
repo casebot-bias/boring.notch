@@ -345,4 +345,100 @@ final class NotchWindowPlannerTests: XCTestCase {
                                                  hasNotch: false, showOnAllDisplays: true),
             height, "the closed notch keeps that height on an un-notched display")
     }
+
+    // MARK: - Window sync (create, move, show, close)
+
+    private final class FakeWindow: NotchWindowHandle {
+        var frame: CGRect
+        private(set) var isOnScreen: Bool
+        private(set) var moves: [CGRect] = []
+        private(set) var shownFrontCount = 0
+        private(set) var isClosed = false
+
+        init(frame: CGRect = .zero, isOnScreen: Bool = false) {
+            self.frame = frame
+            self.isOnScreen = isOnScreen
+        }
+
+        func move(to frame: CGRect) {
+            moves.append(frame)
+            self.frame = frame
+        }
+
+        func showFront() {
+            shownFrontCount += 1
+            isOnScreen = true
+        }
+
+        func closeNotchWindow() {
+            isClosed = true
+            isOnScreen = false
+        }
+    }
+
+    private func plan(_ screens: [NotchScreen], existing: Set<String> = []) -> NotchWindowPlan {
+        NotchWindowPlanner.plan(screens: screens,
+                                windowSize: windowSize,
+                                existingWindowUUIDs: existing,
+                                showOnAllDisplays: true,
+                                selectedUUID: nil)
+    }
+
+    /// One screen per window: each placement gets its own window, moved to the planned frame and
+    /// ordered to the front. Removing creation or ordering here fails the test.
+    func testSyncCreatesOneVisibleWindowPerScreenWithThePlannedFrame() {
+        var windows: [String: FakeWindow] = [:]
+        let expected = plan([macbook, external])
+
+        NotchWindowSync.sync(plan: expected, windows: &windows) { _ in FakeWindow() }
+
+        XCTAssertEqual(windows.count, 2, "one window per screen")
+        XCTAssertEqual(Set(windows.keys), Set(expected.placements.map(\.uuid)))
+        for placement in expected.placements {
+            guard let window = windows[placement.uuid] else {
+                return XCTFail("no window for \(placement.uuid)")
+            }
+            XCTAssertEqual(window.frame, placement.frame, "\(placement.uuid) must take its planned frame")
+            XCTAssertTrue(window.isOnScreen, "\(placement.uuid) must be on screen")
+            XCTAssertEqual(window.shownFrontCount, 1, "\(placement.uuid) must be ordered front once")
+        }
+    }
+
+    /// An existing window is moved, not recreated; a screen that vanished is closed and dropped.
+    func testSyncMovesExistingWindowsAndClosesRemovedOnes() {
+        let stale = FakeWindow(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+        var windows: [String: FakeWindow] = [external.uuid: stale]
+        var created = 0
+
+        NotchWindowSync.sync(plan: plan([macbook, external]), windows: &windows) { _ in
+            created += 1
+            return FakeWindow()
+        }
+
+        XCTAssertEqual(created, 1, "only the missing screen's window is created")
+        XCTAssertEqual(windows[external.uuid]?.moves.count, 1, "the stale window is moved")
+        XCTAssertEqual(windows[external.uuid]?.frame, expectedPlacement(for: external).frame)
+
+        NotchWindowSync.sync(plan: plan([macbook], existing: [macbook.uuid, external.uuid]),
+                             windows: &windows) { _ in FakeWindow() }
+        XCTAssertTrue(stale.isClosed, "the vanished screen's window is closed")
+        XCTAssertNil(windows[external.uuid])
+    }
+
+    /// Re-running the sync on an unchanged plan does nothing: no move, no extra ordering to the front.
+    func testSyncIsIdempotentForAnUnchangedPlan() {
+        var windows: [String: FakeWindow] = [:]
+        let expected = plan([macbook, external])
+        NotchWindowSync.sync(plan: expected, windows: &windows) { _ in FakeWindow() }
+        let movesAfterFirst = windows.mapValues { $0.moves.count }
+        let frontsAfterFirst = windows.mapValues { $0.shownFrontCount }
+
+        NotchWindowSync.sync(plan: expected, windows: &windows) { _ in
+            XCTFail("no window may be created on the second pass")
+            return FakeWindow()
+        }
+
+        XCTAssertEqual(windows.mapValues { $0.moves.count }, movesAfterFirst)
+        XCTAssertEqual(windows.mapValues { $0.shownFrontCount }, frontsAfterFirst)
+    }
 }

@@ -58,11 +58,13 @@ enum NotchWindowPlanner {
         CGRect(origin: origin(for: screen, windowSize: windowSize), size: windowSize)
     }
 
-    /// A display can measure its own menu bar as 0 (`frame.maxY - visibleFrame.maxY`): a secondary
-    /// monitor with no menu bar of its own reads 0. Used directly as a notch height, that 0
-    /// collapses the closed notch to nothing, so the display draws no notch at all - the "the notch
-    /// only shows on the primary screen" report. Keep the configured height instead. An explicitly
-    /// configured 0 is returned unchanged: that is the user's own choice.
+    /// A display can measure its own menu bar as 0 (`frame.maxY - visibleFrame.maxY`): a monitor
+    /// with no menu bar of its own. Used directly as a notch height that 0 leaves the closed notch
+    /// zero pt tall, and on a screen without a hardware notch the closed notch is drawn by content
+    /// of exactly that height - so the screen would show no notch at all. That is one way a display
+    /// can end up with no visible notch, so the height must not be able to collapse: keep the
+    /// configured height instead. An explicitly configured 0 is returned unchanged, since that is
+    /// the user's own choice.
     static func measuredOrConfiguredClosedHeight(measuredMenuBar: CGFloat, configured: CGFloat) -> CGFloat {
         measuredMenuBar > 0 ? measuredMenuBar : configured
     }
@@ -120,5 +122,53 @@ enum NotchWindowPlanner {
     static func closedNotchHeight(closedHeight: CGFloat, hideOnClosed: Bool, hasNotch: Bool,
                                   showOnAllDisplays: Bool) -> CGFloat {
         (hideOnClosed && !hasNotch && !showOnAllDisplays) ? 0 : closedHeight
+    }
+}
+
+/// A notch window as the plan needs it: its frame, whether the window server has it on screen, and
+/// the four things the app does to it. AppKit's `NSWindow` conforms in the app target; tests use a
+/// fake, so creating, moving, showing and closing one window per screen is unit-tested without
+/// AppKit.
+protocol NotchWindowHandle: AnyObject {
+    var frame: CGRect { get }
+    var isOnScreen: Bool { get }
+    func move(to frame: CGRect)
+    func showFront()
+    func closeNotchWindow()
+}
+
+/// Applies a window plan to the windows that exist. Pure: it only talks to `NotchWindowHandle`.
+///
+/// - Windows for `plan.removals` are closed and dropped.
+/// - Every placement gets a window: an existing one is reused, otherwise `make` creates it.
+/// - The window is moved only when its frame differs from the placement's frame, and ordered to
+///   the front only when the placement says the screen must show its notch and the window server
+///   does not already consider it on screen. Re-running the sync on an unchanged plan therefore
+///   does nothing.
+enum NotchWindowSync {
+    @discardableResult
+    static func sync<W: NotchWindowHandle>(plan: NotchWindowPlan,
+                                           windows: inout [String: W],
+                                           make: (NotchWindowPlacement) -> W) -> [String: W] {
+        for uuid in plan.removals {
+            guard let window = windows.removeValue(forKey: uuid) else { continue }
+            window.closeNotchWindow()
+        }
+        for placement in plan.placements {
+            let window: W
+            if let existing = windows[placement.uuid] {
+                window = existing
+            } else {
+                window = make(placement)
+                windows[placement.uuid] = window
+            }
+            if window.frame != placement.frame {
+                window.move(to: placement.frame)
+            }
+            if placement.visible, !window.isOnScreen {
+                window.showFront()
+            }
+        }
+        return windows
     }
 }

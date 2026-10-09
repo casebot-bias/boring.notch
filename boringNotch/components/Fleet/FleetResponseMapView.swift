@@ -2,8 +2,8 @@
 //  FleetResponseMapView.swift
 //  boringNotch
 //
-//  The RESPONSE MAP column of the expanded Fleet panel: the six agent signals
-//  (frank, claire, ciri | dali, nova, odin) flank the centred `case` box, thin
+//  The RESPONSE MAP column of the expanded Fleet panel: the agent signals
+//  (frank, claire, ciri | dali, nova, pika, odin) flank the centred `case` box, thin
 //  wires drawn in a Canvas overlay tying every signal to the box, plus its
 //  compact companion for the closed notch. Colours come only from
 //  FleetTheme(skin:); nothing draws a background (the notch is already black).
@@ -16,8 +16,8 @@ import SwiftUI
 
 // MARK: - Response Map
 
-/// Expanded-panel response map: a label row over two columns of three agent
-/// signals with the case box centred between them.
+/// Expanded-panel response map: a label row over two columns of agent
+/// signals (three left, the rest right) with the case box centred between them.
 struct FleetResponseMapView: View {
     let lanes: [FleetLane]
     let origin: FleetLane
@@ -28,6 +28,10 @@ struct FleetResponseMapView: View {
 
     /// True while any lane runs; only then does the dot clock need to tick.
     private var hasBusyLane: Bool { lanes.contains { $0.state == .busy } }
+
+    /// Left column: the first three agents. Right column: the rest (four with pika).
+    private var leftIndexes: [Int] { Array(lanes.indices.prefix(3)) }
+    private var rightIndexes: [Int] { Array(lanes.indices.dropFirst(3)) }
 
     // MARK: - Layout constants
 
@@ -87,7 +91,8 @@ struct FleetResponseMapView: View {
     /// the Canvas wire anchors sit on the columns' inner edges.
     private var map: some View {
         GeometryReader { geo in
-            let rowHeight = geo.size.height / 3
+            let gridRows = max(leftIndexes.count, rightIndexes.count)
+            let rowHeight = geo.size.height / CGFloat(max(1, gridRows))
             let colWidth = max(52, (geo.size.width - caseSize) / 2 - wireGap - 6)
             ZStack {
                 if reduceMotion || !hasBusyLane {
@@ -108,20 +113,23 @@ struct FleetResponseMapView: View {
                     }
                 }
                 HStack(spacing: 0) {
-                    column(indexes: [0, 1, 2], colWidth: colWidth, rowHeight: rowHeight)
+                    column(indexes: leftIndexes, colWidth: colWidth, rowHeight: rowHeight)
+                        .frame(maxHeight: .infinity, alignment: .center)
                     Spacer(minLength: 0)
                     caseBox
                     Spacer(minLength: 0)
-                    column(indexes: [3, 4, 5], colWidth: colWidth, rowHeight: rowHeight)
+                    column(indexes: rightIndexes, colWidth: colWidth, rowHeight: rowHeight)
+                        .frame(maxHeight: .infinity, alignment: .center)
                 }
             }
         }
     }
 
     /// One cubic per agent: starts at its column's inner edge on the row
-    /// centre, ends on the case box's edge with the row fan offset (−12 / 0 /
-    /// +12). Horizontal tangents at the midpoint x keep each wire a single
-    /// monotone curve running forward into the box. Idle wires stroke in
+    /// centre, ends on the case box's edge fanned across ±12 pt (rows spread
+    /// 24 pt apart, centred on the box). Horizontal tangents at the midpoint x
+    /// keep each wire a single monotone curve running forward into the box.
+    /// Idle wires stroke in
     /// `wire` at 1 pt, busy wires in `accent` at 1.25 pt. A 4 pt square marks
     /// the box end (`accent` while busy, `wire` otherwise); every busy wire
     /// also carries one 2.5 pt `accent` dot travelling along the same cubic,
@@ -134,53 +142,60 @@ struct FleetResponseMapView: View {
         colWidth: CGFloat,
         clock: Double?
     ) {
-        let fanOffsets: [CGFloat] = [-12, 0, 12]
-        for index in 0..<6 {
-            guard let lane = lane(at: index) else { continue }
-            let isLeft = index < 3
-            let row = index % 3
-            let busy = lane.state == .busy
-            let start = CGPoint(
-                x: isLeft ? colWidth : size.width - colWidth,
-                y: rowHeight * (CGFloat(row) + 0.5)
-            )
-            let end = CGPoint(
-                x: size.width / 2 + (isLeft ? -caseSize / 2 : caseSize / 2),
-                y: size.height / 2 + fanOffsets[row]
-            )
-            let midX = start.x + (end.x - start.x) * 0.5
-            let control1 = CGPoint(x: midX, y: start.y)
-            let control2 = CGPoint(x: midX, y: end.y)
+        let columns: [(indexes: [Int], leading: Bool)] = [(leftIndexes, true), (rightIndexes, false)]
+        let gridRows = max(columns[0].indexes.count, columns[1].indexes.count)
+        for column in columns {
+            let count = column.indexes.count
+            // a short column is centred in the grid, so its first row starts half a row in
+            let gridOffset = (CGFloat(gridRows) - CGFloat(count)) / 2
+            // the fan spreads the column's wires across the box's ±12 pt; a lone wire runs straight
+            let fanStep: CGFloat = count > 1 ? 24 / CGFloat(count - 1) : 0
+            for (row, index) in column.indexes.enumerated() {
+                guard let lane = lane(at: index) else { continue }
+                let isLeft = column.leading
+                let busy = lane.state == .busy
+                let start = CGPoint(
+                    x: isLeft ? colWidth : size.width - colWidth,
+                    y: rowHeight * (gridOffset + CGFloat(row) + 0.5)
+                )
+                let end = CGPoint(
+                    x: size.width / 2 + (isLeft ? -caseSize / 2 : caseSize / 2),
+                    y: size.height / 2 + (CGFloat(row) - CGFloat(count - 1) / 2) * fanStep
+                )
+                let midX = start.x + (end.x - start.x) * 0.5
+                let control1 = CGPoint(x: midX, y: start.y)
+                let control2 = CGPoint(x: midX, y: end.y)
 
-            var wire = Path()
-            wire.move(to: start)
-            wire.addCurve(to: end, control1: control1, control2: control2)
-            context.stroke(wire, with: .color(busy ? theme.accent : theme.wire), lineWidth: busy ? 1.25 : 1)
+                var wire = Path()
+                wire.move(to: start)
+                wire.addCurve(to: end, control1: control1, control2: control2)
+                context.stroke(wire, with: .color(busy ? theme.accent : theme.wire), lineWidth: busy ? 1.25 : 1)
 
-            let marker = CGRect(x: end.x - 2, y: end.y - 2, width: 4, height: 4)
-            let markerColor = busy ? theme.accent : theme.wire
-            context.fill(Path(roundedRect: marker, cornerRadius: 1), with: .color(markerColor))
+                let marker = CGRect(x: end.x - 2, y: end.y - 2, width: 4, height: 4)
+                let markerColor = busy ? theme.accent : theme.wire
+                context.fill(Path(roundedRect: marker, cornerRadius: 1), with: .color(markerColor))
 
-            guard busy else { continue }
-            let t = dotPhase(clock: clock, row: row)
-            let mt = 1 - t
-            let w0 = mt * mt * mt
-            let w1 = 3 * mt * mt * t
-            let w2 = 3 * mt * t * t
-            let w3 = t * t * t
-            let dot = CGPoint(
-                x: w0 * start.x + w1 * control1.x + w2 * control2.x + w3 * end.x,
-                y: w0 * start.y + w1 * control1.y + w2 * control2.y + w3 * end.y
-            )
-            context.fill(
-                Path(ellipseIn: CGRect(
-                    x: dot.x - dotRadius,
-                    y: dot.y - dotRadius,
-                    width: 2 * dotRadius,
-                    height: 2 * dotRadius
-                )),
-                with: .color(theme.accent)
-            )
+                guard busy else { continue }
+                let t = dotPhase(clock: clock, row: row)
+                let mt = 1 - t
+                let w0 = mt * mt * mt
+                let w1 = 3 * mt * mt * t
+                let w2 = 3 * mt * t * t
+                let w3 = t * t * t
+                let dot = CGPoint(
+                    x: w0 * start.x + w1 * control1.x + w2 * control2.x + w3 * end.x,
+                    y: w0 * start.y + w1 * control1.y + w2 * control2.y + w3 * end.y
+                )
+                context.fill(
+                    Path(ellipseIn: CGRect(
+                        x: dot.x - dotRadius,
+                        y: dot.y - dotRadius,
+                        width: 2 * dotRadius,
+                        height: 2 * dotRadius
+                    )),
+                    with: .color(theme.accent)
+                )
+            }
         }
     }
 
@@ -196,8 +211,8 @@ struct FleetResponseMapView: View {
 
     // MARK: - Columns and rows
 
-    /// One side of the map: three stacked agent rows, each filling a third of
-    /// the height so the Canvas row anchors line up.
+    /// One side of the map: stacked agent rows, each filling one grid row (the
+    /// column's share of the height) so the Canvas row anchors line up.
     private func column(indexes: [Int], colWidth: CGFloat, rowHeight: CGFloat) -> some View {
         VStack(spacing: 0) {
             ForEach(indexes, id: \.self) { index in
@@ -283,7 +298,7 @@ struct FleetResponseMapView: View {
 
 // MARK: - Mini Signal Map
 
-/// Closed-notch companion: the same six signals around a tiny case square,
+/// Closed-notch companion: the same agent signals around a tiny case square,
 /// connected by 1 px segments; busy signals pulse unless Reduce Motion is on.
 struct FleetMiniSignalMap: View {
     let lanes: [FleetLane]
@@ -300,13 +315,13 @@ struct FleetMiniSignalMap: View {
     private let wireLength: CGFloat = 11
     private let wireGap: CGFloat = 2
     private let sidePad: CGFloat = 3
-    private let rowGap: CGFloat = 6
+    private let rowGap: CGFloat = 4
 
     var body: some View {
         HStack(spacing: wireGap) {
-            signals(indexes: [0, 1, 2], leading: true)
+            signals(indexes: leftIndexes, leading: true)
             caseSquare
-            signals(indexes: [3, 4, 5], leading: false)
+            signals(indexes: rightIndexes, leading: false)
         }
         .padding(.horizontal, sidePad)
         .frame(width: 46, height: 24)
@@ -318,9 +333,13 @@ struct FleetMiniSignalMap: View {
         }
     }
 
+    /// Left column: the first three agents. Right column: the rest (four with pika).
+    private var leftIndexes: [Int] { Array(lanes.indices.prefix(3)) }
+    private var rightIndexes: [Int] { Array(lanes.indices.dropFirst(3)) }
+
     // MARK: - Signals
 
-    /// Three stacked signal squares with 1 px segments reaching the case box.
+    /// Stacked signal squares with 1 px segments reaching the case box.
     private func signals(indexes: [Int], leading: Bool) -> some View {
         VStack(spacing: rowGap) {
             ForEach(indexes, id: \.self) { index in

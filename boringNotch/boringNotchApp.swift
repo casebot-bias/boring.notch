@@ -607,35 +607,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 showOnAllDisplays: true,
                 selectedUUID: coordinator.selectedScreenUUID)
 
-            // Close windows for screens that no longer exist (or are no longer selected) first.
+            // Bookkeeping for the windows the plan drops; `NotchWindowSync` closes them.
             for uuid in plan.removals {
                 if let window = windows[uuid] {
-                    window.close()
                     NotchSpaceManager.shared.notchSpace.windows.remove(window)
-                    windows.removeValue(forKey: uuid)
-                    viewModels.removeValue(forKey: uuid)
-                    removeWindowScreenObserver(forKey: uuid)
                 }
+                viewModels.removeValue(forKey: uuid)
+                removeWindowScreenObserver(forKey: uuid)
             }
 
-            // Create or update one window per placement, in planner order.
+            // Create, move and show one window per placement; the same map is then walked to apply
+            // the per-window alpha/anchor/log work below.
+            NotchWindowSync.sync(plan: plan, windows: &windows) { placement in
+                let screen = NSScreen.screens.first { $0.displayUUID == placement.uuid }
+                    ?? NSScreen.main
+                    ?? NSScreen.screens[0]
+                let viewModel = BoringViewModel(screenUUID: placement.uuid)
+                viewModels[placement.uuid] = viewModel
+                return createBoringNotchWindow(for: screen, with: viewModel)
+            }
+
             for placement in plan.placements {
-                let uuid = placement.uuid
-                guard let nsScreen = NSScreen.screens.first(where: { $0.displayUUID == uuid }) else { continue }
+                guard let nsScreen = NSScreen.screens.first(where: { $0.displayUUID == placement.uuid }),
+                      let window = windows[placement.uuid],
+                      let viewModel = viewModels[placement.uuid] else { continue }
 
-                if windows[uuid] == nil {
-                    let viewModel = BoringViewModel(screenUUID: uuid)
-                    windows[uuid] = createBoringNotchWindow(for: nsScreen, with: viewModel)
-                    viewModels[uuid] = viewModel
-                }
+                applyPlacement(placement, to: window, on: nsScreen, changeAlpha: changeAlpha)
+                logNotchWindow(window, on: nsScreen, expected: placement.frame, viewModel: viewModel)
 
-                if let window = windows[uuid], let viewModel = viewModels[uuid] {
-                    applyPlacement(placement, to: window, on: nsScreen, changeAlpha: changeAlpha)
-                    logNotchWindow(window, on: nsScreen, expected: placement.frame, viewModel: viewModel)
-
-                    if viewModel.notchState == .closed {
-                        viewModel.close()
-                    }
+                if viewModel.notchState == .closed {
+                    viewModel.close()
                 }
             }
         } else {
@@ -735,6 +736,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         onboardingWindowController?.window?.makeKeyAndOrderFront(nil)
         onboardingWindowController?.window?.orderFrontRegardless()
     }
+}
+
+/// The only place the plan's window protocol meets AppKit: a notch window is a plain NSWindow.
+extension NSWindow: NotchWindowHandle {
+    var isOnScreen: Bool { isVisible }
+    func move(to frame: CGRect) { setFrame(frame, display: true) }
+    func showFront() { orderFrontRegardless() }
+    func closeNotchWindow() { close() }
 }
 
 extension Notification.Name {

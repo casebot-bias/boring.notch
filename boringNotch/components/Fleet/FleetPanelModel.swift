@@ -3,7 +3,7 @@
 //  boringNotch
 //
 //  Data model for the opened fleet panel: the `case` origin at the centre of a
-//  response map, the six agent signals (frank, claire, ciri, dali, nova, odin),
+//  response map, the seven agent signals (frank, claire, ciri, dali, nova, pika, odin),
 //  the current-work jobs, and the fleet-wide output / peak readings shown in the
 //  header and footer. Foundation only (no SwiftUI) so it compiles into both the
 //  app target and the test target.
@@ -56,7 +56,7 @@ struct FleetPeak: Identifiable, Equatable {
 
 struct FleetPanelModel: Equatable {
     var origin: FleetLane              // id/label "case"
-    var agents: [FleetLane]            // frank, claire, ciri, dali, nova, odin
+    var agents: [FleetLane]            // frank, claire, ciri, dali, nova, pika, odin
     /// Sum of the agents' reported rates; nil only when no agent reports a rate;
     /// a reported 0 counts as 0.
     var totalTokPerSec: Double?
@@ -110,7 +110,7 @@ struct FleetPanelModel: Equatable {
 }
 
 enum FleetPanelModelBuilder {
-    static let agentIds = ["frank", "claire", "ciri", "dali", "nova", "odin"]
+    static let agentIds = ["frank", "claire", "ciri", "dali", "nova", "pika", "odin"]
 
     /// "openrouter" | "qwencloud" | "other" (nil/empty/unknown model -> "other").
     static func cloudProvider(_ model: String?) -> String {
@@ -131,6 +131,9 @@ enum FleetPanelModelBuilder {
             // nova is not a fleet machine: it is the pool of openrouter cloud jobs
             // the case runs.
             novaLane(fleet: fleet, activity: activity),
+            // pika is the cloud helper (Claude Haiku). The fleet API reports device
+            // "pika"; while it does not yet, the lane stays idle/grey, never a red node.
+            pikaLane(fleet: fleet, activity: activity),
             // Odin is the QA reviewer that runs on case (Codex): activity device
             // "odin", fleet machine "odin".
             machineLane(id: "odin", fleet: fleet, activity: activity),
@@ -160,6 +163,16 @@ enum FleetPanelModelBuilder {
         let openrouterItems = caseCloudItems(activity).filter { cloudProvider($0.model) == "openrouter" }
         let state: FleetNodeState = fleet == nil ? .offline : (openrouterItems.isEmpty ? .idle : .busy)
         return FleetLane(id: "nova", label: "nova", state: state, jobs: toJobs(openrouterItems))
+    }
+
+    /// pika's state: a fleet row that exists but is not online means offline; with no row at all
+    /// (the API does not know pika yet) the lane is idle/grey rather than a red node, and its jobs
+    /// come from the activity device when one is present. Missing data must never crash.
+    private static func pikaLane(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetLane {
+        let device = device(id: "pika", in: activity)
+        let state: FleetNodeState = machine(id: "pika", in: fleet)
+            .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline } ?? .idle
+        return FleetLane(id: "pika", label: "pika", state: state, jobs: toJobs(device?.items ?? []))
     }
 
     // MARK: - Peaks
