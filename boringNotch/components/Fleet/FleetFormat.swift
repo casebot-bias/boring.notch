@@ -45,10 +45,10 @@ enum FleetFormat {
 
     // MARK: - responseDetail
 
-    /// A response-map agent's detail line: busy lanes show their job count (or
-    /// "Working" while busy with no reported jobs), idle lanes "Idle", offline
-    /// lanes "Offline". Offline is deliberately short: at 11 pt the map's column
-    /// truncates anything longer.
+    /// A response-map agent's activity detail line: busy lanes show their job count (or
+    /// "Working" while busy with no reported jobs), idle lanes "Idle", offline lanes
+    /// "Offline" (deliberately short: at 11 pt the map's column truncates anything longer).
+    /// A lane with an open decision shows `decisionDetail` instead.
     static func responseDetail(_ lane: FleetLane) -> String {
         switch lane.state {
         case .busy:
@@ -59,6 +59,54 @@ enum FleetFormat {
         case .offline:
             return "Offline"
         }
+    }
+
+    /// The detail line of a lane with an open decision: the pull request it wants a call on, or
+    /// `"No PR"` when the decision was recorded without one. The map's detail budget is only 54 pt
+    /// at `FleetPanelMetrics.minTextSize`, so the fallback has to stay as short as the label it
+    /// stands in for ("Needs decision" measured ~95 pt and truncated).
+    static func decisionDetail(_ lane: FleetLane) -> String {
+        guard let pr = lane.decisions.first?.pr else { return "No PR" }
+        return "PR #\(pr)"
+    }
+
+    // MARK: - decision
+
+    /// Odin's reason in plain words: "repeat_finding" -> "same problem came back",
+    /// "no_progress" -> "fixes not reducing problems", "round_limit" -> "<round> fix
+    /// rounds used" ("round limit reached" when round is nil); nil/unknown ->
+    /// "decision needed".
+    static func decisionReason(_ reason: String?, round: Int?) -> String {
+        switch reason {
+        case "repeat_finding": return "same problem came back"
+        case "no_progress": return "fixes not reducing problems"
+        case "round_limit":
+            guard let round else { return "round limit reached" }
+            return "\(round) fix rounds used"
+        default: return "decision needed"
+        }
+    }
+
+    /// Odin's alert subject: "monitor-landscape-scale · PR #4"; a job-only or
+    /// PR-only subject reads fine; `unknown` when neither is reported.
+    static func decisionSubject(_ decision: FleetDecision) -> String {
+        var parts: [String] = []
+        if let job = decision.job?.trimmingCharacters(in: .whitespacesAndNewlines), !job.isEmpty {
+            parts.append(job)
+        }
+        if let pr = decision.pr { parts.append("PR #\(pr)") }
+        return parts.isEmpty ? unknown : parts.joined(separator: " · ")
+    }
+
+    /// "last known" while the fleet feed is unreachable — the decisions on screen come from
+    /// the last successful poll — and nil while it is reachable.
+    static func decisionStaleness(_ isReachable: Bool) -> String? {
+        isReachable ? nil : "last known"
+    }
+
+    /// The alert's open-decision count label: nil for none or one, "<count> open" above that.
+    static func decisionCountLabel(_ count: Int) -> String? {
+        count > 1 ? "\(count) open" : nil
     }
 
     // MARK: - step
@@ -119,6 +167,10 @@ enum FleetFormat {
 enum FleetPanelMetrics {
     /// The smallest text size any fleet view may use.
     static let minTextSize: CGFloat = 11
+    /// The alert heading's size (the strip's "ODIN NEEDS DECISION"). The alert's words draw in
+    /// `hot`, an accent colour held to 4.5:1, a floor that only applies at 12 pt or more — so the
+    /// heading has to be at least this large for its own colour to be allowed.
+    static let alertHeadingTextSize: CGFloat = 12
     /// A response-map row's fixed furniture: signal square, its spacing, the trailing spacer and
     /// the job badge. Everything left in the column is the text budget.
     static let responseMapRowOverhead: CGFloat = 30
@@ -131,4 +183,7 @@ enum FleetPanelMetrics {
     static let closedRowMapWidth: CGFloat = 46
     static let closedRowTextWidth: CGFloat = 72
     static var closedRowSideWidth: CGFloat { closedRowMapWidth + 10 + closedRowTextWidth }
+    /// A pulsing status dot breathes by size, never by opacity: dimming an alert dot would drop it
+    /// under the 3:1 dot floor. The busy cells keep their own dim pulse.
+    static let alertPulseScale: CGFloat = 1.35
 }

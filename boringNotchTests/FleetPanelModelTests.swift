@@ -37,11 +37,16 @@ final class FleetPanelModelTests: XCTestCase {
     }
 
     private func deviceJSON(_ device: String, busy: Bool? = nil, items: [String] = [],
-                            slotsUsed: Int? = nil, tokPerSec: Double? = nil) -> String {
+                            slotsUsed: Int? = nil, tokPerSec: Double? = nil,
+                            odinStatus: String? = nil, odinOpen: String? = nil) -> String {
         var p = ["\"device\":\"\(device)\"", "\"items\":[\(items.joined(separator: ","))]"]
         if let busy = busy { p.append("\"busy\":\(busy ? "true" : "false")") }
         if let slotsUsed = slotsUsed { p.append("\"slots\":{\"used\":\(slotsUsed),\"total\":4,\"busy\":[]}") }
         if let tokPerSec = tokPerSec { p.append("\"tokPerSec\":\(tokPerSec)") }
+        var odin: [String] = []
+        if let odinStatus = odinStatus { odin.append("\"status\":\(odinStatus)") }
+        if let odinOpen = odinOpen { odin.append("\"open\":\(odinOpen)") }
+        if !odin.isEmpty { p.append("\"odin\":{" + odin.joined(separator: ",") + "}") }
         return "{" + p.joined(separator: ",") + "}"
     }
 
@@ -449,5 +454,179 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.runningTaskCount, 1, "its run is one running task")
         XCTAssertEqual(model.nowJobs.count, 1, "its run is the current work")
         XCTAssertEqual(model.nowJobs.map(\.key), ["pika-run-2026-10-02T06:00:00.000Z"])
+    }
+
+    // MARK: - Odin needs decision
+
+    private func needsDecisionStatus() -> String {
+        "{\"state\":\"needs_decision\",\"job\":\"monitor-landscape-scale\",\"pr\":4,\"reason\":\"no_progress\",\"round\":4}"
+    }
+
+    func testOdinNeedsDecisionTurnsTheLaneRedAndCarriesTheAlert() {
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: needsDecisionStatus())])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        guard let odin = lane(model, "odin") else { return }
+        XCTAssertEqual(odin.state, .idle)
+        XCTAssertEqual(odin.label, "odin")                                      // only the view renames it
+        XCTAssertTrue(odin.isLinked)
+        XCTAssertTrue(odin.jobs.isEmpty)
+        XCTAssertEqual(odin.decision, FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: "no_progress", round: 4))
+        XCTAssertTrue(odin.hasOpenDecision)
+        XCTAssertEqual(model.decision, odin.decision)
+        // The alert leaves the tallies alone.
+        XCTAssertEqual(model.workingCount, 0)
+        XCTAssertEqual(model.linkedCount, 7)
+        XCTAssertEqual(model.criticalCount, 0)
+        XCTAssertFalse(model.isBusy)
+        XCTAssertEqual(model.runningTaskCount, 0)
+        XCTAssertTrue(model.nowJobs.isEmpty)
+    }
+
+    func testOdinWithoutAStatusBlockStaysIdle() {
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: false)])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        guard let odin = lane(model, "odin") else { return }
+        XCTAssertEqual(odin.state, .idle)
+        XCTAssertNil(odin.decision)
+        XCTAssertNil(model.decision)
+    }
+
+    func testOnlyNeedsDecisionRaisesTheAlert() {
+        guard let f = fleet(onlineFleetJSON()) else { return }
+        for state in ["idle", "reviewing", "done"] {
+            guard let a = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: "{\"state\":\"\(state)\"}")])) else { return }
+            let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+            guard let odin = lane(model, "odin") else { return }
+            XCTAssertEqual(odin.state, .idle, "\"\(state)\" must not raise the alert")
+            XCTAssertNil(model.decision, "\"\(state)\" must not raise the alert")
+        }
+        // A really running review stays the ordinary busy lane.
+        let review = itemJSON("Reviewing boring.notch#13", device: "odin", since: "2026-10-02T06:00:00.000Z")
+        guard let a = activity(activityJSON([deviceJSON("odin", busy: true, items: [review], odinStatus: "{\"state\":\"reviewing\"}")])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        guard let odin = lane(model, "odin") else { return }
+        XCTAssertEqual(odin.state, .busy)
+        XCTAssertNil(model.decision)
+        XCTAssertEqual(model.workingCount, 1)
+    }
+
+    func testNeedsDecisionSurvivesAMissingFleetSnapshot() {
+        guard let a = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: needsDecisionStatus())])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: nil, activity: a)
+        guard let odin = lane(model, "odin") else { return }
+        XCTAssertEqual(odin.state, .offline)                                    // the *alert* survives a missing probe (the decisions, the strip and the pip), not the node state
+        XCTAssertEqual(odin.decision?.pr, 4)
+        XCTAssertEqual(model.decision?.pr, 4)
+        XCTAssertTrue(model.hasOpenDecision)
+    }
+
+    // MARK: - Odin open decisions
+
+    /// Two stopped jobs awaiting a decision, as the writer's open-decisions file
+    /// reaches the feed: the second one has no round.
+    private func twoOpenDecisions() -> String {
+        return "[{\"state\":\"needs_decision\",\"job\":\"monitor-landscape-scale\",\"pr\":4,\"reason\":\"no_progress\",\"round\":4},"
+            + "{\"state\":\"needs_decision\",\"job\":\"hue-release\",\"pr\":7,\"reason\":\"repeat_finding\"}]"
+    }
+
+    private func twoOpenDecisionList() -> [FleetDecision] {
+        return [FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: "no_progress", round: 4),
+                FleetDecision(job: "hue-release", pr: 7, reason: "repeat_finding", round: nil)]
+    }
+
+    func testTwoOpenDecisionsDriveTheOdinLane() {
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: false,
+                                                        odinStatus: "{\"state\":\"idle\"}",
+                                                        odinOpen: twoOpenDecisions())])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        guard let odin = lane(model, "odin") else { return }
+        XCTAssertEqual(odin.state, .idle)                                       // the idle status cannot veto the list
+        XCTAssertEqual(odin.decisions, twoOpenDecisionList())                     // every entry, in file order
+        XCTAssertEqual(model.decisions, twoOpenDecisionList())
+        XCTAssertEqual(model.decision, model.decisions.first)                     // the strip names the first
+        XCTAssertTrue(model.hasOpenDecision)
+        // The alert leaves the tallies alone.
+        XCTAssertEqual(model.workingCount, 0)
+        XCTAssertEqual(model.linkedCount, 7)
+        XCTAssertEqual(model.criticalCount, 0)
+        XCTAssertFalse(model.isBusy)
+    }
+
+    func testOdinReviewingWithAnOpenDecisionStaysBusyAndCountsAsWork() {
+        // An open decision must never hide the review Odin is actually running: the lane
+        // stays busy, so its item shows up in current work and in the running-task count.
+        let review = itemJSON("Reviewing boring.notch#14", device: "odin", since: "2026-10-02T06:00:00.000Z",
+                              lastStep: "sweeping the diff", elapsedSec: 30)
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: true, items: [review],
+                                                        odinStatus: "{\"state\":\"reviewing\"}",
+                                                        odinOpen: twoOpenDecisions())])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        guard let odin = lane(model, "odin") else { return }
+        XCTAssertEqual(odin.state, .busy)
+        XCTAssertTrue(odin.hasOpenDecision)
+        XCTAssertEqual(odin.decisions.count, 2)
+        XCTAssertEqual(model.workingCount, 1)
+        XCTAssertTrue(model.isBusy)
+        XCTAssertEqual(model.runningTaskCount, 1)
+        XCTAssertEqual(model.nowJobs.map(\.label), ["Reviewing boring.notch#14"])
+    }
+
+    func testAnEmptyOpenListBeatsAStaleNeedsDecisionStatus() {
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: false,
+                                                        odinStatus: "{\"state\":\"needs_decision\",\"job\":\"stale-job\",\"pr\":9}",
+                                                        odinOpen: "[]")])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        guard let odin = lane(model, "odin") else { return }
+        // The list is the truth, so a stale status cannot resurrect a closed decision.
+        XCTAssertEqual(odin.state, .idle, "an open list of [] must beat the stale needs_decision status")
+        XCTAssertTrue(odin.decisions.isEmpty, "an open list of [] must beat the stale needs_decision status")
+        XCTAssertTrue(model.decisions.isEmpty, "an open list of [] must beat the stale needs_decision status")
+        XCTAssertFalse(model.hasOpenDecision, "an open list of [] must beat the stale needs_decision status")
+    }
+
+    func testMissingOpenListFallsBackToTheNeedsDecisionStatus() {
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: needsDecisionStatus())])) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        guard let odin = lane(model, "odin") else { return }
+        // No open key at all: an older dashboard, so the single status drives the lane.
+        XCTAssertEqual(odin.state, .idle)
+        XCTAssertEqual(odin.decisions, [FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: "no_progress", round: 4)])
+        XCTAssertEqual(model.decisions.count, 1)
+        XCTAssertTrue(model.hasOpenDecision)
+        // And with neither an open list nor a needs-decision status, nothing is open.
+        guard let a2 = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: "{\"state\":\"idle\"}")])) else { return }
+        let idleModel = FleetPanelModelBuilder.build(fleet: f, activity: a2)
+        guard let idleOdin = lane(idleModel, "odin") else { return }
+        XCTAssertTrue(idleOdin.decisions.isEmpty)
+        XCTAssertTrue(idleModel.decisions.isEmpty)
+        XCTAssertFalse(idleModel.hasOpenDecision)
+        XCTAssertEqual(idleOdin.state, .idle)
+    }
+
+    func testOpenDecisionsSurviveAFailedPollAndClearOnASuccessfulEmptyOne() {
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: false,
+                                                        odinStatus: "{\"state\":\"idle\"}",
+                                                        odinOpen: twoOpenDecisions())])) else { return }
+        let opened = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        XCTAssertTrue(opened.hasOpenDecision, "the successful poll that reported the open list must raise the pip")
+        // A failed poll leaves the store's snapshots untouched (it only assigns them
+        // on success), so rebuilding from the very same snapshots is what the failed
+        // poll leaves behind: the last known decisions must survive it.
+        let failedPoll = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        XCTAssertTrue(failedPoll.hasOpenDecision, "a failed poll must keep the last known open decisions")
+        XCTAssertEqual(failedPoll.decisions.count, 2, "a failed poll must keep every last known decision")
+        // A later successful poll whose open list is empty clears the pip.
+        guard let clearedActivity = activity(activityJSON([deviceJSON("odin", busy: false,
+                                                                       odinStatus: "{\"state\":\"idle\"}",
+                                                                       odinOpen: "[]")])) else { return }
+        let cleared = FleetPanelModelBuilder.build(fleet: f, activity: clearedActivity)
+        XCTAssertFalse(cleared.hasOpenDecision, "a later successful empty open list must clear the pip")
     }
 }
