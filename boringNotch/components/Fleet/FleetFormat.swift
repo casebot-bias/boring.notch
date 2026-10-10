@@ -61,11 +61,12 @@ enum FleetFormat {
         }
     }
 
-    /// The detail line of a lane with an open decision: the pull request it wants a call on,
-    /// falling back to "Needs decision" when none was reported. The row is narrow, so the
-    /// subject job and the reason stay in the panel's alert strip, not here.
+    /// The detail line of a lane with an open decision: the pull request it wants a call on, or
+    /// `"No PR"` when the decision was recorded without one. The map's detail budget is only 54 pt
+    /// at `FleetPanelMetrics.minTextSize`, so the fallback has to stay as short as the label it
+    /// stands in for ("Needs decision" measured ~95 pt and truncated).
     static func decisionDetail(_ lane: FleetLane) -> String {
-        guard let pr = lane.decisions.first?.pr else { return "Needs decision" }
+        guard let pr = lane.decisions.first?.pr else { return "No PR" }
         return "PR #\(pr)"
     }
 

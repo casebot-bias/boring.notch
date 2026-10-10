@@ -188,15 +188,16 @@ final class FleetFormatTests: XCTestCase {
     // MARK: - decisionDetail
 
     /// The alert's detail line reads the first open entry's pull request, falling back to
-    /// "Needs decision" when none was reported. `responseDetail` stays the lane's activity
-    /// detail: a busy lane still reads "Working" even with an open decision.
+    /// "No PR" when none was reported — the fallback has to fit the row's 54 pt detail budget.
+    /// `responseDetail` stays the lane's activity detail: a busy lane still reads "Working"
+    /// even with an open decision.
     func testDecisionDetailReadsTheFirstOpenEntry() {
         let monitor = FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: "no_progress", round: 4)
         let other = FleetDecision(job: "other-job", pr: nil, reason: nil, round: nil)
         XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [monitor])), "PR #4")
-        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other])), "Needs decision")
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other])), "No PR")
         XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [monitor, other])), "PR #4")
-        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other, monitor])), "Needs decision")
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other, monitor])), "No PR")
         XCTAssertEqual(FleetFormat.responseDetail(lane(.busy, decisions: [monitor])), "Working")
     }
 
@@ -298,6 +299,18 @@ final class FleetFormatTests: XCTestCase {
                 monospacedWidth(detail, size: FleetPanelMetrics.minTextSize), detailBudget,
                 "\(detail) does not fit the response-map detail budget")
         }
+        // The alert row shares that budget: the pull-request label and the short fallback the row
+        // shows when the loaded decision carries no PR. "Needs decision" measured ~95 pt here and
+        // truncated, which is why the fallback is short.
+        let withPullRequest = lane(.busy, decisions: [FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: nil, round: nil)])
+        let withoutPullRequest = lane(.busy, decisions: [FleetDecision(job: "monitor-landscape-scale", pr: nil, reason: nil, round: nil)])
+        for detail in [FleetFormat.decisionDetail(withPullRequest), FleetFormat.decisionDetail(withoutPullRequest)] {
+            XCTAssertLessThanOrEqual(
+                monospacedWidth(detail, size: FleetPanelMetrics.minTextSize), detailBudget,
+                "the alert detail \(detail) does not fit the response-map detail budget")
+        }
+        XCTAssertEqual(FleetFormat.decisionDetail(withoutPullRequest), "No PR",
+                       "the fallback is the label the row shows when a decision has no PR")
         for status in ["1 working", "3 critical", FleetFormat.linked(7, of: 7)] {
             XCTAssertLessThanOrEqual(
                 monospacedWidth(status, size: FleetPanelMetrics.minTextSize),
