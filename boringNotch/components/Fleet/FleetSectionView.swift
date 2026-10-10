@@ -114,7 +114,9 @@ struct FleetSectionView: View {
     /// "ODIN NEEDS DECISION", the open count and a "last known" marker while the feed is
     /// unreachable, then one row per open decision — its job and pull request on the left,
     /// the reason in plain words on the right. Absent (the ordinary case) it takes no room.
-    /// The strip uses the skin's text colours and the alert red only for its pip.
+    /// The strip uses the skin's text colours and the alert red only for its pip. The heading
+    /// draws in `hot`, whose 4.5:1 accent floor only applies from 12 pt up, so its size is
+    /// pinned to `FleetPanelMetrics.alertHeadingTextSize` rather than the 11 pt minimum.
     private func decisionStrip(_ decisions: [FleetDecision]) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -122,7 +124,7 @@ struct FleetSectionView: View {
                     .fill(theme.alert)
                     .frame(width: 4, height: 4)
                 Text("ODIN NEEDS DECISION")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: FleetPanelMetrics.alertHeadingTextSize, weight: .semibold))
                     .tracking(0.5)
                     .foregroundColor(theme.hot)
                 Spacer(minLength: 8)

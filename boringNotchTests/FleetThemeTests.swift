@@ -223,6 +223,20 @@ final class FleetThemeTests: XCTestCase {
                                         "\(skin) the needs-decision alert dot must reach 3:1")
             XCTAssertLessThan(contrast(t.alert, bg), 7.0,
                               "\(skin) the alert red is a dot colour: it must stay below the 7:1 text floor so it is never used for words")
+            // The alert's words draw in `hot`, whose 4.5:1 accent floor only applies from 12 pt up,
+            // so the heading size is pinned to the floor it needs.
+            XCTAssertGreaterThanOrEqual(FleetPanelMetrics.alertHeadingTextSize, 12,
+                                        "\(skin) the alert heading draws in an accent colour: 12 pt or more")
+            // Why an alert dot may not reuse the busy cells' dim pulse: at that opacity the
+            // composited colour falls under the 3:1 dot floor, so the alert must breathe by size.
+            let alertComponents = components(t.alert)
+            let dimmed = Color(.sRGB,
+                               red: 0.45 * Double(alertComponents.r),
+                               green: 0.45 * Double(alertComponents.g),
+                               blue: 0.45 * Double(alertComponents.b),
+                               opacity: 1)
+            XCTAssertLessThan(contrast(dimmed, bg), 3.0,
+                              "\(skin) a dimmed alert dot would fall under the dot floor - never dim it")
             // `wire` is also what FleetMiniSignalMap draws the closed map's wires with:
             XCTAssertGreaterThanOrEqual(contrast(t.wire, bg), 3.0,
                                         "\(skin) idle wires, closed map included, at least 3:1")

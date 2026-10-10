@@ -372,7 +372,10 @@ struct FleetMiniSignalMap: View {
         RoundedRectangle(cornerRadius: 1, style: .continuous)
             .fill(color(for: lane))
             .frame(width: signalSize, height: signalSize)
-            .opacity((lane.hasOpenDecision || lane.state == .busy) && !reduceMotion ? (pulsing ? 1 : 0.45) : 1)
+            // #13's busy pulse dims the cell. An alert cell must never dim: it is a status dot and
+            // has to clear 3:1 at every frame, so it breathes by size instead.
+            .opacity(lane.state == .busy && !lane.hasOpenDecision && !reduceMotion ? (pulsing ? 1 : 0.45) : 1)
+            .scaleEffect(lane.hasOpenDecision && !reduceMotion ? (pulsing ? FleetPanelMetrics.alertPulseScale : 1) : 1)
     }
 
     /// One wire segment. `wire`, not the `line` hairline: these are the closed map's idle wires and

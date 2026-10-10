@@ -166,6 +166,10 @@ enum FleetFormat {
 enum FleetPanelMetrics {
     /// The smallest text size any fleet view may use.
     static let minTextSize: CGFloat = 11
+    /// The alert heading's size (the strip's "ODIN NEEDS DECISION"). The alert's words draw in
+    /// `hot`, an accent colour held to 4.5:1, a floor that only applies at 12 pt or more — so the
+    /// heading has to be at least this large for its own colour to be allowed.
+    static let alertHeadingTextSize: CGFloat = 12
     /// A response-map row's fixed furniture: signal square, its spacing, the trailing spacer and
     /// the job badge. Everything left in the column is the text budget.
     static let responseMapRowOverhead: CGFloat = 30
@@ -178,4 +182,7 @@ enum FleetPanelMetrics {
     static let closedRowMapWidth: CGFloat = 46
     static let closedRowTextWidth: CGFloat = 72
     static var closedRowSideWidth: CGFloat { closedRowMapWidth + 10 + closedRowTextWidth }
+    /// A pulsing status dot breathes by size, never by opacity: dimming an alert dot would drop it
+    /// under the 3:1 dot floor. The busy cells keep their own dim pulse.
+    static let alertPulseScale: CGFloat = 1.35
 }

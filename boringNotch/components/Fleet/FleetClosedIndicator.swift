@@ -125,7 +125,9 @@ struct FleetDecisionPip: View {
         Circle()
             .fill(theme.alert)
             .frame(width: 5, height: 5)
-            .opacity(reduceMotion ? 1 : (pulsing ? 1 : 0.35))
+            // The alert dot breathes by size, never by opacity: dimming it would drop the pip under
+            // the 3:1 dot floor. Reduce Motion parks it at its full size.
+            .scaleEffect(reduceMotion ? 1 : (pulsing ? FleetPanelMetrics.alertPulseScale : 1))
             .onAppear {
                 guard !reduceMotion else { return }
                 withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
