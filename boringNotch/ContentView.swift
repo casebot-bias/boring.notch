@@ -38,6 +38,8 @@ struct ContentView: View {
 
     @Default(.showNotHumanFace) var showNotHumanFace
 
+    @Default(.showFleet) var showFleet
+
     @Default(.fleetSkin) var fleetSkin
 
     private var fleetTheme: FleetTheme { FleetTheme(skin: fleetSkin) }
@@ -61,6 +63,17 @@ struct ContentView: View {
                 ? cornerRadiusInsets.opened.bottom
                 : cornerRadiusInsets.closed.bottom
         )
+    }
+
+    /// True while the collapsed notch must carry Odin's needs-decision pip: the notch is
+    /// closed and visible, the fleet feed is on, and the last known status has a decision
+    /// open. Reachability is deliberately not part of it: a failed poll must not blink the
+    /// alert out — the pip stays until a later successful status clears it.
+    private var showsDecisionPip: Bool {
+        vm.notchState == .closed
+            && vm.effectiveClosedNotchHeight > 0
+            && showFleet
+            && fleetStore.panelModel.hasOpenDecision
     }
 
     private var computedChinWidth: CGFloat {
@@ -359,6 +372,26 @@ struct ContentView: View {
                       .fixedSize()
               }
               .zIndex(2)
+              // The needs-decision pip belongs to the whole collapsed notch, not to the
+              // fleet glance alone: the media live activity, the face animation and the
+              // inline HUD all replace that glance, so the pip is drawn on their shared
+              // container and survives every one of them. The reserved trailing strip
+              // keeps it clear of that container's last view (in the media mode that is
+              // the Lottie art, a real NSView that would otherwise composite over it). The
+              // strip also has to sit clear of the physical camera housing, so while the pip
+              // shows the row is kept at least as wide as the cutout plus the camera gap.
+              .padding(.trailing, showsDecisionPip ? 12 : 0)
+              // The pip sits in that trailing strip, so while it shows the row has to reach
+              // past the camera housing: on a notched display a row only as wide as the cutout
+              // would bury the pip under the camera. 60 = the row's own camera gap
+              // (`closedNotchSize.width + 10`) plus ~25 pt of visible margin on each side.
+              .frame(minWidth: showsDecisionPip ? vm.closedNotchSize.width + 60 : nil, alignment: .leading)
+              .overlay(alignment: .trailing) {
+                  if showsDecisionPip {
+                      FleetDecisionPip()
+                          .padding(.trailing, 3)
+                  }
+              }
             if vm.notchState == .open {
                 VStack {
                     switch coordinator.currentView {

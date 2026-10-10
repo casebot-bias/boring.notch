@@ -175,6 +175,66 @@ struct SlotState: Codable, Equatable {
     }
 }
 
+// MARK: - OdinStatus
+
+/// Odin's QA status: the fleet API copies the writer's `~/.case/odin.json` under
+/// the activity device's `odin.status`, so a missing block is an Odin that does
+/// not need a decision, never an error.
+struct OdinStatus: Codable, Equatable {
+    var state: String
+    var job: String?
+    var repo: String?
+    var pr: Int?
+    var sha: String?
+    var round: Int?
+    var reason: String?
+    var findings: Int?
+    var verdict: String?
+    var updated: String?
+
+    var needsDecision: Bool {
+        return state == "needs_decision"
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case state, job, repo, pr, sha, round, reason, findings, verdict, updated
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.state = try container.decodeIfPresent(String.self, forKey: .state) ?? ""
+        self.job = try container.decodeIfPresent(String.self, forKey: .job)
+        self.repo = try container.decodeIfPresent(String.self, forKey: .repo)
+        self.pr = try container.decodeIfPresent(Int.self, forKey: .pr)
+        self.sha = try container.decodeIfPresent(String.self, forKey: .sha)
+        self.round = try container.decodeIfPresent(Int.self, forKey: .round)
+        self.reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        self.findings = try container.decodeIfPresent(Int.self, forKey: .findings)
+        self.verdict = try container.decodeIfPresent(String.self, forKey: .verdict)
+        self.updated = try container.decodeIfPresent(String.self, forKey: .updated)
+    }
+}
+
+/// The activity feed's `odin` block: `{ "status": …, "counts": … }`. Only the
+/// status matters to the notch, so the counts are dropped at decode.
+struct OdinReport: Codable, Equatable {
+    var status: OdinStatus?
+
+    /// Every entry of the writer's open-decisions file; nil when the feed omits the field
+    /// (a dashboard older than the list), `[]` when it is present and nothing is open.
+    var open: [OdinStatus]?
+
+    private enum CodingKeys: String, CodingKey {
+        case status, open
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.status = try container.decodeIfPresent(OdinStatus.self, forKey: .status)
+        self.open = try container.decodeIfPresent([OdinStatus].self, forKey: .open)
+    }
+}
+
 // MARK: - DeviceActivity
 
 struct DeviceActivity: Codable, Equatable, Identifiable {
@@ -187,13 +247,14 @@ struct DeviceActivity: Codable, Equatable, Identifiable {
     var running: Int?
     var waiting: Int?
     var state: String
+    var odin: OdinReport?
 
     var id: String {
         return device
     }
 
     private enum CodingKeys: String, CodingKey {
-        case device, busy, items, slots, tokPerSec, kvCachePct, running, waiting, state
+        case device, busy, items, slots, tokPerSec, kvCachePct, running, waiting, state, odin
     }
 
     init(from decoder: Decoder) throws {
@@ -207,6 +268,7 @@ struct DeviceActivity: Codable, Equatable, Identifiable {
         self.running = try container.decodeIfPresent(Int.self, forKey: .running)
         self.waiting = try container.decodeIfPresent(Int.self, forKey: .waiting)
         self.state = try container.decodeIfPresent(String.self, forKey: .state) ?? ""
+        self.odin = try container.decodeIfPresent(OdinReport.self, forKey: .odin)
     }
 }
 

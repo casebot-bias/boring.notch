@@ -39,6 +39,7 @@ struct FleetTheme {
             accent        = rgb(0x9FB38A)
             memory        = rgb(0x7F9BB5)
             hot           = rgb(0xD9824B)
+            alert         = rgb(0xE5484D)
             off           = rgb(0x6D7166)
             muted         = rgb(0xA7ACA0)
             nameText      = rgb(0xB9BCB1)
@@ -57,6 +58,7 @@ struct FleetTheme {
             accent        = rgb(0xC9A77C)
             memory        = rgb(0x8FA6B4)
             hot           = rgb(0xD9824B)
+            alert         = rgb(0xE5484D)
             off           = rgb(0x75865C)
             muted         = rgb(0xBFB78F)
             nameText      = rgb(0xB9BCB1)
@@ -82,6 +84,10 @@ struct FleetTheme {
     /// Memory bar fill. Above 80 % the bar switches to `hot` instead.
     let memory: Color
     let hot: Color
+    /// Odin's needs-decision alert: the map signal square, the mini map cell and the closed
+    /// notch's pip. A dot colour, not a text colour — it clears 3:1 on both panels (5.4:1 black,
+    /// 4.3:1 olive) but not the 7:1 text floor, so the alert's words draw in `hot`.
+    let alert: Color
     /// Status dots for idle/absent agents. At least 3:1 so an idle dot is visible, still quieter than `accent`.
     let off: Color
     /// Secondary numerals and labels. Above `dim`, below `nameText`, and at least 7:1 on the panel.

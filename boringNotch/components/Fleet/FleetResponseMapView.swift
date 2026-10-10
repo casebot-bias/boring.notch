@@ -9,6 +9,8 @@
 //  FleetTheme(skin:); nothing draws a background (the notch is already black).
 //  The animations are the busy-pulse of the mini signals and the dots
 //  travelling along the busy wires, both honoured off under Reduce Motion.
+//  A node with an open decision (an open Odin decision) draws `theme.alert` and
+//  is titled "Decision" in both maps; the alert outranks the node's activity state.
 //
 
 import Defaults
@@ -230,25 +232,27 @@ struct FleetResponseMapView: View {
     }
 
     /// Signal square, name over detail line, job-count badge at the column's
-    /// far right.
+    /// far right. A node with an open decision draws its signal in `theme.alert`,
+    /// is titled "Decision" in place of the agent label, shows the decision
+    /// detail and drops the badge; the alert outranks the activity state.
     @ViewBuilder
     private func agentRow(lane: FleetLane) -> some View {
         HStack(spacing: 5) {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(signalColor(lane.state))
+                .fill(lane.hasOpenDecision ? theme.alert : signalColor(lane.state))
                 .frame(width: signalSize, height: signalSize)
             VStack(alignment: .leading, spacing: 1) {
-                Text(lane.label)
+                Text(lane.hasOpenDecision ? "Decision" : lane.label)
                     .font(.system(size: 12))
-                    .foregroundColor(nameColor(lane.state))
+                    .foregroundColor(lane.hasOpenDecision ? theme.hot : nameColor(lane.state))
                     .lineLimit(1)
-                Text(FleetFormat.responseDetail(lane))
+                Text(lane.hasOpenDecision ? FleetFormat.decisionDetail(lane) : FleetFormat.responseDetail(lane))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(theme.dim)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
-            if let badge = FleetFormat.jobBadge(lane.jobs.count) {
+            if !lane.hasOpenDecision, let badge = FleetFormat.jobBadge(lane.jobs.count) {
                 Text(badge)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(theme.muted)
@@ -304,6 +308,8 @@ struct FleetResponseMapView: View {
 
 /// Closed-notch companion: the same agent signals around a tiny case square,
 /// connected by 1 px segments; busy signals pulse unless Reduce Motion is on.
+/// A node with an open decision draws `theme.alert` and pulses like a busy one;
+/// the alert outranks the node's activity state.
 struct FleetMiniSignalMap: View {
     let lanes: [FleetLane]
     let origin: FleetLane
@@ -350,11 +356,11 @@ struct FleetMiniSignalMap: View {
                 if let lane = lane(at: index) {
                     HStack(spacing: 0) {
                         if leading {
-                            signal(lane.state)
+                            signal(lane)
                             wire
                         } else {
                             wire
-                            signal(lane.state)
+                            signal(lane)
                         }
                     }
                 }
@@ -362,11 +368,11 @@ struct FleetMiniSignalMap: View {
         }
     }
 
-    private func signal(_ state: FleetNodeState) -> some View {
+    private func signal(_ lane: FleetLane) -> some View {
         RoundedRectangle(cornerRadius: 1, style: .continuous)
-            .fill(color(for: state))
+            .fill(color(for: lane))
             .frame(width: signalSize, height: signalSize)
-            .opacity(state == .busy && !reduceMotion ? (pulsing ? 1 : 0.45) : 1)
+            .opacity((lane.hasOpenDecision || lane.state == .busy) && !reduceMotion ? (pulsing ? 1 : 0.45) : 1)
     }
 
     /// One wire segment. `wire`, not the `line` hairline: these are the closed map's idle wires and
@@ -389,8 +395,9 @@ struct FleetMiniSignalMap: View {
 
     // MARK: - Palette helpers
 
-    private func color(for state: FleetNodeState) -> Color {
-        switch state {
+    private func color(for lane: FleetLane) -> Color {
+        guard !lane.hasOpenDecision else { return theme.alert }
+        switch lane.state {
         case .busy: return theme.accent
         case .idle: return theme.off
         case .offline: return theme.hot

@@ -107,3 +107,30 @@ struct FleetUpdatedLabel: View {
         }
     }
 }
+
+// MARK: - Decision Pip
+
+/// The notch's needs-decision pip: a small red dot at the trailing edge of the
+/// collapsed notch while Odin waits on a decision. `ContentView.NotchLayout` owns
+/// the placement, so every collapsed-notch mode shows it: the fleet glance, the
+/// media live activity, the face animation and the inline HUD all replace the
+/// glance but share that container. Pulses unless Reduce Motion is on.
+struct FleetDecisionPip: View {
+    @Default(.fleetSkin) private var fleetSkin
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulsing = false
+    private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
+
+    var body: some View {
+        Circle()
+            .fill(theme.alert)
+            .frame(width: 5, height: 5)
+            .opacity(reduceMotion ? 1 : (pulsing ? 1 : 0.35))
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                    pulsing = true
+                }
+            }
+    }
+}

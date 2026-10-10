@@ -95,6 +95,27 @@ final class FleetThemeTests: XCTestCase {
         }
     }
 
+    // MARK: - Alert colour
+
+    func testAlertIsTheSameRedOnEverySkin() {
+        for skin in FleetSkin.allCases {
+            assertColor(FleetTheme(skin: skin).alert, 0xE5484D, "\(skin.rawValue) alert")
+        }
+    }
+
+    func testAlertIsRedAndNeverTheOfflineColour() {
+        for skin in FleetSkin.allCases {
+            let t = FleetTheme(skin: skin)
+            let alert = components(t.alert)
+            let hot = components(t.hot)
+            XCTAssertGreaterThan(alert.r, alert.g, "\(skin.rawValue) alert reads as red: red beats green")
+            XCTAssertGreaterThan(alert.r, alert.b, "\(skin.rawValue) alert reads as red: red beats blue")
+            XCTAssertGreaterThan(abs(alert.r - hot.r), 0.001, "\(skin.rawValue) alert differs from hot on red")
+            XCTAssertGreaterThan(abs(alert.g - hot.g), 0.001, "\(skin.rawValue) alert differs from hot on green")
+            XCTAssertGreaterThan(abs(alert.b - hot.b), 0.001, "\(skin.rawValue) alert differs from hot on blue")
+        }
+    }
+
     // MARK: - Panel gradient
 
     @MainActor
@@ -196,6 +217,12 @@ final class FleetThemeTests: XCTestCase {
                                             "\(skin) \(name) is an accent colour: at least 4.5:1")
             }
             XCTAssertGreaterThanOrEqual(contrast(t.off, bg), 3.0, "\(skin) status dots at least 3:1")
+            // PR #14's alert colour is a dot/signal colour and never text: it must clear the dot
+            // floor, and the alert's words are drawn in `hot`, which the accent assertion above covers.
+            XCTAssertGreaterThanOrEqual(contrast(t.alert, bg), 3.0,
+                                        "\(skin) the needs-decision alert dot must reach 3:1")
+            XCTAssertLessThan(contrast(t.alert, bg), 7.0,
+                              "\(skin) the alert red is a dot colour: it must stay below the 7:1 text floor so it is never used for words")
             // `wire` is also what FleetMiniSignalMap draws the closed map's wires with:
             XCTAssertGreaterThanOrEqual(contrast(t.wire, bg), 3.0,
                                         "\(skin) idle wires, closed map included, at least 3:1")

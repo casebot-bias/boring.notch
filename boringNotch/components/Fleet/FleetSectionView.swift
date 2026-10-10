@@ -32,6 +32,7 @@ struct FleetSectionView: View {
                 theme.line
                     .frame(height: 1)
                 healthRow
+                if !store.panelModel.decisions.isEmpty { decisionStrip(store.panelModel.decisions) }
                 main
                 footer
             }
@@ -105,6 +106,57 @@ struct FleetSectionView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(height: 14)
+    }
+
+    // MARK: - Decision rows
+
+    /// Odin's open needs-decision alerts under the health row: a red pip and the words
+    /// "ODIN NEEDS DECISION", the open count and a "last known" marker while the feed is
+    /// unreachable, then one row per open decision — its job and pull request on the left,
+    /// the reason in plain words on the right. Absent (the ordinary case) it takes no room.
+    /// The strip uses the skin's text colours and the alert red only for its pip.
+    private func decisionStrip(_ decisions: [FleetDecision]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Rectangle()
+                    .fill(theme.alert)
+                    .frame(width: 4, height: 4)
+                Text("ODIN NEEDS DECISION")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.5)
+                    .foregroundColor(theme.hot)
+                Spacer(minLength: 8)
+                if let count = FleetFormat.decisionCountLabel(decisions.count) {
+                    Text(count)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(theme.muted)
+                        .lineLimit(1)
+                }
+                if let staleness = FleetFormat.decisionStaleness(store.isReachable) {
+                    Text(staleness)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(theme.dim)
+                        .lineLimit(1)
+                }
+            }
+            ForEach(decisions.indices, id: \.self) { index in
+                decisionRow(decisions[index])
+            }
+        }
+    }
+
+    private func decisionRow(_ decision: FleetDecision) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(FleetFormat.decisionSubject(decision))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(theme.muted)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text(FleetFormat.decisionReason(decision.reason, round: decision.round))
+                .font(.system(size: 11))
+                .foregroundColor(theme.text)
+                .lineLimit(1)
+        }
     }
 
     // MARK: - Main

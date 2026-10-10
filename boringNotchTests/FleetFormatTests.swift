@@ -18,8 +18,8 @@ final class FleetFormatTests: XCTestCase {
         FleetJob(key: key, pill: "frank", label: "Reviewing the diff", step: nil, elapsedSec: nil)
     }
 
-    private func lane(_ state: FleetNodeState, jobs: [FleetJob] = []) -> FleetLane {
-        FleetLane(id: "frank", label: "frank", state: state, jobs: jobs)
+    private func lane(_ state: FleetNodeState, jobs: [FleetJob] = [], decisions: [FleetDecision] = []) -> FleetLane {
+        FleetLane(id: "frank", label: "frank", state: state, jobs: jobs, decisions: decisions)
     }
 
     // MARK: - unknown
@@ -183,6 +183,68 @@ final class FleetFormatTests: XCTestCase {
 
     func testResponseDetailOfflineIsOffline() {
         XCTAssertEqual(FleetFormat.responseDetail(lane(.offline)), "Offline")
+    }
+
+    // MARK: - decisionDetail
+
+    /// The alert's detail line reads the first open entry's pull request, falling back to
+    /// "Needs decision" when none was reported. `responseDetail` stays the lane's activity
+    /// detail: a busy lane still reads "Working" even with an open decision.
+    func testDecisionDetailReadsTheFirstOpenEntry() {
+        let monitor = FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: "no_progress", round: 4)
+        let other = FleetDecision(job: "other-job", pr: nil, reason: nil, round: nil)
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [monitor])), "PR #4")
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other])), "Needs decision")
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [monitor, other])), "PR #4")
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other, monitor])), "Needs decision")
+        XCTAssertEqual(FleetFormat.responseDetail(lane(.busy, decisions: [monitor])), "Working")
+    }
+
+    func testDecisionReasonMapsTheThreeReasonsToPlainWords() {
+        XCTAssertEqual(FleetFormat.decisionReason("repeat_finding", round: nil), "same problem came back")
+        XCTAssertEqual(FleetFormat.decisionReason("no_progress", round: nil), "fixes not reducing problems")
+        XCTAssertEqual(FleetFormat.decisionReason("round_limit", round: 4), "4 fix rounds used")
+    }
+
+    func testDecisionReasonRoundLimitWithoutARoundStillReads() {
+        XCTAssertEqual(FleetFormat.decisionReason("round_limit", round: nil), "round limit reached")
+    }
+
+    func testDecisionReasonUnknownFallsBackToDecisionNeeded() {
+        XCTAssertEqual(FleetFormat.decisionReason(nil, round: 4), "decision needed")
+        XCTAssertEqual(FleetFormat.decisionReason("", round: nil), "decision needed")
+        XCTAssertEqual(FleetFormat.decisionReason("something_new", round: nil), "decision needed")
+    }
+
+    func testDecisionSubjectJoinsJobAndPullRequest() {
+        XCTAssertEqual(FleetFormat.decisionSubject(
+            FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: nil, round: nil)),
+                       "monitor-landscape-scale · PR #4")
+    }
+
+    func testDecisionSubjectToleratesMissingParts() {
+        XCTAssertEqual(FleetFormat.decisionSubject(
+            FleetDecision(job: "monitor-landscape-scale", pr: nil, reason: nil, round: nil)),
+                       "monitor-landscape-scale")
+        XCTAssertEqual(FleetFormat.decisionSubject(FleetDecision(job: nil, pr: 4, reason: nil, round: nil)), "PR #4")
+        XCTAssertEqual(FleetFormat.decisionSubject(FleetDecision(job: "   ", pr: 4, reason: nil, round: nil)), "PR #4")
+        XCTAssertEqual(FleetFormat.decisionSubject(
+            FleetDecision(job: nil, pr: nil, reason: nil, round: nil)),
+                       FleetFormat.unknown)
+    }
+
+    // MARK: - decision staleness
+
+    func testDecisionStalenessMarksOnlyAnUnreachableFeed() {
+        XCTAssertNil(FleetFormat.decisionStaleness(true))
+        XCTAssertEqual(FleetFormat.decisionStaleness(false), "last known")
+    }
+
+    func testDecisionCountLabelOnlyAppearsAboveOne() {
+        XCTAssertNil(FleetFormat.decisionCountLabel(0))
+        XCTAssertNil(FleetFormat.decisionCountLabel(1))
+        XCTAssertEqual(FleetFormat.decisionCountLabel(2), "2 open")
+        XCTAssertEqual(FleetFormat.decisionCountLabel(5), "5 open")
     }
 
     // MARK: - fleetBaseURL
