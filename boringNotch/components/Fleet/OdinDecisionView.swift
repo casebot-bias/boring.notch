@@ -191,13 +191,13 @@ struct OdinDecisionView: View {
 
     // MARK: - Why row
 
-    /// The reason in hot mono over a hairline, with the PR link on the right.
+    /// The reason in hotText mono over a hairline, with the PR link on the right.
     private func whyRow(_ d: FleetDecision) -> some View {
         let url = FleetFormat.decisionPullRequestURL(d)
         return HStack(spacing: 8) {
             Text(FleetFormat.decisionWhy(d))
                 .font(FleetType.mono(size: 11))
-                .foregroundColor(theme.hot)
+                .foregroundColor(theme.hotText)
                 .lineLimit(1)
             Spacer(minLength: 8)
             Button {
@@ -390,7 +390,7 @@ struct OdinDecisionView: View {
             if let error, !sent {
                 Text(error)
                     .font(FleetType.mono(size: 11))
-                    .foregroundColor(theme.hot)
+                    .foregroundColor(theme.hotText)
                     .lineLimit(2)
                     .padding(.top, 6)
             }

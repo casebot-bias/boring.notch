@@ -31,6 +31,8 @@ struct FleetClient {
     var baseURL: URL
     var session: URLSession = .shared
     var timeout: TimeInterval = 3
+    /// The answer may run a 60 s server-side command, so it is not bound by the 3 s poll timeout.
+    static let decisionTimeout: TimeInterval = 65
 
     func fetchFleet() async throws -> FleetSnapshot {
         let url = baseURL.appendingPathComponent("api/fleet")
@@ -65,12 +67,13 @@ struct FleetClient {
     }
 
     /// Answers one open Odin decision: `POST <base>/api/odin/decision` with the contract's JSON
-    /// body and the notch's client header. 200 decodes the answer; every other status is a
-    /// `decisionRejected` carrying the server's short message when it sent one.
+    /// body and the notch's client header. Rides `decisionTimeout`, not the 3 s poll `timeout`,
+    /// because the server may run a 60 s command before it answers. 200 decodes the answer; every
+    /// other status is a `decisionRejected` carrying the server's short message when it sent one.
     func sendDecision(job: String, option: String) async throws -> DecisionAnswer {
         var request = URLRequest(url: baseURL.appendingPathComponent("api/odin/decision"),
                                  cachePolicy: .reloadIgnoringLocalCacheData,
-                                 timeoutInterval: timeout)
+                                 timeoutInterval: Self.decisionTimeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("notch", forHTTPHeaderField: "X-Fleet-Client")

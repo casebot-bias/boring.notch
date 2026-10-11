@@ -74,6 +74,8 @@ final class FleetClientTests: XCTestCase {
         XCTAssertEqual(request.url?.host, "fleet.example")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Fleet-Client"), "notch")
+        XCTAssertGreaterThanOrEqual(StubURLProtocol.lastRequest?.timeoutInterval ?? 0, 60,
+                                    "the answer may run a 60 s server-side command")
 
         let body = try XCTUnwrap(StubURLProtocol.lastBody)
         let decoded = try JSONDecoder().decode([String: String].self, from: body)

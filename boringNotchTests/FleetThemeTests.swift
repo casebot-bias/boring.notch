@@ -205,6 +205,7 @@ final class FleetThemeTests: XCTestCase {
             let textRoles: [(String, Color)] = [
                 ("text", t.text), ("jobText", t.jobText), ("nameText", t.nameText),
                 ("muted", t.muted), ("dim", t.dim), ("alertChipText", t.alertChipText),
+                ("hotText", t.hotText),
                 ("nameOff", t.nameOff),
             ]
             for (name, colour) in textRoles {
@@ -258,6 +259,19 @@ final class FleetThemeTests: XCTestCase {
                                         "\(skin) the chip's words must read at 7:1 on the chip")
             XCTAssertGreaterThanOrEqual(contrast(t.alert, chip), 3.0,
                                         "\(skin) the chip's pulsing dot must reach 3:1 on the chip")
+        }
+    }
+
+    /// `hot` marks (arcs, chip borders, gauge values at 13 pt) and `hotText` words are two colours: the
+    /// words must clear the 7:1 text floor on both panels, and the lighter twin must actually be lighter.
+    func testHotTextIsTheTextGradeTwinOfHot() {
+        for skin in FleetSkin.allCases {
+            let t = FleetTheme(skin: skin)
+            let bg = t.panelTop
+            XCTAssertGreaterThanOrEqual(contrast(t.hotText, bg), 7.0,
+                                        "\(skin) attention words need the 7:1 text floor")
+            XCTAssertGreaterThan(contrast(t.hotText, bg), contrast(t.hot, bg),
+                                 "\(skin) hotText is hot's lighter twin")
         }
     }
 

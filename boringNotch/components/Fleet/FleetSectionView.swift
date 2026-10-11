@@ -81,8 +81,7 @@ struct FleetSectionView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 FleetSpeedTrend(speed: model.speed, theme: theme)
                 Text(FleetFormat.speedNumberText(model.speed))
-                    .font(.system(size: 13, weight: .semibold))
-                    .monospacedDigit()
+                    .font(FleetType.mono(size: 13, weight: .medium))
                     .foregroundColor(idle ? theme.dim : theme.text)
                 Text(" tok/s")
                     .font(FleetType.mono(size: 11))
@@ -110,7 +109,7 @@ struct FleetSectionView: View {
                                         of: model.agentCount,
                                         critical: model.criticalCount))
                 .font(FleetType.mono(size: 11))
-                .foregroundColor(model.criticalCount > 0 ? theme.hot : theme.dim)
+                .foregroundColor(model.criticalCount > 0 ? theme.hotText : theme.dim)
                 .lineLimit(1)
         }
         .frame(height: 26)

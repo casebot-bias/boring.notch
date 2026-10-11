@@ -53,8 +53,7 @@ struct FleetWorkView: View {
                 .foregroundColor(theme.muted)
             Spacer(minLength: 0)
             Text("\(runningTaskCount)")
-                .font(.system(size: 13, weight: .semibold))
-                .monospacedDigit()
+                .font(FleetType.mono(size: 13, weight: .medium))
                 .foregroundColor(theme.text)
         }
     }

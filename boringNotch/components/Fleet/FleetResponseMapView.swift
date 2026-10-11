@@ -238,14 +238,14 @@ struct FleetResponseMapView: View {
     }
 
     /// Signal square, name over the state line, job badge at the column's far right. Busy and
-    /// open-decision names are L1 (`text`, semibold); idle and offline names are L2 (`muted` and
-    /// `off`, medium). An offline signal is a hollow square; an open-decision lane draws its signal
-    /// in `theme.alert`, keeps its own name, says "Needs you" in `hot` and drops the badge.
+    /// open-decision names are L1 (`text`, semibold); idle and offline names are L2 (`muted`, and
+    /// `nameOff` for offline, medium). An offline signal is a hollow square; an open-decision lane draws its signal
+    /// in `theme.alert`, keeps its own name, says "Needs you" in `hotText` and drops the badge.
     @ViewBuilder
     private func agentRow(lane: FleetLane) -> some View {
         let needsYou = lane.hasOpenDecision
         let live = needsYou || lane.state == .busy
-        let nameColor: Color = live ? theme.text : (lane.state == .offline ? theme.off : theme.muted)
+        let nameColor: Color = live ? theme.text : (lane.state == .offline ? theme.nameOff : theme.muted)
         HStack(spacing: 5) {
             Group {
                 if lane.state == .offline && !needsYou {
@@ -266,7 +266,7 @@ struct FleetResponseMapView: View {
                     .font(!needsYou && FleetFormat.speedDetail(lane) != nil
                           ? FleetType.mono(size: 11, weight: .medium)
                           : FleetType.mono(size: 11))
-                    .foregroundColor(needsYou ? theme.hot : theme.dim)
+                    .foregroundColor(needsYou ? theme.hotText : theme.dim)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
