@@ -179,6 +179,25 @@ enum FleetPanelMetrics {
     static let responseMapColumnWidth: CGFloat = 84
     /// The whole response map: two columns, the 60 pt case box and the two wire gaps.
     static let responseMapWidth: CGFloat = 292
+    /// One response-map row's two text lines: the 12 pt name line, the 1 pt stack gap and the
+    /// 11 pt monospaced status line. A 12 pt system line measures ≈14.3 pt and an 11 pt
+    /// monospaced line ≈13.1 pt, so the pair needs ≈28.4 pt; 31 pt leaves ≈2.6 pt of air. The map
+    /// used to divide whatever height the panel gave it by its rows, which left each of its four
+    /// rows ~24 pt and printed every status line over the next agent's name.
+    static let responseMapMinRowHeight: CGFloat = 31
+    /// The response map's grid for `rows` agent rows (the grid is as tall as its longer column):
+    /// the map's floor, which the opened panel is tall enough to hold.
+    static func responseMapHeight(rows: Int) -> CGFloat {
+        return CGFloat(max(1, rows)) * responseMapMinRowHeight
+    }
+    /// Everything the opened Fleet column draws outside the map's four rows: the header, its
+    /// hairline, the health row, Odin's decision strip, the five 10 pt row gaps, the footer and
+    /// the map's own "RESPONSE MAP" label. Measured from the rendered panel.
+    static let fleetSectionChromeHeight: CGFloat = 206
+    /// The opened Fleet column: its fixed rows plus the map's four rows. The sizing module opens
+    /// the notch to exactly this height and the section view frames itself at it, so window and
+    /// content can never disagree.
+    static let fleetSectionHeight: CGFloat = fleetSectionChromeHeight + responseMapHeight(rows: 4)
     /// The closed-notch row: the mini map's width, the gap after it, and the text budget.
     static let closedRowMapWidth: CGFloat = 46
     static let closedRowTextWidth: CGFloat = 72

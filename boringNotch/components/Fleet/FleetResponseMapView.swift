@@ -34,6 +34,8 @@ struct FleetResponseMapView: View {
     /// Left column: the first three agents. Right column: the rest (four with pika).
     private var leftIndexes: [Int] { Array(lanes.indices.prefix(3)) }
     private var rightIndexes: [Int] { Array(lanes.indices.dropFirst(3)) }
+    /// The map's grid: as many rows as its longer agent column (four with pika).
+    private var gridRows: Int { max(leftIndexes.count, rightIndexes.count) }
 
     // MARK: - Layout constants
 
@@ -94,7 +96,6 @@ struct FleetResponseMapView: View {
     /// overlap the box; the Canvas wire anchors sit on the columns' inner edges.
     private var map: some View {
         GeometryReader { geo in
-            let gridRows = max(leftIndexes.count, rightIndexes.count)
             let rowHeight = geo.size.height / CGFloat(max(1, gridRows))
             // The column floor leaves room for the name and detail lines, so no status truncates
             // at 11 pt; a wider map still gets the freed space.
@@ -129,6 +130,10 @@ struct FleetResponseMapView: View {
                 }
             }
         }
+        // Every row keeps `responseMapMinRowHeight`: the 12 pt name line and the 11 pt status
+        // line under it can never print over the next agent. The columns and the Canvas wires
+        // read `rowHeight` off this same geometry, so the wire anchors stay on the row centres.
+        .frame(minHeight: FleetPanelMetrics.responseMapHeight(rows: gridRows))
     }
 
     /// One cubic per agent: starts at its column's inner edge on the row

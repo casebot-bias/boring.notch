@@ -319,6 +319,35 @@ final class FleetFormatTests: XCTestCase {
         }
     }
 
+    /// The opened Fleet panel must leave the response map room for its four rows, and one row must
+    /// fit its 12 pt name line plus the 11 pt status line under it. The overlap came from dividing
+    /// the panel's leftover height by four, which left ~24 pt a row.
+    func testOpenedNotchFitsTheResponseMapRows() {
+        let sizes = NotchWindowPlanner.sizes(showFleet: true,
+                                             baseOpen: CGSize(width: 640, height: 190),
+                                             fleetMusicWidth: 220, fleetSpacing: 15,
+                                             fleetSectionWidth: 560,
+                                             fleetSectionHeight: FleetPanelMetrics.fleetSectionHeight,
+                                             shadowPadding: 20)
+        XCTAssertEqual(sizes.open.height, FleetPanelMetrics.fleetSectionHeight,
+                       "the opened notch takes the Fleet column's height")
+        XCTAssertGreaterThanOrEqual(
+            sizes.open.height,
+            FleetPanelMetrics.fleetSectionChromeHeight + FleetPanelMetrics.responseMapHeight(rows: 4),
+            "the notch must hold the panel's fixed rows plus the map's four rows")
+        XCTAssertGreaterThanOrEqual(FleetPanelMetrics.responseMapHeight(rows: 4),
+                                    4 * FleetPanelMetrics.responseMapMinRowHeight,
+                                    "the map's grid is four rows of responseMapMinRowHeight")
+
+        let nameLine = NSFont.systemFont(ofSize: 12)
+        let statusLine = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        let linePair = (nameLine.ascender - nameLine.descender + nameLine.leading)
+            + 1
+            + (statusLine.ascender - statusLine.descender + statusLine.leading)
+        XCTAssertGreaterThanOrEqual(FleetPanelMetrics.responseMapMinRowHeight, linePair,
+                                    "one map row fits the 12 pt name line and the 11 pt status line")
+    }
+
     /// A response-map column cannot be narrower than its furniture plus the detail budget, and the
     /// closed row's side block cannot be narrower than its mini map, gap and text budget.
     func testBlockWidthsCoverTheirContents() {

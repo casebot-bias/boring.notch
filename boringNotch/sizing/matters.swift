@@ -17,10 +17,13 @@ let fleetSectionWidth: CGFloat = 560
 let fleetMusicWidth: CGFloat = 220
 /// Hard cap for the cover in the compact column, whatever the art size or shape.
 /// 150 pt keeps the cover, the track block, the progress bar and the control
-/// toolbar inside the opened notch's 300 pt height.
+/// toolbar inside the opened notch's fleetSectionHeight.
 let fleetCoverMaxSide: CGFloat = 150
 let fleetSectionSpacing: CGFloat = 15
-let fleetSectionHeight: CGFloat = 300
+/// The opened Fleet column: its fixed rows plus the response map's four agent rows, derived in
+/// `FleetPanelMetrics` so the map can never be squeezed into printing a status line over the next
+/// agent's name.
+let fleetSectionHeight: CGFloat = FleetPanelMetrics.fleetSectionHeight
 private let baseOpenNotchSize: CGSize = .init(width: 640, height: 190)
 
 var openNotchSize: CGSize { panelSizes.open }
