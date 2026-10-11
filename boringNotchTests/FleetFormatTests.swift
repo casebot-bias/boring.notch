@@ -18,8 +18,8 @@ final class FleetFormatTests: XCTestCase {
         FleetJob(key: key, pill: "frank", label: "Reviewing the diff", step: nil, elapsedSec: nil)
     }
 
-    private func lane(_ state: FleetNodeState, jobs: [FleetJob] = []) -> FleetLane {
-        FleetLane(id: "frank", label: "frank", state: state, jobs: jobs)
+    private func lane(_ state: FleetNodeState, jobs: [FleetJob] = [], decisions: [FleetDecision] = []) -> FleetLane {
+        FleetLane(id: "frank", label: "frank", state: state, jobs: jobs, decisions: decisions)
     }
 
     // MARK: - unknown
@@ -185,6 +185,69 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.responseDetail(lane(.offline)), "Offline")
     }
 
+    // MARK: - decisionDetail
+
+    /// The alert's detail line reads the first open entry's pull request, falling back to
+    /// "No PR" when none was reported — the fallback has to fit the row's 54 pt detail budget.
+    /// `responseDetail` stays the lane's activity detail: a busy lane still reads "Working"
+    /// even with an open decision.
+    func testDecisionDetailReadsTheFirstOpenEntry() {
+        let monitor = FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: "no_progress", round: 4)
+        let other = FleetDecision(job: "other-job", pr: nil, reason: nil, round: nil)
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [monitor])), "PR #4")
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other])), "No PR")
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [monitor, other])), "PR #4")
+        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other, monitor])), "No PR")
+        XCTAssertEqual(FleetFormat.responseDetail(lane(.busy, decisions: [monitor])), "Working")
+    }
+
+    func testDecisionReasonMapsTheThreeReasonsToPlainWords() {
+        XCTAssertEqual(FleetFormat.decisionReason("repeat_finding", round: nil), "same problem came back")
+        XCTAssertEqual(FleetFormat.decisionReason("no_progress", round: nil), "fixes not reducing problems")
+        XCTAssertEqual(FleetFormat.decisionReason("round_limit", round: 4), "4 fix rounds used")
+    }
+
+    func testDecisionReasonRoundLimitWithoutARoundStillReads() {
+        XCTAssertEqual(FleetFormat.decisionReason("round_limit", round: nil), "round limit reached")
+    }
+
+    func testDecisionReasonUnknownFallsBackToDecisionNeeded() {
+        XCTAssertEqual(FleetFormat.decisionReason(nil, round: 4), "decision needed")
+        XCTAssertEqual(FleetFormat.decisionReason("", round: nil), "decision needed")
+        XCTAssertEqual(FleetFormat.decisionReason("something_new", round: nil), "decision needed")
+    }
+
+    func testDecisionSubjectJoinsJobAndPullRequest() {
+        XCTAssertEqual(FleetFormat.decisionSubject(
+            FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: nil, round: nil)),
+                       "monitor-landscape-scale · PR #4")
+    }
+
+    func testDecisionSubjectToleratesMissingParts() {
+        XCTAssertEqual(FleetFormat.decisionSubject(
+            FleetDecision(job: "monitor-landscape-scale", pr: nil, reason: nil, round: nil)),
+                       "monitor-landscape-scale")
+        XCTAssertEqual(FleetFormat.decisionSubject(FleetDecision(job: nil, pr: 4, reason: nil, round: nil)), "PR #4")
+        XCTAssertEqual(FleetFormat.decisionSubject(FleetDecision(job: "   ", pr: 4, reason: nil, round: nil)), "PR #4")
+        XCTAssertEqual(FleetFormat.decisionSubject(
+            FleetDecision(job: nil, pr: nil, reason: nil, round: nil)),
+                       FleetFormat.unknown)
+    }
+
+    // MARK: - decision staleness
+
+    func testDecisionStalenessMarksOnlyAnUnreachableFeed() {
+        XCTAssertNil(FleetFormat.decisionStaleness(true))
+        XCTAssertEqual(FleetFormat.decisionStaleness(false), "last known")
+    }
+
+    func testDecisionCountLabelOnlyAppearsAboveOne() {
+        XCTAssertNil(FleetFormat.decisionCountLabel(0))
+        XCTAssertNil(FleetFormat.decisionCountLabel(1))
+        XCTAssertEqual(FleetFormat.decisionCountLabel(2), "2 open")
+        XCTAssertEqual(FleetFormat.decisionCountLabel(5), "5 open")
+    }
+
     // MARK: - fleetBaseURL
 
     func testFleetBaseURLStripsOneTrailingSlash() {
@@ -236,6 +299,18 @@ final class FleetFormatTests: XCTestCase {
                 monospacedWidth(detail, size: FleetPanelMetrics.minTextSize), detailBudget,
                 "\(detail) does not fit the response-map detail budget")
         }
+        // The alert row shares that budget: the pull-request label and the short fallback the row
+        // shows when the loaded decision carries no PR. "Needs decision" measured ~95 pt here and
+        // truncated, which is why the fallback is short.
+        let withPullRequest = lane(.busy, decisions: [FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: nil, round: nil)])
+        let withoutPullRequest = lane(.busy, decisions: [FleetDecision(job: "monitor-landscape-scale", pr: nil, reason: nil, round: nil)])
+        for detail in [FleetFormat.decisionDetail(withPullRequest), FleetFormat.decisionDetail(withoutPullRequest)] {
+            XCTAssertLessThanOrEqual(
+                monospacedWidth(detail, size: FleetPanelMetrics.minTextSize), detailBudget,
+                "the alert detail \(detail) does not fit the response-map detail budget")
+        }
+        XCTAssertEqual(FleetFormat.decisionDetail(withoutPullRequest), "No PR",
+                       "the fallback is the label the row shows when a decision has no PR")
         for status in ["1 working", "3 critical", FleetFormat.linked(7, of: 7)] {
             XCTAssertLessThanOrEqual(
                 monospacedWidth(status, size: FleetPanelMetrics.minTextSize),

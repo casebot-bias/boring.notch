@@ -9,10 +9,10 @@
 //  app target and the test target.
 //
 
-import Foundation
-
-/// Signal state of a node. Offline beats busy: an offline/absent machine reports
-/// .offline even when its activity device claims work.
+/// Signal state of a node: busy, idle or offline. Offline beats busy: an offline/absent
+/// machine reports .offline even when its activity device claims work. An open decision is
+/// a separate dimension (`FleetLane.hasOpenDecision`), never a node state, so a lane that is
+/// reviewing still counts as busy work.
 enum FleetNodeState: Equatable { case busy, idle, offline }
 
 /// One running piece of work, shown on its signal and in the current-work list.
@@ -31,7 +31,32 @@ struct FleetLane: Identifiable, Equatable {
     var label: String
     var state: FleetNodeState
     var jobs: [FleetJob]
+    var decisions: [FleetDecision] = []
+
+    /// The lane's first open decision, kept for the single-decision call sites.
+    var decision: FleetDecision? { decisions.first }
+
+    /// Any decision open on this lane: the alert's own dimension, independent of the lane's
+    /// activity state. The map row, the mini map and the collapsed pip read this.
+    var hasOpenDecision: Bool { !decisions.isEmpty }
+
     var isLinked: Bool { state != .offline }
+}
+
+/// Odin's open alert: its QA reviewer is waiting on a human decision. Shown in the
+/// panel's alert strip and on the collapsed notch's red dot.
+struct FleetDecision: Equatable {
+    var job: String?
+    var pr: Int?
+    var reason: String?
+    var round: Int?
+}
+
+extension FleetDecision {
+    /// The one place an Odin stop record becomes a decision.
+    fileprivate init(_ status: OdinStatus) {
+        self.init(job: status.job, pr: status.pr, reason: status.reason, round: status.round)
+    }
 }
 
 /// Fleet-wide peak for one hardware kind, shown in the panel footer.
@@ -107,6 +132,18 @@ struct FleetPanelModel: Equatable {
             }
         }.map(\.element)
     }
+
+    /// Odin's open decisions, in order. Walks the agents and returns the first lane
+    /// with an open list (only Odin ever sets one).
+    var decisions: [FleetDecision] { agents.first { !$0.decisions.isEmpty }?.decisions ?? [] }
+
+    /// The first open decision: the one the panel's alert strip names.
+    var decision: FleetDecision? { decisions.first }
+
+    /// Whether any decision is open; drives the collapsed notch's red pip. Deliberately
+    /// independent of reachability: a failed poll keeps the last known decision until a
+    /// later successful status clears it.
+    var hasOpenDecision: Bool { !decisions.isEmpty }
 }
 
 enum FleetPanelModelBuilder {
@@ -136,8 +173,9 @@ enum FleetPanelModelBuilder {
             // at all leaves the lane idle/grey - never a red node for missing data.
             pikaLane(fleet: fleet, activity: activity),
             // Odin is the QA reviewer that runs on case (Codex): activity device
-            // "odin", fleet machine "odin".
-            machineLane(id: "odin", fleet: fleet, activity: activity),
+            // "odin", fleet machine "odin". Its open decisions ride on the lane as the
+            // alert dimension (see odinLane), independent of its busy/idle state.
+            odinLane(fleet: fleet, activity: activity),
         ]
         let rates = agentIds.compactMap { device(id: $0, in: activity)?.tokPerSec }
         let totalTokPerSec = rates.isEmpty ? nil : rates.reduce(0, +)
@@ -176,6 +214,27 @@ enum FleetPanelModelBuilder {
             .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
             ?? (deviceBusy(device) ? .busy : .idle)
         return FleetLane(id: "pika", label: "pika", state: state, jobs: toJobs(device?.items ?? []))
+    }
+
+    /// Odin's lane: its state is the plain machine/device rule — busy while a review runs, so
+    /// that review still counts as work — and its open decisions ride along as the alert's own
+    /// dimension. A failed fleet probe cannot hide the alert, and an idle status cannot veto a
+    /// non-empty open list.
+    private static func odinLane(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetLane {
+        let machine = machine(id: "odin", in: fleet)
+        let device = device(id: "odin", in: activity)
+        let state: FleetNodeState = machineOnline(machine) ? (deviceBusy(device) ? .busy : .idle) : .offline
+        return FleetLane(id: "odin", label: "odin", state: state, jobs: toJobs(device?.items ?? []),
+                         decisions: decisions(from: device?.odin))
+    }
+
+    /// The open decisions of an Odin report, in file order. The feed's open-decisions
+    /// list wins whenever it is present (`[]` means nothing is open, even with a
+    /// needs-decision status); without it, the single needs-decision status.
+    static func decisions(from report: OdinReport?) -> [FleetDecision] {
+        if let open = report?.open { return open.map { FleetDecision($0) } }
+        guard let status = report?.status, status.needsDecision else { return [] }
+        return [FleetDecision(status)]
     }
 
     // MARK: - Peaks
