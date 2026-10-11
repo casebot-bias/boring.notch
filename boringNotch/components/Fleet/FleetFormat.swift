@@ -215,6 +215,29 @@ enum FleetFormat {
         guard lane.state == .busy, let speed = lane.speed else { return nil }
         return "\(Int(round(speed))) tok/s"
     }
+
+    /// The contract's fleet speed: the median of the devices that report one - never a sum, so one
+    /// writer's own speed is the fleet's. Even counts average the two middle values; nil when nothing
+    /// reports (the header then keeps its "—").
+    static func medianSpeed(_ speeds: [Double?]) -> Double? {
+        let values = speeds.compactMap { $0 }.sorted()
+        guard !values.isEmpty else { return nil }
+        let middle = values.count / 2
+        if values.count % 2 == 1 {
+            return values[middle]
+        }
+        return (values[middle - 1] + values[middle]) / 2
+    }
+
+    // MARK: - selection
+
+    /// The selection an open list of `count` decisions can hold: `index` clamped into range, and 0 for an
+    /// empty list. Answering one decision shrinks the list under the index, so every reader (the current
+    /// decision, the chip highlight and the ‹ › steppers) must go through this instead of the raw index.
+    static func clampedIndex(_ index: Int, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return min(max(index, 0), count - 1)
+    }
 }
 /// Widths the fleet panel's fixed blocks must give their text so no label truncates. The response
 /// map and the closed-notch row read these; the tests measure the real strings at `minTextSize`

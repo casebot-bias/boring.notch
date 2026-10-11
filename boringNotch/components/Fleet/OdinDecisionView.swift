@@ -40,16 +40,17 @@ struct OdinDecisionView: View {
         return d.job ?? FleetFormat.decisionChip(d)
     }
 
-    /// The selected decision, clamped so a shrinking list never reads out of range.
+    /// The selected decision. `index` is clamped on read and pulled back on shrink, so it never reads out of range.
     private var current: FleetDecision? {
         guard !decisions.isEmpty else { return nil }
-        return decisions[min(index, decisions.count - 1)]
+        return decisions[FleetFormat.clampedIndex(index, count: decisions.count)]
     }
 
-    /// Moves the selection, wrapping around the list.
+    /// Moves the selection by `k` from the clamped base, wrapping around the list.
     private func step(_ k: Int) {
         guard !decisions.isEmpty else { return }
-        index = (index + k + decisions.count) % decisions.count
+        let base = FleetFormat.clampedIndex(index, count: decisions.count)
+        index = (base + k + decisions.count) % decisions.count
     }
 
     // MARK: - Body
@@ -69,6 +70,9 @@ struct OdinDecisionView: View {
                     }
                 }
             }
+        }
+        .onChange(of: decisions.count) { _, count in
+            index = FleetFormat.clampedIndex(index, count: count)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -127,7 +131,7 @@ struct OdinDecisionView: View {
     private var chipStrip: some View {
         HStack(spacing: 6) {
             ForEach(Array(decisions.enumerated()), id: \.offset) { offset, d in
-                chip(d, selected: offset == index) { index = offset }
+                chip(d, selected: offset == FleetFormat.clampedIndex(index, count: decisions.count)) { index = offset }
             }
         }
         .fixedSize(horizontal: true, vertical: false)

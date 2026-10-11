@@ -206,11 +206,14 @@ enum FleetPanelModelBuilder {
         ]
         let rates = agentIds.compactMap { device(id: $0, in: activity)?.tokPerSec }
         let totalTokPerSec = rates.isEmpty ? nil : rates.reduce(0, +)
+        let speed = fleet?.speed ?? activity?.speed ?? Self.medianSpeed(from: activity)
         return FleetPanelModel(origin: origin,
                                agents: agents,
                                totalTokPerSec: totalTokPerSec,
                                // The fleet payload's speed block wins; the activity payload's is the fallback.
-                               speed: fleet?.speed ?? activity?.speed,
+                               // When neither sends a block, the median of the reporting devices is used, so
+                               // the header is never a sum.
+                               speed: speed,
                                peaks: peaks(from: fleet))
     }
 
@@ -300,6 +303,15 @@ enum FleetPanelModelBuilder {
 
     private static func device(id: String, in activity: ActivitySnapshot?) -> DeviceActivity? {
         activity?.devices.first { $0.device == id }
+    }
+
+    /// The contract's fleet speed when neither payload carries a block: the median of the devices that
+    /// report one. nil when no device does, so the header keeps its "—".
+    private static func medianSpeed(from activity: ActivitySnapshot?) -> FleetSpeed? {
+        guard let current = FleetFormat.medianSpeed((activity?.devices ?? []).map(\.speed)) else {
+            return nil
+        }
+        return FleetSpeed(current: current, lastAt: nil)
     }
 
     /// The cloud-routed items the case runs (nova's raw feed before provider split).

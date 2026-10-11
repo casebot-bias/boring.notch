@@ -374,4 +374,34 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertNil(FleetFormat.speedDetail(busyWithout))
         XCTAssertEqual(FleetFormat.responseDetail(busyWithout), "Working")
     }
+
+    func testMedianSpeedIsTheMedianOfTheReportingDevices() {
+        XCTAssertNil(FleetFormat.medianSpeed([]))
+        XCTAssertNil(FleetFormat.medianSpeed([nil, nil]))
+        XCTAssertNil(FleetFormat.medianSpeed([nil]))
+        XCTAssertEqual(FleetFormat.medianSpeed([nil, 38.5, nil]) ?? 0, 38.5, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.medianSpeed([30, 10, 20]) ?? 0, 20, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.medianSpeed([10, 20]) ?? 0, 15, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.medianSpeed([0, 40, nil]) ?? 0, 20, accuracy: 0.001)
+    }
+
+    /// The owner's case: with a single writer the fleet number is that writer's own speed.
+    func testOneWriterAtThirtyNineIsTheFleetNumberAndTheHeaderText() {
+        let fleet = FleetSpeed(current: FleetFormat.medianSpeed([nil, 38.5, nil, nil]), lastAt: nil)
+        XCTAssertEqual(fleet.current ?? 0, 38.5, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.speedNumberText(fleet), "39")
+        XCTAssertFalse(FleetFormat.speedIsIdle(fleet))
+    }
+
+    /// Answering the 4th of 4 decisions leaves three: the index clamps to 2, so the third chip stays
+    /// selected and the steppers step from there.
+    func testClampedIndexKeepsAChipSelectedWhenTheListShrinks() {
+        XCTAssertEqual(FleetFormat.clampedIndex(3, count: 4), 3)
+        XCTAssertEqual(FleetFormat.clampedIndex(3, count: 3), 2)
+        XCTAssertEqual(FleetFormat.clampedIndex(2, count: 3), 2)
+        XCTAssertEqual(FleetFormat.clampedIndex(0, count: 3), 0)
+        XCTAssertEqual(FleetFormat.clampedIndex(9, count: 4), 3)
+        XCTAssertEqual(FleetFormat.clampedIndex(-2, count: 4), 0)
+        XCTAssertEqual(FleetFormat.clampedIndex(2, count: 0), 0)
+    }
 }
