@@ -61,6 +61,9 @@ struct OdinDecisionView: View {
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     chipsRow
+                    if sentJob != nil {
+                        sentNote
+                    }
                     if let d = current {
                         decisionBody(d)
                     }
@@ -80,6 +83,15 @@ struct OdinDecisionView: View {
             .foregroundColor(sentJob != nil ? theme.accent : theme.muted)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 6)
+    }
+
+    /// "Decision sent" until the next fetch. Shown even while other decisions are still open:
+    /// the answered job leaves the list at once, so only `sentJob` remembers that it was answered.
+    private var sentNote: some View {
+        Text("Decision sent")
+            .font(.system(size: 12.5, weight: .medium))
+            .foregroundColor(theme.accent)
+            .lineLimit(1)
     }
 
     // MARK: - Chips row
@@ -366,7 +378,6 @@ struct OdinDecisionView: View {
     /// The full-width send button plus the store's error line under it.
     private func sendButton(_ d: FleetDecision) -> some View {
         let sending = sendingJob == d.job
-        let sent = sentJob == d.job
         let on = picked[key(d)] != nil && !sending
         return VStack(alignment: .leading, spacing: 3) {
             Button {
@@ -374,7 +385,7 @@ struct OdinDecisionView: View {
                       let option = d.options.first(where: { $0.id == pickedID }) else { return }
                 onSend(d, option)
             } label: {
-                Text(sending ? "Sending…" : sent ? "Decision sent" : "Send decision")
+                Text(sending ? "Sending…" : "Send decision")
                     .font(.system(size: 12, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 5)
@@ -387,7 +398,7 @@ struct OdinDecisionView: View {
             .buttonStyle(.plain)
             .disabled(!on)
 
-            if let error, !sent {
+            if let error {
                 Text(error)
                     .font(FleetType.mono(size: 11))
                     .foregroundColor(theme.hotText)
