@@ -97,20 +97,49 @@ struct FleetMachine: Codable, Equatable, Identifiable {
     }
 }
 
+/// How fast one answer is being written, as the fleet API reports it: the current decode speed, when
+/// it was last non-null, and the last ten minutes of readings (null = nobody writing).
+struct FleetSpeed: Codable, Equatable {
+    var current: Double?
+    var lastAt: String?
+    var trend: [Double?]
+    var stepSec: Int?
+
+    private enum CodingKeys: String, CodingKey { case current, lastAt, trend, stepSec }
+
+    init(current: Double?, lastAt: String?, trend: [Double?] = [], stepSec: Int? = nil) {
+        self.current = current
+        self.lastAt = lastAt
+        self.trend = trend
+        self.stepSec = stepSec
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.current = try container.decodeIfPresent(Double.self, forKey: .current)
+        self.lastAt = try container.decodeIfPresent(String.self, forKey: .lastAt)
+        self.trend = try container.decodeIfPresent([Double?].self, forKey: .trend) ?? []
+        self.stepSec = try container.decodeIfPresent(Int.self, forKey: .stepSec)
+    }
+}
+
 // MARK: - FleetSnapshot
 
 struct FleetSnapshot: Codable, Equatable {
     var generatedAt: String
     var machines: [FleetMachine]
+    /// The fleet-wide decode speed; nil while the feed reports none.
+    var speed: FleetSpeed?
 
     private enum CodingKeys: String, CodingKey {
-        case generatedAt, machines
+        case generatedAt, machines, speed
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt) ?? ""
         self.machines = try container.decodeIfPresent([FleetMachine].self, forKey: .machines) ?? []
+        self.speed = try container.decodeIfPresent(FleetSpeed.self, forKey: .speed)
     }
 
     static func decode(_ data: Data) throws -> FleetSnapshot {
@@ -177,6 +206,37 @@ struct SlotState: Codable, Equatable {
 
 // MARK: - OdinStatus
 
+/// One choice the owner can answer an Odin decision with (the shared contract's `options[]`).
+struct OdinOption: Codable, Equatable {
+    var id: String
+    var label: String
+    var pick: Bool
+
+    /// The contract's default list, for entries that carry no `options` at all.
+    static let defaults: [OdinOption] = [
+        OdinOption(id: "fix", label: "One more fix round", pick: false),
+        OdinOption(id: "accept", label: "Accept, add to backlog", pick: false),
+        OdinOption(id: "stop", label: "Stop, close the PR", pick: false),
+    ]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, label, pick
+    }
+
+    init(id: String, label: String, pick: Bool) {
+        self.id = id
+        self.label = label
+        self.pick = pick
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+        self.label = try container.decodeIfPresent(String.self, forKey: .label) ?? ""
+        self.pick = try container.decodeIfPresent(Bool.self, forKey: .pick) ?? false
+    }
+}
+
 /// Odin's QA status: the fleet API copies the writer's `~/.case/odin.json` under
 /// the activity device's `odin.status`, so a missing block is an Odin that does
 /// not need a decision, never an error.
@@ -192,12 +252,19 @@ struct OdinStatus: Codable, Equatable {
     var verdict: String?
     var updated: String?
 
+    /// Job titles the reviewer found this decision's findings in.
+    var found: [String]
+    /// The question the owner answers, when the decision carries one.
+    var question: String?
+    /// The owner's answer choices; a missing key decodes to `OdinOption.defaults`.
+    var options: [OdinOption]
+
     var needsDecision: Bool {
         return state == "needs_decision"
     }
 
     private enum CodingKeys: String, CodingKey {
-        case state, job, repo, pr, sha, round, reason, findings, verdict, updated
+        case state, job, repo, pr, sha, round, reason, findings, verdict, updated, found, question, options
     }
 
     init(from decoder: Decoder) throws {
@@ -212,6 +279,9 @@ struct OdinStatus: Codable, Equatable {
         self.findings = try container.decodeIfPresent(Int.self, forKey: .findings)
         self.verdict = try container.decodeIfPresent(String.self, forKey: .verdict)
         self.updated = try container.decodeIfPresent(String.self, forKey: .updated)
+        self.found = try container.decodeIfPresent([String].self, forKey: .found) ?? []
+        self.question = try container.decodeIfPresent(String.self, forKey: .question)
+        self.options = try container.decodeIfPresent([OdinOption].self, forKey: .options) ?? OdinOption.defaults
     }
 }
 
@@ -248,13 +318,15 @@ struct DeviceActivity: Codable, Equatable, Identifiable {
     var waiting: Int?
     var state: String
     var odin: OdinReport?
+    /// The device's own decode speed in tokens/s; nil when the device reports none.
+    var speed: Double?
 
     var id: String {
         return device
     }
 
     private enum CodingKeys: String, CodingKey {
-        case device, busy, items, slots, tokPerSec, kvCachePct, running, waiting, state, odin
+        case device, busy, items, slots, tokPerSec, kvCachePct, running, waiting, state, odin, speed
     }
 
     init(from decoder: Decoder) throws {
@@ -269,6 +341,7 @@ struct DeviceActivity: Codable, Equatable, Identifiable {
         self.waiting = try container.decodeIfPresent(Int.self, forKey: .waiting)
         self.state = try container.decodeIfPresent(String.self, forKey: .state) ?? ""
         self.odin = try container.decodeIfPresent(OdinReport.self, forKey: .odin)
+        self.speed = try container.decodeIfPresent(Double.self, forKey: .speed)
     }
 }
 
@@ -277,15 +350,18 @@ struct DeviceActivity: Codable, Equatable, Identifiable {
 struct ActivitySnapshot: Codable, Equatable {
     var generatedAt: String
     var devices: [DeviceActivity]
+    /// Fleet-wide decode speed; nil while the feed reports no speed block.
+    var speed: FleetSpeed?
 
     private enum CodingKeys: String, CodingKey {
-        case generatedAt, devices
+        case generatedAt, devices, speed
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt) ?? ""
         self.devices = try container.decodeIfPresent([DeviceActivity].self, forKey: .devices) ?? []
+        self.speed = try container.decodeIfPresent(FleetSpeed.self, forKey: .speed)
     }
 
     static func decode(_ data: Data) throws -> ActivitySnapshot {

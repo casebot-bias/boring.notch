@@ -293,4 +293,79 @@ final class FleetDecodingTests: XCTestCase {
                          "devices[0].odin.open must be nil when the key is absent (dashboard older than the list): \(body)")
         }
     }
+
+    /// An entry without `found`, `question` and `options` decodes to the contract's defaults.
+    func testOdinEntryWithoutTheNewFieldsTakesTheDefaults() throws {
+        let json = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","devices":[{"device":"odin","items":[],"state":"ok","odin":{"open":[{"state":"needs_decision","job":"notch-map-overlap","pr":4,"reason":"no_progress","round":2}]}}]}
+        """
+        let snapshot = try ActivitySnapshot.decode(Data(json.utf8))
+        let entry = try XCTUnwrap(snapshot.devices.first?.odin?.open?.first)
+        XCTAssertEqual(entry.found, [])
+        XCTAssertNil(entry.question)
+        XCTAssertEqual(entry.options, OdinOption.defaults)
+        XCTAssertEqual(entry.options.map(\.id), ["fix", "accept", "stop"])
+        XCTAssertEqual(entry.options.map(\.label),
+                       ["One more fix round", "Accept, add to backlog", "Stop, close the PR"])
+        XCTAssertEqual(entry.options.filter(\.pick).count, 0)
+    }
+
+    /// The new fields reach `FleetDecision` unchanged, in order, and an explicit empty `options`
+    /// list stays empty instead of falling back to the defaults.
+    func testOdinDecisionCarriesFoundQuestionAndOptions() throws {
+        let json = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","devices":[{"device":"odin","items":[],"state":"ok","odin":{"open":[
+        {"state":"needs_decision","job":"ciri-skill-trim","repo":"casebot-bias/ciri","pr":9,"reason":"product_choice",
+         "question":"Remove the other 29 skills?",
+         "found":["Each skill adds about 300 tokens.","The 29 unused skills add about 8,700 tokens."],
+         "options":[{"id":"trim","label":"Remove the 29 unused","pick":true},{"id":"keep","label":"Keep all 41"},{"id":"list","label":"Show me the list first"}]},
+        {"state":"needs_decision","job":"no-choices","pr":1,"options":[]}]}}]}
+        """
+        let snapshot = try ActivitySnapshot.decode(Data(json.utf8))
+        let model = FleetPanelModelBuilder.build(fleet: nil, activity: snapshot)
+        XCTAssertEqual(model.decisions.count, 2)
+        let first = try XCTUnwrap(model.decision)
+        XCTAssertEqual(first.job, "ciri-skill-trim")
+        XCTAssertEqual(first.repo, "casebot-bias/ciri")
+        XCTAssertEqual(first.question, "Remove the other 29 skills?")
+        XCTAssertEqual(first.found, ["Each skill adds about 300 tokens.",
+                                     "The 29 unused skills add about 8,700 tokens."])
+        XCTAssertEqual(first.options.map(\.id), ["trim", "keep", "list"])
+        XCTAssertEqual(first.options.map(\.label),
+                       ["Remove the 29 unused", "Keep all 41", "Show me the list first"])
+        XCTAssertEqual(first.options.filter(\.pick).map(\.id), ["trim"])
+        XCTAssertEqual(model.decisions.dropFirst().first?.options.count, 0,
+                       "an explicit empty list is not replaced by the defaults")
+    }
+
+    /// The fleet speed block and a device's own speed decode, nulls in the trend included.
+    func testSpeedDecodesCurrentTrendAndDeviceValues() throws {
+        let json = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","speed":{"current":154.4,"lastAt":"2026-10-11T17:59:50.000Z","trend":[120.0,null,38.5],"stepSec":10},"devices":[{"device":"frank","items":[],"state":"ok","speed":38.5},{"device":"dali","items":[],"state":"ok"}]}
+        """
+        let snapshot = try ActivitySnapshot.decode(Data(json.utf8))
+        let speed = try XCTUnwrap(snapshot.speed)
+        XCTAssertEqual(speed.current, 154.4)
+        XCTAssertEqual(speed.lastAt, "2026-10-11T17:59:50.000Z")
+        XCTAssertEqual(speed.trend, [120.0, nil, 38.5])
+        XCTAssertEqual(speed.stepSec, 10)
+        XCTAssertEqual(snapshot.devices.first?.speed, 38.5)
+        XCTAssertNil(snapshot.devices.dropFirst().first?.speed)
+        let fleetJSON = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","speed":{"current":42.0,"lastAt":null,"trend":[null,42.0],"stepSec":10},"machines":[]}
+        """
+        let fleet = try FleetSnapshot.decode(Data(fleetJSON.utf8))
+        XCTAssertEqual(fleet.speed?.current, 42.0)
+        XCTAssertEqual(fleet.speed?.trend, [nil, 42.0])
+    }
+
+    /// No speed block, no device speed: both stay nil rather than defaulting to zero.
+    func testMissingSpeedIsNoData() throws {
+        let json = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","devices":[{"device":"frank","items":[],"state":"ok"}]}
+        """
+        let snapshot = try ActivitySnapshot.decode(Data(json.utf8))
+        XCTAssertNil(snapshot.speed)
+        XCTAssertNil(snapshot.devices.first?.speed)
+    }
 }

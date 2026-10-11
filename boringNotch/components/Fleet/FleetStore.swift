@@ -21,8 +21,15 @@ final class FleetStore: ObservableObject {
     @Published private(set) var isReachable: Bool = false
     @Published private(set) var lastUpdated: Date?
 
+    /// The decision being sent, the last one answered (until the next fetch) and the last short
+    /// error, so the ODIN tab can show its button's three states.
+    @Published private(set) var sendingDecisionJob: String?
+    @Published private(set) var sentDecisionJob: String?
+    @Published private(set) var decisionError: String?
+
     var panelModel: FleetPanelModel {
-        return FleetPanelModelBuilder.build(fleet: fleet, activity: activity)
+        let model = FleetPanelModelBuilder.build(fleet: fleet, activity: activity)
+        return model.droppingDecisions(jobs: answeredJobs)
     }
 
     // MARK: - Tunables
@@ -42,6 +49,8 @@ final class FleetStore: ObservableObject {
     private var notchOpen = false
     private var lastSuccessAt: Date?
     private var lastErrorAt: Date?
+    /// Jobs answered from this notch: dropped from the panel until a fetch stops reporting them.
+    private var answeredJobs: Set<String> = []
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -90,6 +99,61 @@ final class FleetStore: ObservableObject {
         if Defaults[.showFleet] {
             startPolling()
         }
+    }
+
+    /// Answers one open decision and, on success, drops it from the panel (and says so) until a
+    /// later fetch agrees it is gone. A failure keeps the owner's choice and shows a short message.
+    func sendDecision(_ decision: FleetDecision, option: OdinOption) async {
+        guard let job = decision.job, !job.isEmpty, let baseURL = baseURL() else {
+            decisionError = "This decision cannot be sent."
+            return
+        }
+        guard sendingDecisionJob == nil else { return }
+        sendingDecisionJob = job
+        decisionError = nil
+        defer { sendingDecisionJob = nil }
+        do {
+            _ = try await FleetClient(baseURL: baseURL, session: session)
+                .sendDecision(job: job, option: option.id)
+            answeredJobs.insert(job)
+            sentDecisionJob = job
+        } catch let error as FleetClientError {
+            decisionError = Self.shortDecisionError(error)
+        } catch {
+            decisionError = Self.decisionFallbackError
+        }
+    }
+
+    private static let decisionFallbackError = "Case did not answer. Try again."
+
+    /// The short line the ODIN tab shows under the button: the server's own words when it sent
+    /// one, otherwise one line per status. Never the raw body.
+    private static func shortDecisionError(_ error: FleetClientError) -> String {
+        switch error {
+        case let .decisionRejected(status, message):
+            if let message, !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return message
+            }
+            switch status {
+            case 400: return "Case did not accept that choice."
+            case 403: return "The notch is not allowed to answer."
+            case 404: return "That job is no longer open."
+            case 409: return "That job is still running."
+            default: return "Case could not take the decision."
+            }
+        case .badStatus, .transport, .decoding:
+            return decisionFallbackError
+        }
+    }
+
+    /// Keeps only the jobs the latest feed still reports: an answered job leaves the set once the
+    /// feed agrees it is gone, so a job that opens again shows up again. The open set comes from the
+    /// raw model, not from `panelModel` (which already hides the answered jobs).
+    private func pruneAnsweredDecisions() {
+        guard !answeredJobs.isEmpty else { return }
+        let open = Set(FleetPanelModelBuilder.build(fleet: fleet, activity: activity)
+                        .decisions.compactMap(\.job))
+        answeredJobs.formIntersection(open)
     }
 
     // MARK: - Polling
@@ -173,6 +237,8 @@ final class FleetStore: ObservableObject {
         do {
             let snapshot = try await FleetClient(baseURL: baseURL, session: session).fetchActivity()
             activity = snapshot
+            pruneAnsweredDecisions()
+            sentDecisionJob = nil
             markSuccess()
         } catch {
             if !Task.isCancelled {

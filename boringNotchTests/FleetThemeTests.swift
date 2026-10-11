@@ -204,7 +204,8 @@ final class FleetThemeTests: XCTestCase {
             let bg = t.panelTop
             let textRoles: [(String, Color)] = [
                 ("text", t.text), ("jobText", t.jobText), ("nameText", t.nameText),
-                ("muted", t.muted), ("dim", t.dim), ("nameOff", t.nameOff),
+                ("muted", t.muted), ("dim", t.dim), ("alertChipText", t.alertChipText),
+                ("nameOff", t.nameOff),
             ]
             for (name, colour) in textRoles {
                 XCTAssertGreaterThanOrEqual(contrast(colour, bg), 7.0,
@@ -223,10 +224,6 @@ final class FleetThemeTests: XCTestCase {
                                         "\(skin) the needs-decision alert dot must reach 3:1")
             XCTAssertLessThan(contrast(t.alert, bg), 7.0,
                               "\(skin) the alert red is a dot colour: it must stay below the 7:1 text floor so it is never used for words")
-            // The alert's words draw in `hot`, whose 4.5:1 accent floor only applies from 12 pt up,
-            // so the heading size is pinned to the floor it needs.
-            XCTAssertGreaterThanOrEqual(FleetPanelMetrics.alertHeadingTextSize, 12,
-                                        "\(skin) the alert heading draws in an accent colour: 12 pt or more")
             // Why an alert dot may not reuse the busy cells' dim pulse: at that opacity the
             // composited colour falls under the 3:1 dot floor, so the alert must breathe by size.
             let alertComponents = components(t.alert)
@@ -242,6 +239,25 @@ final class FleetThemeTests: XCTestCase {
                                         "\(skin) idle wires, closed map included, at least 3:1")
             XCTAssertLessThan(contrast(t.line, bg), 3.0,
                               "\(skin) the line hairline is too dark for those wires - do not use it for them")
+        }
+    }
+
+    /// The ODIN tab's action-needed chip draws its words over the alert red at 16 % on the panel,
+    /// not over the bare panel: that composite is the words' real background.
+    func testAlertChipTextClearsItsFloorOnTheChipBackground() {
+        for skin in FleetSkin.allCases {
+            let t = FleetTheme(skin: skin)
+            let panel = components(t.panelTop)
+            let red = components(t.alert)
+            let chip = Color(.sRGB,
+                             red: Double(red.r * 0.16 + panel.r * 0.84),
+                             green: Double(red.g * 0.16 + panel.g * 0.84),
+                             blue: Double(red.b * 0.16 + panel.b * 0.84),
+                             opacity: 1)
+            XCTAssertGreaterThanOrEqual(contrast(t.alertChipText, chip), 7.0,
+                                        "\(skin) the chip's words must read at 7:1 on the chip")
+            XCTAssertGreaterThanOrEqual(contrast(t.alert, chip), 3.0,
+                                        "\(skin) the chip's pulsing dot must reach 3:1 on the chip")
         }
     }
 

@@ -1,0 +1,399 @@
+//
+//  OdinDecisionView.swift
+//  boringNotch
+//
+//  The ODIN tab: one chip per open decision, the reason with an "Open PR ↗"
+//  link, a QUESTION / ODIN FOUND switch over the findings box, and the
+//  option list with the "Send decision" button. The chip strip and the
+//  findings box drag open (offset + clip, never scrolling containers) so
+//  their text renders everywhere, offscreen PNGs included. Labels and
+//  sentences draw in SF Pro, data in JetBrains Mono, nothing below 11 pt.
+//
+
+import AppKit
+import Defaults
+import SwiftUI
+
+struct OdinDecisionView: View {
+    let decisions: [FleetDecision]
+    let sendingJob: String?
+    let sentJob: String?
+    let error: String?
+    let onSend: (FleetDecision, OdinOption) -> Void
+
+    @Default(.fleetSkin) private var fleetSkin
+    @State private var index = 0
+    @State private var pane: Pane = .question
+    @State private var picked: [String: String] = [:]
+    @State private var chipOffset: CGFloat = 0
+    @State private var chipDragStart: CGFloat?
+    @State private var paneOffset: CGFloat = 0
+    @State private var paneDragStart: CGFloat?
+
+    private enum Pane { case question, found }
+    private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
+
+    // MARK: - Helpers
+
+    /// The pick map's key for a decision: its job, falling back to its chip text.
+    private func key(_ d: FleetDecision) -> String {
+        return d.job ?? FleetFormat.decisionChip(d)
+    }
+
+    /// The selected decision, clamped so a shrinking list never reads out of range.
+    private var current: FleetDecision? {
+        guard !decisions.isEmpty else { return nil }
+        return decisions[min(index, decisions.count - 1)]
+    }
+
+    /// Moves the selection, wrapping around the list.
+    private func step(_ k: Int) {
+        guard !decisions.isEmpty else { return }
+        index = (index + k + decisions.count) % decisions.count
+    }
+
+    // MARK: - Body
+
+    var body: some View {
+        Group {
+            if decisions.isEmpty {
+                emptyState
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    chipsRow
+                    if let d = current {
+                        decisionBody(d)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // MARK: - Empty state
+
+    private var emptyState: some View {
+        Text(sentJob != nil
+             ? "Decision sent. Case goes on with the job. Odin reviews it again when it is done."
+             : "No decisions waiting. Odin is idle.")
+            .font(.system(size: 12.5))
+            .foregroundColor(sentJob != nil ? theme.accent : theme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 6)
+    }
+
+    // MARK: - Chips row
+
+    /// The chip strip: a `GeometryReader` viewport measures the space left after
+    /// the ‹ › steppers and the counter, and the chips drag sideways inside it
+    /// (offset + clip, clamped so they never pass the left edge). The viewport
+    /// contributes no ideal width, so the strip never sizes the tab.
+    private var chipsRow: some View {
+        HStack(spacing: 6) {
+            chipsViewport
+            if decisions.count > 1 {
+                arrowButton("‹") { step(-1) }
+                arrowButton("›") { step(1) }
+            }
+            Text(FleetFormat.decisionProgress(index: index, count: decisions.count))
+                .font(FleetType.mono(size: 11))
+                .foregroundColor(theme.dim)
+                .lineLimit(1)
+        }
+        .frame(height: 22)
+        .contentShape(Rectangle())
+        .gesture(DragGesture()
+            .onChanged { value in
+                let start = chipDragStart ?? chipOffset
+                chipDragStart = start
+                chipOffset = min(0, start + value.translation.width)
+            }
+            .onEnded { _ in chipDragStart = nil })
+    }
+
+    /// The chip content at its natural width; the viewport clips and offsets it.
+    private var chipStrip: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(decisions.enumerated()), id: \.offset) { offset, d in
+                chip(d, selected: offset == index) { index = offset }
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    /// The measured viewport: the strip sits at its natural width, offset by the
+    /// drag, and is clipped to the width the row offers it.
+    private var chipsViewport: some View {
+        GeometryReader { geo in
+            chipStrip
+                .offset(x: chipOffset)
+                .frame(width: max(0, geo.size.width), alignment: .leading)
+                .clipped()
+        }
+        .frame(height: 22)
+    }
+
+    /// One open decision: "<job> #<pr>" with a red pip; the selected chip carries the orange frame.
+    private func chip(_ d: FleetDecision, selected: Bool, select: @escaping () -> Void) -> some View {
+        Button(action: select) {
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(theme.alert)
+                    .frame(width: 6, height: 6)
+                Text(FleetFormat.decisionChip(d))
+                    .font(selected ? FleetType.mono(size: 11, weight: .medium) : FleetType.mono(size: 11))
+                    .foregroundColor(selected ? theme.text : theme.dim)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 8)
+            .frame(height: 20)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(selected ? theme.hot.opacity(0.10) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(selected ? theme.hot : theme.pillBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// A ‹ / › stepper square beside the chips.
+    private func arrowButton(_ glyph: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(glyph)
+                .font(.system(size: 12))
+                .foregroundColor(theme.text)
+                .frame(width: 20, height: 20)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(theme.pillBorder, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Decision body
+
+    private func decisionBody(_ d: FleetDecision) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            whyRow(d)
+            HStack(alignment: .top, spacing: 14) {
+                questionPane(d)
+                optionsPane(d)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    // MARK: - Why row
+
+    /// The reason in hot mono over a hairline, with the PR link on the right.
+    private func whyRow(_ d: FleetDecision) -> some View {
+        let url = FleetFormat.decisionPullRequestURL(d)
+        return HStack(spacing: 8) {
+            Text(FleetFormat.decisionWhy(d))
+                .font(FleetType.mono(size: 11))
+                .foregroundColor(theme.hot)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button {
+                if let url {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                Text("Open PR ↗")
+                    .font(.system(size: 12))
+                    .foregroundColor(url == nil ? theme.dim : theme.text)
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 11)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(theme.pillBorder, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(url == nil)
+        }
+        .padding(.vertical, 5)
+        .overlay(alignment: .bottom) {
+            theme.line.frame(height: 1)
+        }
+    }
+
+    // MARK: - Question pane
+
+    /// QUESTION / ODIN FOUND switch over the 96 pt findings box, which drags
+    /// open vertically (offset + clip, clamped at the top) and resets on any
+    /// decision or pane change.
+    private func questionPane(_ d: FleetDecision) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                paneButton("QUESTION", active: pane == .question) { pane = .question }
+                paneButton("ODIN FOUND \(d.found.count)", active: pane == .found) { pane = .found }
+            }
+            Group {
+                switch pane {
+                case .question:
+                    Text(FleetFormat.decisionQuestion(d))
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundColor(theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .found:
+                    if d.found.isEmpty {
+                        Text("Odin found nothing to report.")
+                            .font(.system(size: 11))
+                            .foregroundColor(theme.dim)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(d.found.enumerated()), id: \.offset) { _, line in
+                                HStack(alignment: .top, spacing: 6) {
+                                    Rectangle()
+                                        .fill(theme.hot)
+                                        .frame(width: 4, height: 4)
+                                        .padding(.top, 4)
+                                    Text(line)
+                                        .font(FleetType.mono(size: 11))
+                                        .foregroundColor(theme.dim)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .offset(y: paneOffset)
+            .frame(height: 96, alignment: .top)
+            .clipped()
+            .contentShape(Rectangle())
+            .gesture(DragGesture()
+                .onChanged { value in
+                    let start = paneDragStart ?? paneOffset
+                    paneDragStart = start
+                    paneOffset = min(0, start + value.translation.height)
+                }
+                .onEnded { _ in paneDragStart = nil })
+            .onChange(of: index) { paneOffset = 0 }
+            .onChange(of: pane) { paneOffset = 0 }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One underline-tab of the QUESTION / ODIN FOUND switch.
+    private func paneButton(_ title: String, active: Bool, select: @escaping () -> Void) -> some View {
+        Button(action: select) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.9)
+                .foregroundColor(theme.muted)
+                .padding(.bottom, 1)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(active ? theme.accent : Color.clear)
+                        .frame(height: 1)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Options pane
+
+    /// The 262 pt column: one radio row per option, then the send button and the store's error line.
+    private func optionsPane(_ d: FleetDecision) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(d.options, id: \.id) { option in
+                optionRow(d, option)
+            }
+            sendButton(d)
+        }
+        .frame(width: 262, alignment: .leading)
+    }
+
+    /// One answer choice with its radio and Odin's own `MY PICK` tag.
+    private func optionRow(_ d: FleetDecision, _ option: OdinOption) -> some View {
+        let selected = picked[key(d)] == option.id
+        return Button {
+            picked[key(d)] = option.id
+        } label: {
+            HStack(spacing: 8) {
+                if selected {
+                    ZStack {
+                        Circle()
+                            .strokeBorder(theme.accent, lineWidth: 1.5)
+                        Circle()
+                            .fill(theme.accent)
+                            .frame(width: 4.5, height: 4.5)
+                    }
+                    .frame(width: 11, height: 11)
+                } else {
+                    Circle()
+                        .strokeBorder(theme.dim, lineWidth: 1.5)
+                        .frame(width: 11, height: 11)
+                }
+                Text(option.label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(theme.text)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                if option.pick {
+                    Text("MY PICK")
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundColor(theme.accent)
+                }
+            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(selected ? theme.accent.opacity(0.10) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(selected ? theme.accent : theme.pillBorder, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The full-width send button plus the store's error line under it.
+    private func sendButton(_ d: FleetDecision) -> some View {
+        let sending = sendingJob == d.job
+        let sent = sentJob == d.job
+        let on = picked[key(d)] != nil && !sending
+        return VStack(alignment: .leading, spacing: 3) {
+            Button {
+                guard let pickedID = picked[key(d)],
+                      let option = d.options.first(where: { $0.id == pickedID }) else { return }
+                onSend(d, option)
+            } label: {
+                Text(sending ? "Sending…" : sent ? "Decision sent" : "Send decision")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 5)
+                    .foregroundColor(on ? theme.panelTop : theme.off)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(on ? theme.accent : theme.barTrack)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(!on)
+
+            if let error, !sent {
+                Text(error)
+                    .font(FleetType.mono(size: 11))
+                    .foregroundColor(theme.hot)
+                    .lineLimit(2)
+                    .padding(.top, 6)
+            }
+        }
+    }
+}
