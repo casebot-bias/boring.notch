@@ -97,12 +97,12 @@ struct FleetSectionView: View {
 
     // MARK: - Tabs
 
-    /// FLEET / ODIN tabs with the health line on the same line, over the strip's hairline.
+    /// FLEET / DECISIONS tabs with the health line on the same line, over the strip's hairline.
     private var tabsRow: some View {
         let model = store.panelModel
         return HStack(alignment: .center, spacing: 20) {
             tabButton("FLEET", .fleet)
-            tabButton("ODIN", .odin, chip: FleetFormat.actionNeededLabel(model.decisions.count))
+            tabButton("DECISIONS", .odin, chip: FleetFormat.actionNeededLabel(model.decisions.count))
             Spacer(minLength: 8)
             Text(FleetFormat.healthLine(runningTasks: model.runningTaskCount,
                                         linked: model.linkedCount,
@@ -117,7 +117,7 @@ struct FleetSectionView: View {
     }
 
     /// One tab: L2 label (active: `text` semibold; inactive: `dim` medium), an
-    /// action-needed chip on ODIN while a decision is open, and a 2 pt accent
+    /// action-needed chip on DECISIONS while a decision is open, and a 2 pt accent
     /// underline over the strip's hairline when active.
     private func tabButton(_ title: String, _ value: FleetPanelTab, chip: String? = nil) -> some View {
         let current = tab == value
