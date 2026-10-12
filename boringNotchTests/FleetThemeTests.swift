@@ -235,9 +235,9 @@ final class FleetThemeTests: XCTestCase {
                                opacity: 1)
             XCTAssertLessThan(contrast(dimmed, bg), 3.0,
                               "\(skin) a dimmed alert dot would fall under the dot floor - never dim it")
-            // `wire` is also what FleetMiniSignalMap draws the closed map's wires with:
+            // `wire` is what the response map draws its wires with:
             XCTAssertGreaterThanOrEqual(contrast(t.wire, bg), 3.0,
-                                        "\(skin) idle wires, closed map included, at least 3:1")
+                                        "\(skin) idle wires at least 3:1")
             XCTAssertLessThan(contrast(t.line, bg), 3.0,
                               "\(skin) the line hairline is too dark for those wires - do not use it for them")
         }
