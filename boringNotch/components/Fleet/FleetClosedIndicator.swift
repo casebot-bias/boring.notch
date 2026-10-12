@@ -17,7 +17,7 @@ struct FleetClosedIndicator: View {
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
     // Both sides share one fixed width so the camera gap sits on the physical notch's
     // centre; unequal sides would push the gap off-centre and the notch would cover text.
-    // Wide enough for the mini map, its gap and the full "3 critical" / "1 working" strings, so
+    // Wide enough for the full "3 critical" / "1 working" strings and the right-hand speed, so
     // neither side block truncates at 11 pt.
     private var sideWidth: CGFloat { FleetPanelMetrics.closedRowSideWidth }
 
@@ -29,11 +29,8 @@ struct FleetClosedIndicator: View {
         if visible {
             let model = store.panelModel
             HStack(spacing: 0) {
-                // Left block: mini map and working / status text, right-aligned toward the gap
+                // Left block: working / status text, right-aligned toward the gap (no mini map: owner request)
                 HStack(spacing: 10) {
-                    // Compact six-signal map of the agents
-                    FleetMiniSignalMap(lanes: model.agents, origin: model.origin)
-
                     // Working count over link / critical status
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(model.workingCount)")
