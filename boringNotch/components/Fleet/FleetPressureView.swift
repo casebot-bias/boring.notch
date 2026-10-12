@@ -53,10 +53,13 @@ private struct HostRings: View {
 
 /// The cluster's three arcs: outer CPU (r 15), middle GPU (r 11), inner RAM (r 7), each a 3 pt
 /// round-capped stroke that starts at 12 o'clock and runs clockwise to its percent. A ring with no
-/// reading keeps its track only; an offline machine draws no arcs at all.
+/// reading keeps its track only; an offline machine draws no arcs at all. New readings ease in over
+/// 0.3 s unless Reduce Motion is on.
 private struct TripleRing: View {
     let host: FleetHostReading
     let theme: FleetTheme
+    /// Reduce Motion turns the arcs' easing off: they then jump straight to the new reading.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct Spec: Identifiable {
         let kind: FleetRingKind
@@ -80,6 +83,7 @@ private struct TripleRing: View {
                         .stroke(theme.ringArcColor(level, kind: spec.kind),
                                 style: StrokeStyle(lineWidth: Self.ringWidth, lineCap: .round))
                         .frame(width: spec.radius * 2, height: spec.radius * 2)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: fraction)
                 }
             }
         }
