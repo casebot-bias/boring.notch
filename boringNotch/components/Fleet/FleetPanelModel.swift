@@ -36,6 +36,9 @@ struct FleetLane: Identifiable, Equatable {
     /// The device's own decode speed in tokens/s; nil when the device reports none (nova: never).
     var speed: Double?
     var decisions: [FleetDecision] = []
+    /// The machine is on but its activity probe failed (the feed's device `state: "error"`, e.g. its
+    /// model server is switched off): the same rule the web dashboard uses for "telemetry probe failed".
+    var probeFailed: Bool = false
 
     /// The lane's first open decision, kept for the single-decision call sites.
     var decision: FleetDecision? { decisions.first }
@@ -144,6 +147,8 @@ struct FleetPanelModel: Equatable {
     var workingCount: Int { agents.filter { $0.state == .busy }.count }
     var linkedCount: Int { agents.filter(\.isLinked).count }
     var criticalCount: Int { agents.filter { !$0.isLinked }.count }
+    /// Machines that are on but whose model / probe does not answer ("1 down").
+    var downCount: Int { agents.filter { $0.isLinked && $0.probeFailed }.count }
     var isBusy: Bool { workingCount > 0 || origin.state == .busy }
 
     /// Jobs of the busy lanes (case first) in walk order, deduped by key keeping the
@@ -316,7 +321,7 @@ enum FleetPanelModelBuilder {
         let device = device(id: id, in: activity)
         let state: FleetNodeState = machineOnline(machine) ? (deviceBusy(device) ? .busy : .idle) : .offline
         return FleetLane(id: id, label: id, state: state, jobs: toJobs(device?.items ?? []),
-                         speed: device?.speed)
+                         speed: device?.speed, probeFailed: probeFailed(device))
     }
 
     /// nova's state comes from the fleet snapshot's presence and its own cloud jobs,
@@ -339,7 +344,7 @@ enum FleetPanelModelBuilder {
             .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
             ?? (deviceBusy(device) ? .busy : .idle)
         return FleetLane(id: "pika", label: "pika", state: state, jobs: toJobs(device?.items ?? []),
-                         speed: device?.speed)
+                         speed: device?.speed, probeFailed: probeFailed(device))
     }
 
     /// Odin's lane: its state is the plain machine/device rule — busy while a review runs, so
@@ -351,7 +356,8 @@ enum FleetPanelModelBuilder {
         let device = device(id: "odin", in: activity)
         let state: FleetNodeState = machineOnline(machine) ? (deviceBusy(device) ? .busy : .idle) : .offline
         return FleetLane(id: "odin", label: "odin", state: state, jobs: toJobs(device?.items ?? []),
-                         speed: device?.speed, decisions: decisions(from: device?.odin))
+                         speed: device?.speed, decisions: decisions(from: device?.odin),
+                         probeFailed: probeFailed(device))
     }
 
     /// The open decisions of an Odin report, in file order. The feed's open-decisions
@@ -414,6 +420,11 @@ enum FleetPanelModelBuilder {
     /// The cloud-routed items the case runs (nova's raw feed before provider split).
     private static func caseCloudItems(_ activity: ActivitySnapshot?) -> [ActivityItem] {
         (device(id: "case", in: activity)?.items ?? []).filter { $0.device == "cloud" }
+    }
+
+    /// The activity probe of this device failed (`state: "error"`).
+    private static func probeFailed(_ device: DeviceActivity?) -> Bool {
+        device?.state == "error"
     }
 
     private static func machineOnline(_ machine: FleetMachine?) -> Bool {

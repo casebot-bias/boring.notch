@@ -138,15 +138,15 @@ final class FleetFormatTests: XCTestCase {
     // MARK: - closed alert
 
     func testClosedAlertIsHiddenWhenAllIsWell() {
-        XCTAssertNil(FleetFormat.closedAlert(critical: 0, linked: 7, of: 7))
+        XCTAssertNil(FleetFormat.closedAlert(critical: 0, down: 0))
     }
 
-    func testClosedAlertShowsDownMachines() {
-        XCTAssertEqual(FleetFormat.closedAlert(critical: 0, linked: 5, of: 7), "2 down")
+    func testClosedAlertShowsModelDownMachines() {
+        XCTAssertEqual(FleetFormat.closedAlert(critical: 0, down: 2), "2 down")
     }
 
     func testClosedAlertCriticalWinsOverDown() {
-        XCTAssertEqual(FleetFormat.closedAlert(critical: 3, linked: 5, of: 7), "3 critical")
+        XCTAssertEqual(FleetFormat.closedAlert(critical: 3, down: 1), "3 critical")
     }
 
     /// Both sides take the wider text, never past the cap: a short row makes a narrow notch.
@@ -260,7 +260,7 @@ final class FleetFormatTests: XCTestCase {
     /// side block `closedRowTextWidth`; every string those blocks can hold has to fit.
     func testMapAndClosedRowStringsFitTheirMetrics() {
         let detailBudget = FleetPanelMetrics.responseMapColumnWidth - FleetPanelMetrics.responseMapRowOverhead
-        for detail in ["Idle", "Offline", "Working", "1 job", "2 jobs", "39 tok/s"] {
+        for detail in ["Idle", "Offline", "Working", "1 job", "2 jobs", "39 tok/s", "Down"] {
             XCTAssertLessThanOrEqual(
                 monospacedWidth(detail, size: FleetPanelMetrics.minTextSize), detailBudget,
                 "\(detail) does not fit the response-map detail budget")
@@ -367,6 +367,8 @@ final class FleetFormatTests: XCTestCase {
                        "0 tasks · 7/7 linked · All clear")
         XCTAssertEqual(FleetFormat.healthLine(runningTasks: 1, linked: 6, of: 7, critical: 1),
                        "1 task · 6/7 linked · 1 critical")
+        XCTAssertEqual(FleetFormat.healthLine(runningTasks: 1, linked: 7, of: 7, critical: 0, down: 1),
+                       "1 task · 7/7 linked · 1 down")
     }
 
     // MARK: - speed
