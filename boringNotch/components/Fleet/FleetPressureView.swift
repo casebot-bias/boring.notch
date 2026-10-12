@@ -74,7 +74,7 @@ private struct TripleRing: View {
         ZStack {
             ForEach(Self.specs) { spec in
                 Circle()
-                    .stroke(theme.barTrack, style: StrokeStyle(lineWidth: Self.ringWidth))
+                    .stroke(theme.ringTrack, style: StrokeStyle(lineWidth: Self.ringWidth))
                     .frame(width: spec.radius * 2, height: spec.radius * 2)
                 if let fraction = host.arcFraction(spec.kind),
                    let level = FleetFormat.ringLevel(host.value(spec.kind)) {

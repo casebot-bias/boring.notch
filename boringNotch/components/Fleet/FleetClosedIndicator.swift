@@ -34,8 +34,7 @@ struct FleetClosedIndicator: View {
                         + Text(" working")
                         .font(.system(size: 12))
                         .foregroundColor(theme.text)
-                    if let alert = FleetFormat.closedAlert(critical: model.criticalCount,
-                                                           linked: model.linkedCount, of: model.agentCount) {
+                    if let alert = FleetFormat.closedAlert(critical: model.criticalCount, down: model.downCount) {
                         Text("·")
                             .font(.system(size: 12))
                             .foregroundColor(theme.dim)

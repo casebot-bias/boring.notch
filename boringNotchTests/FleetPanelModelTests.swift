@@ -178,6 +178,19 @@ final class FleetPanelModelTests: XCTestCase {
 
     // MARK: - Offline precedence
 
+    /// claire on 2026-10-12: the machine is online but its model server is off, so the activity
+    /// probe reports `state: "error"`. The notch must say so instead of "All clear".
+    func testFailedProbeOnOnlineMachineCountsAsDown() {
+        let a = activityJSON(["{\"device\":\"claire\",\"items\":[],\"state\":\"error\",\"note\":\"fetch failed\"}",
+                              deviceJSON("frank")])
+        let model = FleetPanelModelBuilder.build(fleet: fleet(onlineFleetJSON()), activity: activity(a), fleetLive: true)
+        XCTAssertEqual(model.downCount, 1)
+        XCTAssertEqual(model.criticalCount, 0)
+        XCTAssertEqual(lane(model, "claire")?.probeFailed, true)
+        XCTAssertEqual(lane(model, "frank")?.probeFailed, false)
+        if let claire = lane(model, "claire") { XCTAssertEqual(FleetFormat.responseDetail(claire), "Down") }
+    }
+
     func testOfflineMachineBeatsBusyDevice() {
         let json = fleetJSON([machineJSON("case"), machineJSON("frank"), machineJSON("claire"),
                               machineJSON("ciri"), machineJSON("dali", state: "unreachable"),

@@ -48,6 +48,7 @@ struct FleetTheme {
             nameOff       = rgb(0x93988C)
             jobText       = rgb(0xD4D6CB)
             barTrack      = rgb(0x141513)
+            ringTrack     = rgb(0x34372F)
             pillBorder    = rgb(0x2C3324)
         case .olive:
             panelTop      = rgb(0x1A2013)
@@ -69,6 +70,7 @@ struct FleetTheme {
             nameOff       = rgb(0xB3A989)
             jobText       = rgb(0xD4D6CB)
             barTrack      = rgb(0x0E120A)
+            ringTrack     = rgb(0x36402A)
             pillBorder    = rgb(0x4A3F2C)
         }
     }
@@ -107,6 +109,9 @@ struct FleetTheme {
     let nameOff: Color
     let jobText: Color
     let barTrack: Color
+    /// The footer rings' empty track: lighter than `barTrack` so an empty or low ring still shows
+    /// its full circle (owner could not see the empty rings), still well below the arc colours.
+    let ringTrack: Color
     let pillBorder: Color
 
     var panel: LinearGradient {

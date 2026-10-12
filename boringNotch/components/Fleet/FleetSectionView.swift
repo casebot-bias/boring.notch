@@ -107,9 +107,10 @@ struct FleetSectionView: View {
             Text(FleetFormat.healthLine(runningTasks: model.runningTaskCount,
                                         linked: model.linkedCount,
                                         of: model.agentCount,
-                                        critical: model.criticalCount))
+                                        critical: model.criticalCount,
+                                        down: model.downCount))
                 .font(FleetType.mono(size: 11))
-                .foregroundColor(model.criticalCount > 0 ? theme.hotText : theme.dim)
+                .foregroundColor(model.criticalCount + model.downCount > 0 ? theme.hotText : theme.dim)
                 .lineLimit(1)
         }
         .frame(height: 26)

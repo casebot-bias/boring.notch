@@ -52,6 +52,7 @@ enum FleetFormat {
     /// "Offline" (deliberately short: at 11 pt the map's column truncates anything longer).
     static func responseDetail(_ lane: FleetLane) -> String {
         if lane.hasOpenDecision { return "Needs you" }
+        if lane.probeFailed && lane.state != .offline { return "Down" }
         if let speed = speedDetail(lane) { return speed }
         switch lane.state {
         case .busy:
@@ -139,9 +140,9 @@ enum FleetFormat {
 
     /// The tab strip's health line: "0 tasks · 7/7 linked · All clear" (reuses `linked(_:of:)` and
     /// `status(_:)`; "1 task" is singular).
-    static func healthLine(runningTasks: Int, linked: Int, of total: Int, critical: Int) -> String {
+    static func healthLine(runningTasks: Int, linked: Int, of total: Int, critical: Int, down: Int = 0) -> String {
         let tasks = runningTasks == 1 ? "1 task" : "\(runningTasks) tasks"
-        return "\(tasks) · \(FleetFormat.linked(linked, of: total)) · \(status(critical))"
+        return "\(tasks) · \(FleetFormat.linked(linked, of: total)) · \(status(critical, down: down))"
     }
 
     // MARK: - step
@@ -155,20 +156,20 @@ enum FleetFormat {
 
     // MARK: - status
 
-    /// 0 -> "All clear"; 1 -> "1 critical"; n -> "n critical"
-    static func status(_ criticalCount: Int) -> String {
-        guard criticalCount > 0 else { return "All clear" }
-        return "\(criticalCount) critical"
+    /// 0 -> "All clear"; 1 -> "1 critical"; n -> "n critical". Offline machines (critical) win over
+    /// machines that are on but whose model does not answer ("n down").
+    static func status(_ criticalCount: Int, down: Int = 0) -> String {
+        if criticalCount > 0 { return "\(criticalCount) critical" }
+        if down > 0 { return "\(down) down" }
+        return "All clear"
     }
 
     // MARK: - closed alert
 
-    /// The closed row's optional second item: "3 critical" wins, then "2 down" (machines not
-    /// linked); nil when all is well, so the row stays "1 working" and the notch stays narrow.
-    static func closedAlert(critical: Int, linked: Int, of total: Int) -> String? {
-        if critical > 0 { return status(critical) }
-        if linked < total { return "\(total - linked) down" }
-        return nil
+    /// The closed row's optional second item: "3 critical" (machines offline) wins, then "2 down"
+    /// (machines on, model not answering); nil when all is well, so the row stays "1 working".
+    static func closedAlert(critical: Int, down: Int) -> String? {
+        critical > 0 || down > 0 ? status(critical, down: down) : nil
     }
 
     // MARK: - linked

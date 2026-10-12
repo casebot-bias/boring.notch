@@ -46,6 +46,7 @@ final class FleetThemeTests: XCTestCase {
         assertColor(t.nameOff,   0xB3A989, "olive nameOff")
         assertColor(t.jobText,   0xD4D6CB, "olive jobText")
         assertColor(t.barTrack,  0x0E120A, "olive barTrack")
+        assertColor(t.ringTrack, 0x36402A, "olive ringTrack")
         assertColor(t.pillBorder, 0x4A3F2C, "olive pillBorder")
     }
 
@@ -67,6 +68,7 @@ final class FleetThemeTests: XCTestCase {
         assertColor(t.nameOff,   0x93988C, "black nameOff")
         assertColor(t.jobText,   0xD4D6CB, "black jobText")
         assertColor(t.barTrack,  0x141513, "black barTrack")
+        assertColor(t.ringTrack, 0x34372F, "black ringTrack")
         assertColor(t.pillBorder, 0x2C3324, "black pillBorder")
         XCTAssertEqual(components(t.panelEdge).a, 0, accuracy: 0.001, "black panelEdge is clear")
     }
