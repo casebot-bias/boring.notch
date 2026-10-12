@@ -174,8 +174,9 @@ struct FleetSectionView: View {
 
     /// One triple ring per fleet machine on the left, the bordered Open Fleet
     /// button on the right.
+    /// 10 pt keeps the last machine's reading clear of the button, a 100 % reading included.
     private var footer: some View {
-        HStack(alignment: .center, spacing: 0) {
+        HStack(alignment: .center, spacing: 10) {
             FleetPressureView(hosts: store.panelModel.hosts)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: openFleet) {
