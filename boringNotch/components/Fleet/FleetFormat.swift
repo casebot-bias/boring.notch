@@ -175,6 +175,41 @@ enum FleetFormat {
         min(max(percent / 100, 0), 1)
     }
 
+    // MARK: - rings
+
+    /// The level a footer ring's reading falls in: under 70 % `ok`, 70-89 % `hot`, 90 % and over
+    /// `alert`; nil when there is no reading (that ring then keeps its track only).
+    static func ringLevel(_ percent: Int?) -> FleetRingLevel? {
+        guard let percent else { return nil }
+        if percent >= 90 { return .alert }
+        if percent >= 70 { return .hot }
+        return .ok
+    }
+
+    /// A ring's number as its cluster prints it: "88", or `unknown` ("—") when the machine
+    /// reports none.
+    static func ringValueText(_ percent: Int?) -> String {
+        guard let percent else { return unknown }
+        return "\(percent)"
+    }
+
+    /// The cluster's headline: the highest of the three readings with its type ("RAM 88"), or
+    /// `unknown` ("—") when the machine reports nothing. Ties keep ring order (cpu, gpu, ram).
+    static func ringHeadline(_ host: FleetHostReading) -> String {
+        guard let hottest = host.hottest else { return unknown }
+        return "\(hottest.kind.title) \(ringValueText(hottest.value))"
+    }
+
+    /// The cluster's one sentence, shared by the hover tooltip and the VoiceOver label:
+    /// "frank: CPU 13% · GPU 94% · RAM 86%"; a reading the machine does not report is `unknown`.
+    static func ringDetail(_ host: FleetHostReading) -> String {
+        let parts = FleetRingKind.allCases.map { kind -> String in
+            let value = host.value(kind).map { "\($0)%" } ?? unknown
+            return "\(kind.title) \(value)"
+        }
+        return "\(host.label): " + parts.joined(separator: " · ")
+    }
+
     // MARK: - fleetBaseURL
 
     /// Normalises `Defaults[.fleetBaseURL]` into the URL used to reach the fleet:

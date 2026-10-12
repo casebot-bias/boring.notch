@@ -5,7 +5,7 @@
 //  Behaviour tests for FleetPanelModelBuilder.build: response-map lane order and
 //  states, current-work job order/dedup, the unique-key runningTaskCount, nova's
 //  cloud routing, the fleet-wide tok/s sum (a reported 0 stays 0) and the
-//  cpu/gpu/ram peaks.
+//  per-machine cpu/gpu/ram footer readings.
 //
 import XCTest
 
@@ -82,7 +82,7 @@ final class FleetPanelModelTests: XCTestCase {
 
     // MARK: - Empty snapshots
 
-    func testNilSnapshotsGiveOfflineLanesAndUnknownPeaks() {
+    func testNilSnapshotsGiveOfflineLanesAndUnknownFooterReadings() {
         let model = FleetPanelModelBuilder.build(fleet: nil, activity: nil)
         XCTAssertEqual(model.origin.id, "case")
         XCTAssertEqual(model.origin.label, "case")
@@ -103,12 +103,15 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertNil(model.totalTokPerSec)
         XCTAssertEqual(model.runningTaskCount, 0)
         XCTAssertTrue(model.nowJobs.isEmpty)
-        // Peaks keep their slots even when nobody reports.
-        XCTAssertEqual(model.peaks.map(\.kind), [.cpu, .gpu, .ram])
-        XCTAssertEqual(model.peaks.map(\.id), ["cpu", "gpu", "ram"])
-        for peak in model.peaks {
-            XCTAssertNil(peak.value, "\(peak.kind.rawValue) must report no value")
-            XCTAssertNil(peak.host, "\(peak.kind.rawValue) must report no host")
+        // The footer keeps its five slots even when the fleet never answers: no readings, no arcs.
+        XCTAssertEqual(model.hosts.map(\.label), ["case", "frank", "claire", "dali", "mac"])
+        for host in model.hosts {
+            XCTAssertFalse(host.online, "\(host.id) must be offline")
+            for kind in FleetRingKind.allCases {
+                XCTAssertNil(host.value(kind), "\(host.id) \(kind.rawValue) must report no value")
+                XCTAssertNil(host.arcFraction(kind), "\(host.id) \(kind.rawValue) must draw no arc")
+            }
+            XCTAssertEqual(FleetFormat.ringHeadline(host), "—")
         }
     }
 
@@ -358,31 +361,52 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(FleetFormat.fleetOutput(mixedModel.totalTokPerSec), "12")
     }
 
-    // MARK: - Peaks
+    // MARK: - Footer host readings
 
-    func testPeaksTakeHighestValuePerKindWithHostTitleIncludingMacbook() {
-        let json = fleetJSON([machineJSON("case"),                                   // origin reports nothing
-                              machineJSON("frank", cpu: 10),
-                              machineJSON("claire"), machineJSON("ciri"), machineJSON("odin"),
-                              machineJSON("dali", title: "Dali Studio", cpu: 71, gpu: 96),
-                              machineJSON("macbook", title: "MacBook", cpu: 68.3, gpu: 12, ram: 90)])
+    func testFooterHostsKeepTheOwnersOrderAndLabels() {
+        XCTAssertEqual(FleetPanelModelBuilder.footerHosts.map(\.id), ["case", "frank", "claire", "dali", "macbook"])
+        XCTAssertEqual(FleetPanelModelBuilder.footerHosts.map(\.label), ["case", "frank", "claire", "dali", "mac"])
+        guard let f = fleet(onlineFleetJSON()) else { return }
+        let hosts = FleetPanelModelBuilder.build(fleet: f, activity: nil).hosts
+        XCTAssertEqual(hosts.map(\.id), ["case", "frank", "claire", "dali", "macbook"])
+        XCTAssertEqual(hosts.map(\.label), ["case", "frank", "claire", "dali", "mac"])
+        XCTAssertTrue(hosts.allSatisfy { $0.online }, "every machine in this payload is online")
+        // Online machines that report nothing still hold their slot, with no arcs.
+        XCTAssertTrue(hosts.allSatisfy { $0.cpu == nil && $0.gpu == nil && $0.ram == nil })
+        XCTAssertTrue(hosts.allSatisfy { host in FleetRingKind.allCases.allSatisfy { host.arcFraction($0) == nil } })
+    }
+
+    func testFooterReadingsComeFromTheirOwnMachineOnly() {
+        let json = fleetJSON([machineJSON("case", cpu: 6, gpu: 33, ram: 50),
+                              machineJSON("frank", cpu: 0, gpu: 0, ram: 84),
+                              machineJSON("claire", cpu: 0, gpu: 0, ram: 88),
+                              machineJSON("dali", title: "Dali Studio", cpu: 3, gpu: 0, ram: 57),
+                              machineJSON("macbook", title: "MacBook", cpu: 13, gpu: 13, ram: 75.4)])
         guard let f = fleet(json) else { return }
-        let peaks = FleetPanelModelBuilder.build(fleet: f, activity: nil).peaks
-        XCTAssertEqual(peaks.map(\.kind), [.cpu, .gpu, .ram])
-        XCTAssertEqual(peaks.map(\.id), ["cpu", "gpu", "ram"])
-        XCTAssertEqual(peaks[0].value ?? 0, 71, accuracy: 0.001)
-        XCTAssertEqual(peaks[0].host, "Dali Studio")                             // host is the machine title
-        XCTAssertEqual(peaks[1].value ?? 0, 96, accuracy: 0.001)
-        XCTAssertEqual(peaks[1].host, "Dali Studio")
-        XCTAssertEqual(peaks[2].value ?? 0, 90, accuracy: 0.001)
-        XCTAssertEqual(peaks[2].host, "MacBook")                                  // macbook is not an agent but still peaks
-        XCTAssertEqual(FleetPeak.Kind.allCases.map(\.title), ["CPU", "GPU", "RAM"])
-        // A fleet where nobody reports anything keeps every peak empty.
-        guard let bare = fleet(onlineFleetJSON()) else { return }
-        for peak in FleetPanelModelBuilder.build(fleet: bare, activity: nil).peaks {
-            XCTAssertNil(peak.value, "\(peak.kind.rawValue) must report no value")
-            XCTAssertNil(peak.host, "\(peak.kind.rawValue) must report no host")
+        let hosts = FleetPanelModelBuilder.build(fleet: f, activity: nil).hosts
+        XCTAssertEqual(hosts.map(\.cpu), [6, 0, 0, 3, 13])          // not a fleet-wide peak: each machine keeps its own
+        XCTAssertEqual(hosts.map(\.gpu), [33, 0, 0, 0, 13])
+        XCTAssertEqual(hosts.map(\.ram), [50, 84, 88, 57, 75])      // 75.4 shows as 75
+        XCTAssertEqual(hosts[4].label, "mac")                        // the machine title never leaks into the label
+        // A reported 0 % is a reading, not a gap: it keeps its level and a zero sweep.
+        XCTAssertEqual(hosts[1].arcFraction(.gpu), 0)
+        XCTAssertEqual(FleetFormat.ringLevel(hosts[1].gpu), .ok)
+    }
+
+    func testOfflineMachineDrawsNoArcsButKeepsItsLastReadings() {
+        let json = fleetJSON([machineJSON("frank", state: "unreachable", cpu: 13, gpu: 94, ram: 86)])
+        guard let f = fleet(json) else { return }
+        let hosts = FleetPanelModelBuilder.build(fleet: f, activity: nil).hosts
+        let frank = hosts[1]
+        XCTAssertFalse(frank.online)
+        XCTAssertEqual(frank.ram, 86, "the last reported value stays readable as the cluster's text")
+        for kind in FleetRingKind.allCases {
+            XCTAssertNil(frank.arcFraction(kind), "an offline machine must draw no arc for \(kind.rawValue)")
         }
+        let caseHost = hosts[0]
+        XCTAssertFalse(caseHost.online, "a machine the payload never mentions is offline")
+        XCTAssertNil(caseHost.cpu)
+        XCTAssertEqual(FleetFormat.ringHeadline(caseHost), "—")
     }
 
     // MARK: - Malformed items

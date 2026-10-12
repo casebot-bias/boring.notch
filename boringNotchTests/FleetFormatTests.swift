@@ -404,4 +404,44 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.clampedIndex(-2, count: 4), 0)
         XCTAssertEqual(FleetFormat.clampedIndex(2, count: 0), 0)
     }
+
+    // MARK: - Footer rings
+
+    func testRingLevelSplitsOkHotAlertAtTheDesignBoundaries() {
+        XCTAssertNil(FleetFormat.ringLevel(nil))
+        XCTAssertEqual(FleetFormat.ringLevel(0), .ok)
+        XCTAssertEqual(FleetFormat.ringLevel(69), .ok)
+        XCTAssertEqual(FleetFormat.ringLevel(70), .hot)
+        XCTAssertEqual(FleetFormat.ringLevel(89), .hot)
+        XCTAssertEqual(FleetFormat.ringLevel(90), .alert)
+        XCTAssertEqual(FleetFormat.ringLevel(100), .alert)
+    }
+
+    func testRingValueTextPrintsThePercentAndDashesWhenMissing() {
+        XCTAssertEqual(FleetFormat.ringValueText(88), "88")
+        XCTAssertEqual(FleetFormat.ringValueText(0), "0")
+        XCTAssertEqual(FleetFormat.ringValueText(nil), "—")
+    }
+
+    func testRingHeadlineNamesTheHighestReadingWithItsType() {
+        let gpuTop = FleetHostReading(id: "frank", label: "frank", cpu: 13, gpu: 94, ram: 86, online: true)
+        XCTAssertEqual(FleetFormat.ringHeadline(gpuTop), "GPU 94")
+        let ramTop = FleetHostReading(id: "claire", label: "claire", cpu: 0, gpu: 0, ram: 88, online: true)
+        XCTAssertEqual(FleetFormat.ringHeadline(ramTop), "RAM 88")
+        // A reported 0 is still a reading: zeroes print as "CPU 0", never as the dash.
+        let zeros = FleetHostReading(id: "case", label: "case", cpu: 0, gpu: 0, ram: 0, online: true)
+        XCTAssertEqual(FleetFormat.ringHeadline(zeros), "CPU 0")
+        // Ties keep ring order: cpu, then gpu, then ram.
+        let tie = FleetHostReading(id: "dali", label: "dali", cpu: 88, gpu: 88, ram: 50, online: true)
+        XCTAssertEqual(FleetFormat.ringHeadline(tie), "CPU 88")
+        let missing = FleetHostReading(id: "mac", label: "mac", cpu: nil, gpu: nil, ram: nil, online: false)
+        XCTAssertEqual(FleetFormat.ringHeadline(missing), "—")
+    }
+
+    func testRingDetailListsAllThreeNumbersForTheTooltipAndVoiceOver() {
+        let host = FleetHostReading(id: "frank", label: "frank", cpu: 13, gpu: 94, ram: 86, online: true)
+        XCTAssertEqual(FleetFormat.ringDetail(host), "frank: CPU 13% · GPU 94% · RAM 86%")
+        let gapped = FleetHostReading(id: "mac", label: "mac", cpu: nil, gpu: 12, ram: nil, online: true)
+        XCTAssertEqual(FleetFormat.ringDetail(gapped), "mac: CPU — · GPU 12% · RAM —")
+    }
 }
