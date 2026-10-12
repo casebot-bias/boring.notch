@@ -66,6 +66,26 @@ struct FleetClient {
         }
     }
 
+    /// The Case jobs' heartbeat: `GET <base>/api/jobs`. A dashboard that does not know the route
+    /// answers 404, which is `nil` (the panel then reads exactly as before); any other failure
+    /// throws, and the store keeps its last good value.
+    func fetchJobs() async throws -> CaseJobsSnapshot? {
+        let url = baseURL.appendingPathComponent("api/jobs")
+        let (data, response) = try await request(url)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw FleetClientError.badStatus(0)
+        }
+        if httpResponse.statusCode == 404 { return nil }
+        guard httpResponse.statusCode == 200 else {
+            throw FleetClientError.badStatus(httpResponse.statusCode)
+        }
+        do {
+            return try CaseJobsSnapshot.decode(data)
+        } catch {
+            throw FleetClientError.decoding(error.localizedDescription)
+        }
+    }
+
     /// Answers one open Odin decision: `POST <base>/api/odin/decision` with the contract's JSON
     /// body and the notch's client header. Rides `decisionTimeout`, not the 3 s poll `timeout`,
     /// because the server may run a 60 s command before it answers. 200 decodes the answer; every

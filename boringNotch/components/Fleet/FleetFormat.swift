@@ -79,8 +79,84 @@ enum FleetFormat {
         case "round_limit":
             guard let round else { return "round limit reached" }
             return "\(round) fix rounds used"
+        case "no_commit": return "fix round, no new commit"
+        case "qa_skipped": return "review could not run"
+        case "watchdog_stalled": return "job stuck after restart"
         default: return "decision needed"
         }
+    }
+
+    // MARK: - case jobs
+
+    /// A job with no commit for longer than this reads amber.
+    static let commitStaleMinutes = 60
+
+    /// The watchdog badge's colour family: amber for a nudge or restart, red for a stuck job.
+    enum CaseJobBadgeLevel: Equatable { case amber, red }
+
+    struct CaseJobBadge: Equatable {
+        var text: String
+        var level: CaseJobBadgeLevel
+    }
+
+    /// One running Case job as a single line: the name, `2/5`, `12m` and a badge when the watchdog
+    /// is not ok. A field the feed leaves out leaves its part out too.
+    struct CaseJobLine: Equatable {
+        var name: String
+        var items: String?
+        var commit: String?
+        var commitIsStale: Bool
+        var badge: CaseJobBadge?
+    }
+
+    /// Minutes since the last commit, short: 12 -> "12m", 65 -> "1h05m", 1500 -> "1d". nil -> nil.
+    static func commitAge(minutes: Int?) -> String? {
+        guard let minutes else { return nil }
+        let m = max(0, minutes)
+        if m < 60 { return "\(m)m" }
+        if m < 1440 { return "\(m / 60)h" + String(format: "%02d", m % 60) + "m" }
+        return "\(m / 1440)d"
+    }
+
+    /// The watchdog's badge: nudged -> NUDGED, restarted -> RESTART (amber), escalated -> STUCK (red).
+    /// ok, none, missing or an unknown state -> no badge.
+    static func caseJobBadge(_ watchdog: CaseJobWatchdog?) -> CaseJobBadge? {
+        switch watchdog?.state {
+        case "nudged": return CaseJobBadge(text: "NUDGED", level: .amber)
+        case "restarted": return CaseJobBadge(text: "RESTART", level: .amber)
+        case "escalated": return CaseJobBadge(text: "STUCK", level: .red)
+        default: return nil
+        }
+    }
+
+    static func caseJobLine(_ job: CaseJob) -> CaseJobLine {
+        var items: String?
+        if let total = job.itemsTotal, total > 0 {
+            items = "\(min(max(0, job.itemsPassed ?? 0), total))/\(total)"
+        }
+        return CaseJobLine(name: job.job,
+                           items: items,
+                           commit: commitAge(minutes: job.minutesSinceCommit),
+                           commitIsStale: (job.minutesSinceCommit ?? 0) > commitStaleMinutes,
+                           badge: caseJobBadge(job.watchdog))
+    }
+
+    /// The decision detail's proof readout: "proof 2/4", plus "1 blocking" while any item blocks.
+    struct CaseJobProofLine: Equatable {
+        var text: String
+        var blocking: String?
+    }
+
+    static func proofLine(_ proof: CaseJobProof?) -> CaseJobProofLine? {
+        guard let proof, let total = proof.total, total > 0 else { return nil }
+        let blocking = (proof.blocking ?? 0) > 0 ? "\(proof.blocking ?? 0) blocking" : nil
+        return CaseJobProofLine(text: "proof \(min(max(0, proof.proven ?? 0), total))/\(total)", blocking: blocking)
+    }
+
+    /// The proof line for a decision's job, when the jobs feed knows that job.
+    static func decisionProof(_ decision: FleetDecision, jobs: [CaseJob]) -> CaseJobProofLine? {
+        guard let name = decision.job, !name.isEmpty else { return nil }
+        return proofLine(jobs.first { $0.job == name }?.proof)
     }
 
     /// Odin's round limit, as the contract's `round r of 4` suffix reads it.
@@ -323,6 +399,31 @@ enum FleetPanelMetrics {
     /// One side's width: the wider of the two texts, never past the cap.
     static func closedRowSide(left: CGFloat, right: CGFloat) -> CGFloat {
         min(closedRowSideWidth, max(left, right))
+    }
+    /// The current-work column: 604 pt section, less the 18 pt lead and 1 pt rule, the 292 pt map and
+    /// the 20 + 1 + 20 pt around the hairline.
+    static let workColumnWidth: CGFloat = 252
+    /// Running Case jobs get at most this many heartbeat lines; each line is one 12 pt row.
+    static let caseJobLineLimit = 2
+    static let caseJobLineHeight: CGFloat = 16
+    /// The least width the job name keeps; the items, age and badge take the rest.
+    static let caseJobMinNameWidth: CGFloat = 90
+    /// Gap between the parts of a job line.
+    static let caseJobLineSpacing: CGFloat = 6
+    /// The height the work column has: the 300 pt panel less header, tabs, top pad, footer and gaps.
+    static let workColumnHeight: CGFloat = 186
+    /// What the work column stacks: head row, one preview job (3 lines, label up to 2) and the more link.
+    static let workHeadHeight: CGFloat = 24
+    static let workPreviewHeight: CGFloat = 65
+    static let workPreviewGap: CGFloat = 15
+    static let workMoreLinkHeight: CGFloat = 15
+    /// How many preview jobs sit under the heartbeat lines: two as before, one while lines show.
+    static func previewLimit(caseJobLines: Int) -> Int { caseJobLines > 0 ? 1 : 2 }
+    /// The column's content height for that many heartbeat lines and the matching previews.
+    static func workContentHeight(caseJobLines: Int, previews: Int, moreLink: Bool) -> CGFloat {
+        let lines = CGFloat(caseJobLines) * caseJobLineHeight + (caseJobLines > 0 ? 8 : 0)
+        let rows = CGFloat(previews) * workPreviewHeight + CGFloat(max(0, previews - 1)) * workPreviewGap
+        return workHeadHeight + lines + rows + (moreLink ? workMoreLinkHeight : 0)
     }
     /// A pulsing status dot breathes by size, never by opacity: dimming an alert dot would drop it
     /// under the 3:1 dot floor. The busy cells keep their own dim pulse.

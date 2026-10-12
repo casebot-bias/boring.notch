@@ -18,6 +18,8 @@ final class FleetStore: ObservableObject {
 
     @Published private(set) var fleet: FleetSnapshot?
     @Published private(set) var activity: ActivitySnapshot?
+    /// The Case jobs' heartbeat (`/api/jobs`); nil while the dashboard has none (or is too old to know it).
+    @Published private(set) var caseJobs: CaseJobsSnapshot?
     @Published private(set) var isReachable: Bool = false
     @Published private(set) var lastUpdated: Date?
 
@@ -30,7 +32,8 @@ final class FleetStore: ObservableObject {
     var panelModel: FleetPanelModel {
         // The rings read the fleet payload's own freshness, never the shared reachability, which an
         // activity answer can set back to true while the fleet poll keeps failing.
-        let model = FleetPanelModelBuilder.build(fleet: fleet, activity: activity, fleetLive: freshness.fleetIsLive)
+        let model = FleetPanelModelBuilder.build(fleet: fleet, activity: activity, fleetLive: freshness.fleetIsLive,
+                                                 caseJobs: caseJobs)
         return model.droppingDecisions(jobs: answeredJobs)
     }
 
@@ -193,6 +196,7 @@ final class FleetStore: ObservableObject {
     private func fleetLoop() async {
         while !Task.isCancelled {
             await fetchFleet()
+            await fetchJobs()
             let interval = notchOpen ? Self.fleetIntervalOpen : Self.fleetIntervalClosed
             do {
                 try await Task.sleep(nanoseconds: Self.nanoseconds(interval))
@@ -229,6 +233,17 @@ final class FleetStore: ObservableObject {
             if !Task.isCancelled {
                 markFailure(.fleet)
             }
+        }
+    }
+
+    /// The jobs heartbeat rides the fleet cadence. A 404 (old dashboard) clears it; any other failure
+    /// keeps the last good value. It never touches reachability: the panel's health reads the other feeds.
+    private func fetchJobs() async {
+        guard let baseURL = baseURL() else { return }
+        do {
+            caseJobs = try await FleetClient(baseURL: baseURL, session: session).fetchJobs()
+        } catch {
+            // Keep the last good value.
         }
     }
 

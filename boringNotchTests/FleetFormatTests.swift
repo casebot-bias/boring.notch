@@ -214,6 +214,125 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.decisionReason("something_new", round: nil), "decision needed")
     }
 
+    // MARK: - Case jobs: reasons, line, badge, proof
+
+    func testNewDecisionReasonsReadInPlainWords() {
+        XCTAssertEqual(FleetFormat.decisionReason("no_commit", round: 2), "fix round, no new commit")
+        XCTAssertEqual(FleetFormat.decisionReason("qa_skipped", round: nil), "review could not run")
+        XCTAssertEqual(FleetFormat.decisionReason("watchdog_stalled", round: nil), "job stuck after restart")
+        XCTAssertEqual(FleetFormat.decisionWhy(FleetDecision(reason: "no_commit", round: 2)),
+                       "fix round, no new commit · round 2 of 4")
+    }
+
+    func testCommitAgeIsShort() {
+        XCTAssertNil(FleetFormat.commitAge(minutes: nil))
+        XCTAssertEqual(FleetFormat.commitAge(minutes: 0), "0m")
+        XCTAssertEqual(FleetFormat.commitAge(minutes: 12), "12m")
+        XCTAssertEqual(FleetFormat.commitAge(minutes: 59), "59m")
+        XCTAssertEqual(FleetFormat.commitAge(minutes: 60), "1h00m")
+        XCTAssertEqual(FleetFormat.commitAge(minutes: 125), "2h05m")
+        XCTAssertEqual(FleetFormat.commitAge(minutes: 1500), "1d")
+        XCTAssertEqual(FleetFormat.commitAge(minutes: -3), "0m")
+    }
+
+    func testWatchdogBadgeRules() {
+        func badge(_ state: String?) -> FleetFormat.CaseJobBadge? {
+            FleetFormat.caseJobBadge(CaseJobWatchdog(state: state))
+        }
+        XCTAssertEqual(badge("nudged"), FleetFormat.CaseJobBadge(text: "NUDGED", level: .amber))
+        XCTAssertEqual(badge("restarted"), FleetFormat.CaseJobBadge(text: "RESTART", level: .amber))
+        XCTAssertEqual(badge("escalated"), FleetFormat.CaseJobBadge(text: "STUCK", level: .red))
+        XCTAssertNil(badge("ok"))
+        XCTAssertNil(badge("none"))
+        XCTAssertNil(badge("something_new"))
+        XCTAssertNil(badge(nil))
+        XCTAssertNil(FleetFormat.caseJobBadge(nil))
+    }
+
+    func testCaseJobLineFullAndPartial() {
+        let full = CaseJob(job: "notch-job-heartbeat", running: true, itemsPassed: 2, itemsTotal: 5,
+                           minutesSinceCommit: 12, watchdog: CaseJobWatchdog(state: "nudged"))
+        XCTAssertEqual(FleetFormat.caseJobLine(full),
+                       FleetFormat.CaseJobLine(name: "notch-job-heartbeat", items: "2/5", commit: "12m",
+                                               commitIsStale: false,
+                                               badge: FleetFormat.CaseJobBadge(text: "NUDGED", level: .amber)))
+        let bare = FleetFormat.caseJobLine(CaseJob(job: "a", running: true))
+        XCTAssertEqual(bare, FleetFormat.CaseJobLine(name: "a", items: nil, commit: nil,
+                                                     commitIsStale: false, badge: nil))
+        // A total of zero or a passed count above the total never reads oddly.
+        XCTAssertNil(FleetFormat.caseJobLine(CaseJob(job: "a", itemsPassed: 0, itemsTotal: 0)).items)
+        XCTAssertEqual(FleetFormat.caseJobLine(CaseJob(job: "a", itemsPassed: 9, itemsTotal: 5)).items, "5/5")
+        XCTAssertEqual(FleetFormat.caseJobLine(CaseJob(job: "a", itemsTotal: 5)).items, "0/5")
+    }
+
+    func testCommitAgeTurnsAmberAfterSixtyMinutes() {
+        func stale(_ minutes: Int?) -> Bool {
+            FleetFormat.caseJobLine(CaseJob(job: "a", minutesSinceCommit: minutes)).commitIsStale
+        }
+        XCTAssertFalse(stale(nil))
+        XCTAssertFalse(stale(12))
+        XCTAssertFalse(stale(60))
+        XCTAssertTrue(stale(61))
+        XCTAssertTrue(stale(300))
+    }
+
+    func testProofLine() {
+        XCTAssertEqual(FleetFormat.proofLine(CaseJobProof(total: 4, proven: 2, missing: 2, blocking: 0)),
+                       FleetFormat.CaseJobProofLine(text: "proof 2/4", blocking: nil))
+        XCTAssertEqual(FleetFormat.proofLine(CaseJobProof(total: 4, proven: 2, missing: 2, blocking: 1)),
+                       FleetFormat.CaseJobProofLine(text: "proof 2/4", blocking: "1 blocking"))
+        XCTAssertNil(FleetFormat.proofLine(nil))
+        XCTAssertNil(FleetFormat.proofLine(CaseJobProof(total: 0, proven: 0, missing: 0, blocking: 0)))
+        XCTAssertNil(FleetFormat.proofLine(CaseJobProof()))
+    }
+
+    func testDecisionProofComesFromTheMatchingJob() {
+        let jobs = [CaseJob(job: "other", proof: CaseJobProof(total: 3, proven: 3, missing: 0, blocking: 0)),
+                    CaseJob(job: "mine", proof: CaseJobProof(total: 4, proven: 2, missing: 2, blocking: 1))]
+        XCTAssertEqual(FleetFormat.decisionProof(FleetDecision(job: "mine"), jobs: jobs)?.text, "proof 2/4")
+        XCTAssertNil(FleetFormat.decisionProof(FleetDecision(job: "unknown"), jobs: jobs))
+        XCTAssertNil(FleetFormat.decisionProof(FleetDecision(), jobs: jobs))
+        XCTAssertNil(FleetFormat.decisionProof(FleetDecision(job: "mine"), jobs: []))
+    }
+
+    // MARK: - Case jobs: the strings must fit
+
+    /// A job line is name + `12/12` + `1h59m` + `RESTART`; the right part has to leave the name its floor.
+    func testLongestCaseJobLineLeavesTheNameItsFloor() {
+        let size = FleetPanelMetrics.minTextSize
+        let right = ["12/12", "1h59m", "RESTART"]
+        let width = right.reduce(CGFloat(0)) { $0 + monospacedWidth($1, size: size) }
+            + FleetPanelMetrics.caseJobLineSpacing * CGFloat(right.count)
+        XCTAssertLessThanOrEqual(width, FleetPanelMetrics.workColumnWidth - FleetPanelMetrics.caseJobMinNameWidth,
+                                 "items, age and badge leave the job name its floor")
+    }
+
+    /// The decision detail's why row: the longest reason, the proof readout and the PR button share one line.
+    func testWhyRowFitsReasonProofAndPullRequestButton() {
+        let size = FleetPanelMetrics.minTextSize
+        let rowWidth: CGFloat = 604 - 19
+        let prButton: CGFloat = 100
+        let proof = ["proof 12/12", "12 blocking"]
+        let proofWidth = proof.reduce(CGFloat(0)) { $0 + monospacedWidth($1, size: size) } + 8 * 3
+        for reason in ["repeat_finding", "no_progress", "round_limit", "no_commit", "qa_skipped", "watchdog_stalled",
+                       "product_choice"] {
+            let why = FleetFormat.decisionWhy(FleetDecision(reason: reason, round: 4))
+            XCTAssertLessThanOrEqual(monospacedWidth(why, size: size) + proofWidth + prButton, rowWidth,
+                                     "\(why) does not fit the why row with proof")
+        }
+    }
+
+    /// The heartbeat lines and the shorter preview list stay inside the column's height: the notch does not grow.
+    func testWorkColumnStaysInItsHeight() {
+        for lines in 0...FleetPanelMetrics.caseJobLineLimit {
+            let previews = FleetPanelMetrics.previewLimit(caseJobLines: lines)
+            XCTAssertLessThanOrEqual(
+                FleetPanelMetrics.workContentHeight(caseJobLines: lines, previews: previews, moreLink: true),
+                FleetPanelMetrics.workColumnHeight, "\(lines) heartbeat lines do not fit the column")
+        }
+        XCTAssertEqual(FleetPanelMetrics.previewLimit(caseJobLines: 0), 2, "no feed: the column reads as before")
+    }
+
     // MARK: - fleetBaseURL
 
     func testFleetBaseURLStripsOneTrailingSlash() {
