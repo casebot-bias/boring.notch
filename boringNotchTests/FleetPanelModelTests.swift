@@ -54,6 +54,24 @@ final class FleetPanelModelTests: XCTestCase {
         return "{\"generatedAt\":\"2026-10-02T07:00:00.000Z\",\"devices\":[\(devices.joined(separator: ","))]}"
     }
 
+    // MARK: - Case jobs
+
+    func testCaseJobsRideTheModelAndOnlyRunningOnesAreListed() {
+        let jobs = CaseJobsSnapshot(jobs: [CaseJob(job: "a", running: true), CaseJob(job: "b", running: false),
+                                           CaseJob(job: "c", running: true)])
+        let model = FleetPanelModelBuilder.build(fleet: nil, activity: nil, fleetLive: false, caseJobs: jobs)
+        XCTAssertEqual(model.caseJobs.map(\.job), ["a", "b", "c"])
+        XCTAssertEqual(model.runningCaseJobs.map(\.job), ["a", "c"], "the feed's order, running only")
+    }
+
+    func testWithoutTheJobsFeedThePanelModelIsUnchanged() {
+        let plain = FleetPanelModelBuilder.build(fleet: nil, activity: nil, fleetLive: false)
+        let nilFeed = FleetPanelModelBuilder.build(fleet: nil, activity: nil, fleetLive: false, caseJobs: nil)
+        XCTAssertEqual(plain, nilFeed)
+        XCTAssertEqual(plain.caseJobs, [])
+        XCTAssertEqual(plain.runningCaseJobs, [])
+    }
+
     /// case, frank, claire, ciri, dali, macbook, odin; all online, no readings.
     /// There is no "nova" machine: the nova lane is the pool of openrouter cloud
     /// jobs the case runs, so it deliberately has no fleet machine here.

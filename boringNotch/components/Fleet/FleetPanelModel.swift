@@ -139,6 +139,11 @@ struct FleetPanelModel: Equatable {
     /// One reading per footer machine, always in `FleetPanelModelBuilder.footerHosts` order. A reading
     /// is live only while the fleet feed's last poll answered and its own machine reports online.
     var hosts: [FleetHostReading]
+    /// The Case jobs' heartbeat (`/api/jobs`), running ones first; empty without that feed.
+    var caseJobs: [CaseJob] = []
+
+    /// The Case jobs that are running now, in the feed's order.
+    var runningCaseJobs: [CaseJob] { caseJobs.filter(\.running) }
 
     /// case first, then the agents.
     var lanes: [FleetLane] { [origin] + agents }
@@ -279,7 +284,8 @@ enum FleetPanelModelBuilder {
 
     /// `fleetLive` is the store's reachability: false once a poll has failed, so a retained snapshot
     /// reads as stale instead of live.
-    static func build(fleet: FleetSnapshot?, activity: ActivitySnapshot?, fleetLive: Bool) -> FleetPanelModel {
+    static func build(fleet: FleetSnapshot?, activity: ActivitySnapshot?, fleetLive: Bool,
+                      caseJobs: CaseJobsSnapshot? = nil) -> FleetPanelModel {
         // case runs its own jobs AND the delegated ones routed to frank/claire/dali.
         let origin = machineLane(id: "case", fleet: fleet, activity: activity)
         let agents: [FleetLane] = [
@@ -309,7 +315,8 @@ enum FleetPanelModelBuilder {
                                // When neither sends a block, the median of the reporting devices is used, so
                                // the header is never a sum.
                                speed: speed,
-                               hosts: hosts(from: fleet, live: fleetLive))
+                               hosts: hosts(from: fleet, live: fleetLive),
+                               caseJobs: caseJobs?.jobs ?? [])
     }
 
     // MARK: - Lane builders

@@ -61,6 +61,63 @@ final class FleetClientTests: XCTestCase {
         )
     }
 
+    func testFetchJobsDecodesTheFeed() async throws {
+        let client = makeClient { _ in
+            (200, Data(#"{"generatedAt":"x","jobs":[{"job":"a","running":true,"itemsPassed":1,"itemsTotal":3}]}"#.utf8))
+        }
+        let snapshot = try await client.fetchJobs()
+        XCTAssertEqual(StubURLProtocol.lastRequest?.url?.path, "/api/jobs")
+        XCTAssertEqual(StubURLProtocol.lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(snapshot?.jobs.map(\.job), ["a"])
+        XCTAssertEqual(snapshot?.jobs.first?.itemsTotal, 3)
+    }
+
+    func testFetchJobsOn404IsNilSoAnOldDashboardLeavesThePanelAlone() async throws {
+        let client = makeClient { _ in (404, Data("Not Found".utf8)) }
+        let snapshot = try await client.fetchJobs()
+        XCTAssertNil(snapshot)
+    }
+
+    func testFetchJobsThrowsOnOtherFailures() async throws {
+        let client = makeClient { _ in (500, Data()) }
+        do {
+            _ = try await client.fetchJobs()
+            XCTFail("expected a failure")
+        } catch let error as FleetClientError {
+            XCTAssertEqual(error, .badStatus(500))
+        }
+        let garbled = makeClient { _ in (200, Data("not json".utf8)) }
+        do {
+            _ = try await garbled.fetchJobs()
+            XCTFail("expected a decoding failure")
+        } catch let error as FleetClientError {
+            guard case .decoding = error else { return XCTFail("expected decoding, got \(error)") }
+        }
+    }
+
+    /// A decision's own `rerun` option reaches the notch's list and goes back to the API as its id.
+    func testRerunOptionRoundTripsFromTheFeedToTheRequest() async throws {
+        let json = """
+        {"generatedAt":"x","devices":[{"device":"odin","items":[],"state":"ok","odin":{"open":[
+          {"state":"needs_decision","job":"notch-job-heartbeat","pr":9,"reason":"qa_skipped",
+           "options":[{"id":"rerun","label":"Run the review again","pick":true},
+                      {"id":"stop","label":"Stop, close the PR","pick":false}]}]}}]}
+        """
+        let activity = try ActivitySnapshot.decode(Data(json.utf8))
+        let model = FleetPanelModelBuilder.build(fleet: nil, activity: activity, fleetLive: false)
+        let decision = try XCTUnwrap(model.decisions.first)
+        XCTAssertEqual(decision.reason, "qa_skipped")
+        XCTAssertEqual(decision.options.map(\.id), ["rerun", "stop"], "the decision's own options, not the defaults")
+        let option = try XCTUnwrap(decision.options.first { $0.id == "rerun" })
+        XCTAssertEqual(option.label, "Run the review again")
+
+        let client = makeClient { _ in (200, Data(#"{"ok":true,"action":"followup"}"#.utf8)) }
+        _ = try await client.sendDecision(job: try XCTUnwrap(decision.job), option: option.id)
+        let body = try XCTUnwrap(StubURLProtocol.lastBody)
+        XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: body),
+                       ["job": "notch-job-heartbeat", "option": "rerun"])
+    }
+
     func testSendDecisionPostsTheContractRequest() async throws {
         let client = makeClient { _ in
             (200, Data(#"{"ok":true,"job":"ciri-skill-trim","option":"trim","action":"followup"}"#.utf8))

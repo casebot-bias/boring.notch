@@ -368,3 +368,122 @@ struct ActivitySnapshot: Codable, Equatable {
         return try JSONDecoder().decode(ActivitySnapshot.self, from: data)
     }
 }
+
+// MARK: - Case jobs (`/api/jobs`)
+
+private extension KeyedDecodingContainer {
+    /// A string, or nil when the key is missing or holds anything else.
+    func looseString(_ key: Key) -> String? {
+        (try? decodeIfPresent(String.self, forKey: key)) ?? nil
+    }
+
+    /// A whole number the dashboard may send as 3 or 3.0; anything else reads as missing.
+    func looseInt(_ key: Key) -> Int? {
+        if let value = (try? decodeIfPresent(Int.self, forKey: key)) ?? nil { return value }
+        if let value = (try? decodeIfPresent(Double.self, forKey: key)) ?? nil, value.isFinite {
+            return Int(value.rounded())
+        }
+        return nil
+    }
+}
+
+/// The watchdog's last word on a job: `ok`, `nudged`, `restarted`, `escalated` or `none`.
+struct CaseJobWatchdog: Equatable {
+    var state: String?
+    var at: String?
+    var detail: String?
+}
+
+/// How many of a job's spec items have proof (`blocking` ones stop the job from passing).
+struct CaseJobProof: Equatable {
+    var total: Int?
+    var proven: Int?
+    var missing: Int?
+    var blocking: Int?
+}
+
+/// One Case job as the fleet dashboard's `GET /api/jobs` reports it. Every field but the name is
+/// optional: an older or newer dashboard may leave any of them out.
+struct CaseJob: Equatable, Identifiable {
+    var job: String = ""
+    var running: Bool = false
+    var startedAt: String?
+    var itemsPassed: Int?
+    var itemsTotal: Int?
+    var currentItemText: String?
+    var lastCommitAt: String?
+    var lastActivityAt: String?
+    var minutesSinceCommit: Int?
+    var watchdog: CaseJobWatchdog?
+    var proof: CaseJobProof?
+
+    var id: String { job }
+}
+
+extension CaseJobWatchdog: Decodable {
+    private enum CodingKeys: String, CodingKey { case state, at, detail }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(state: c.looseString(.state), at: c.looseString(.at), detail: c.looseString(.detail))
+    }
+}
+
+extension CaseJobProof: Decodable {
+    private enum CodingKeys: String, CodingKey { case total, proven, missing, blocking }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(total: c.looseInt(.total), proven: c.looseInt(.proven),
+                  missing: c.looseInt(.missing), blocking: c.looseInt(.blocking))
+    }
+}
+
+extension CaseJob: Decodable {
+    private enum CodingKeys: String, CodingKey {
+        case job, running, startedAt, itemsPassed, itemsTotal, currentItem, lastCommitAt,
+             lastActivityAt, minutesSinceCommit, watchdog, proof
+    }
+
+    private struct CurrentItem: Decodable { var text: String? }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let item = (try? c.decodeIfPresent(CurrentItem.self, forKey: .currentItem)) ?? nil
+        self.init(job: c.looseString(.job) ?? "",
+                  running: ((try? c.decodeIfPresent(Bool.self, forKey: .running)) ?? nil) ?? false,
+                  startedAt: c.looseString(.startedAt),
+                  itemsPassed: c.looseInt(.itemsPassed),
+                  itemsTotal: c.looseInt(.itemsTotal),
+                  currentItemText: item?.text,
+                  lastCommitAt: c.looseString(.lastCommitAt),
+                  lastActivityAt: c.looseString(.lastActivityAt),
+                  minutesSinceCommit: c.looseInt(.minutesSinceCommit),
+                  watchdog: (try? c.decodeIfPresent(CaseJobWatchdog.self, forKey: .watchdog)) ?? nil,
+                  proof: (try? c.decodeIfPresent(CaseJobProof.self, forKey: .proof)) ?? nil)
+    }
+}
+
+/// The `/api/jobs` payload: running jobs first. Jobs without a name are dropped.
+struct CaseJobsSnapshot: Equatable, Decodable {
+    var generatedAt: String = ""
+    var jobs: [CaseJob] = []
+
+    private enum CodingKeys: String, CodingKey { case generatedAt, jobs }
+
+    init(generatedAt: String = "", jobs: [CaseJob] = []) {
+        self.generatedAt = generatedAt
+        self.jobs = jobs
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.generatedAt = c.looseString(.generatedAt) ?? ""
+        let all = ((try? c.decodeIfPresent([CaseJob].self, forKey: .jobs)) ?? nil) ?? []
+        self.jobs = all.filter { !$0.job.isEmpty }
+    }
+
+    static func decode(_ data: Data) throws -> CaseJobsSnapshot {
+        return try JSONDecoder().decode(CaseJobsSnapshot.self, from: data)
+    }
+}

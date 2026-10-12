@@ -4,6 +4,53 @@ import XCTest
 /// captured with curl from the live API (`Fixtures/fleet.json`, `Fixtures/activity.json`).
 final class FleetDecodingTests: XCTestCase {
 
+    // MARK: - /api/jobs
+
+    func testJobsDecodeFull() throws {
+        let json = """
+        {"generatedAt":"2026-10-13T09:00:00.000Z","jobs":[
+          {"job":"notch-job-heartbeat","running":true,"startedAt":"2026-10-13T08:00:00.000Z",
+           "itemsPassed":2,"itemsTotal":5,"currentItem":{"id":"3","text":"Add the badge"},
+           "lastCommitAt":"2026-10-13T08:48:00.000Z","lastActivityAt":"2026-10-13T08:59:00.000Z",
+           "minutesSinceCommit":12,
+           "watchdog":{"state":"nudged","at":"2026-10-13T08:50:00.000Z","detail":"no commit in 40 min"},
+           "proof":{"total":4,"proven":2,"missing":2,"blocking":1},"specVersions":[1,2]},
+          {"job":"old-one","running":false}]}
+        """
+        let snapshot = try CaseJobsSnapshot.decode(Data(json.utf8))
+        XCTAssertEqual(snapshot.jobs.count, 2)
+        let job = snapshot.jobs[0]
+        XCTAssertEqual(job.job, "notch-job-heartbeat")
+        XCTAssertTrue(job.running)
+        XCTAssertEqual(job.itemsPassed, 2)
+        XCTAssertEqual(job.itemsTotal, 5)
+        XCTAssertEqual(job.currentItemText, "Add the badge")
+        XCTAssertEqual(job.minutesSinceCommit, 12)
+        XCTAssertEqual(job.watchdog, CaseJobWatchdog(state: "nudged", at: "2026-10-13T08:50:00.000Z",
+                                                     detail: "no commit in 40 min"))
+        XCTAssertEqual(job.proof, CaseJobProof(total: 4, proven: 2, missing: 2, blocking: 1))
+        XCTAssertFalse(snapshot.jobs[1].running)
+    }
+
+    func testJobsDecodePartialAndNullFields() throws {
+        let json = """
+        {"jobs":[{"job":"a","running":true,"startedAt":null,"itemsPassed":null,"itemsTotal":null,
+                  "currentItem":null,"lastCommitAt":null,"minutesSinceCommit":null,"watchdog":null,"proof":null},
+                 {"job":"b","minutesSinceCommit":12.0,"watchdog":{"state":"ok"}},
+                 {"running":true},
+                 {"job":"c","itemsTotal":"five","watchdog":"weird"}]}
+        """
+        let snapshot = try CaseJobsSnapshot.decode(Data(json.utf8))
+        XCTAssertEqual(snapshot.jobs.map(\.job), ["a", "b", "c"], "a job without a name is dropped")
+        XCTAssertEqual(snapshot.jobs[0], CaseJob(job: "a", running: true))
+        XCTAssertEqual(snapshot.jobs[1].minutesSinceCommit, 12)
+        XCTAssertEqual(snapshot.jobs[1].watchdog?.state, "ok")
+        XCTAssertNil(snapshot.jobs[2].itemsTotal, "a wrong type reads as missing, not as a failed feed")
+        XCTAssertNil(snapshot.jobs[2].watchdog)
+        XCTAssertEqual(snapshot.generatedAt, "")
+        XCTAssertEqual(try CaseJobsSnapshot.decode(Data("{}".utf8)).jobs, [])
+    }
+
     // MARK: - Fixture loading
 
     /// Loads a bundled fixture, trying the `Fixtures` subdirectory first and the

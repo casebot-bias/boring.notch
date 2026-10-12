@@ -14,12 +14,16 @@ import SwiftUI
 struct FleetWorkView: View {
     let jobs: [FleetJob]
     let runningTaskCount: Int
+    /// The running Case jobs from `/api/jobs`; empty without that feed, and the column reads as before.
+    var caseJobs: [CaseJob] = []
 
     @Default(.fleetSkin) private var fleetSkin
     @State private var linkHovered = false
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
 
-    private let previewLimit = 2
+    /// The heartbeat lines that fit (the first running jobs), and the previews that share the column.
+    private var jobLines: [CaseJob] { Array(caseJobs.prefix(FleetPanelMetrics.caseJobLineLimit)) }
+    private var previewLimit: Int { FleetPanelMetrics.previewLimit(caseJobLines: jobLines.count) }
 
     // MARK: - Body
 
@@ -28,8 +32,13 @@ struct FleetWorkView: View {
             head
                 .padding(.bottom, 8)
 
+            if !jobLines.isEmpty {
+                heartbeat
+                    .padding(.bottom, jobs.isEmpty ? 0 : 8)
+            }
+
             if jobs.isEmpty {
-                emptyState
+                if jobLines.isEmpty { emptyState }
             } else {
                 previews
             }
@@ -68,6 +77,50 @@ struct FleetWorkView: View {
         .font(.system(size: 12.5))
         .foregroundColor(theme.muted)
         .padding(.top, 20)
+    }
+
+    // MARK: - Heartbeat
+
+    private var heartbeat: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(jobLines) { job in
+                heartbeatRow(FleetFormat.caseJobLine(job))
+            }
+        }
+    }
+
+    /// One Case job on one line: name, `2/5`, `12m` (amber after an hour), watchdog badge.
+    private func heartbeatRow(_ line: FleetFormat.CaseJobLine) -> some View {
+        HStack(spacing: FleetPanelMetrics.caseJobLineSpacing) {
+            Text(line.name)
+                .font(.system(size: 12))
+                .foregroundColor(theme.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+            if let items = line.items {
+                Text(items)
+                    .font(FleetType.mono(size: 11))
+                    .foregroundColor(theme.dim)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            if let commit = line.commit {
+                Text(commit)
+                    .font(FleetType.mono(size: 11))
+                    .foregroundColor(line.commitIsStale ? theme.hotText : theme.dim)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            if let badge = line.badge {
+                Text(badge.text)
+                    .font(FleetType.mono(size: 11, weight: .medium))
+                    .foregroundColor(badge.level == .red ? theme.alertChipText : theme.hotText)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        .frame(height: FleetPanelMetrics.caseJobLineHeight)
     }
 
     // MARK: - Previews

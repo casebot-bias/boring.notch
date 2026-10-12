@@ -51,6 +51,7 @@ struct FleetSectionView: View {
                             sendingJob: store.sendingDecisionJob,
                             sentJob: store.sentDecisionJob,
                             error: store.decisionError,
+                            caseJobs: store.panelModel.caseJobs,
                             onSend: { decision, option in
                                 Task { await store.sendDecision(decision, option: option) }
                             }
@@ -165,7 +166,8 @@ struct FleetSectionView: View {
                 .frame(width: 1)
                 .frame(maxHeight: .infinity)
             FleetWorkView(jobs: store.panelModel.nowJobs,
-                          runningTaskCount: store.panelModel.runningTaskCount)
+                          runningTaskCount: store.panelModel.runningTaskCount,
+                          caseJobs: store.panelModel.runningCaseJobs)
                 .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

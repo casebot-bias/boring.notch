@@ -19,6 +19,8 @@ struct OdinDecisionView: View {
     let sendingJob: String?
     let sentJob: String?
     let error: String?
+    /// The Case jobs' heartbeat, for the proof readout; empty without that feed.
+    var caseJobs: [CaseJob] = []
     let onSend: (FleetDecision, OdinOption) -> Void
 
     @Default(.fleetSkin) private var fleetSkin
@@ -215,6 +217,18 @@ struct OdinDecisionView: View {
                 .font(FleetType.mono(size: 11))
                 .foregroundColor(theme.hotText)
                 .lineLimit(1)
+            if let proof = FleetFormat.decisionProof(d, jobs: caseJobs) {
+                Text(proof.text)
+                    .font(FleetType.mono(size: 11))
+                    .foregroundColor(theme.dim)
+                    .lineLimit(1)
+                if let blocking = proof.blocking {
+                    Text(blocking)
+                        .font(FleetType.mono(size: 11))
+                        .foregroundColor(theme.alertChipText)
+                        .lineLimit(1)
+                }
+            }
             Spacer(minLength: 8)
             Button {
                 if let url {
