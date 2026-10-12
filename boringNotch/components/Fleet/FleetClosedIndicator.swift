@@ -15,12 +15,6 @@ struct FleetClosedIndicator: View {
     @ObservedObject private var store = FleetStore.shared
     @Default(.fleetSkin) private var fleetSkin
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
-    // Both sides share one fixed width so the camera gap sits on the physical notch's
-    // centre; unequal sides would push the gap off-centre and the notch would cover text.
-    // Wide enough for the one-line "12 working · 7/7 linked" / "· 3 critical" and the right-hand
-    // speed, so neither side block truncates at 11 pt.
-    private var sideWidth: CGFloat { FleetPanelMetrics.closedRowSideWidth }
-
     private var visible: Bool {
         return Defaults[.showFleet] && store.isReachable && vm.effectiveClosedNotchHeight > 0
     }
@@ -28,8 +22,11 @@ struct FleetClosedIndicator: View {
     var body: some View {
         if visible {
             let model = store.panelModel
-            HStack(spacing: 0) {
-                // Left block: one line, "2 working · 7/7 linked" (or "· 3 critical"), right-aligned toward the gap.
+            // Both sides take the wider text's width so the camera gap sits on the physical notch's
+            // centre; unequal sides would push the gap off-centre and the notch would cover text.
+            FleetEqualSidesLayout {
+                // Left block: "2 working", plus "· 1 down" / "· 3 critical" only when something is wrong.
+                // All linked is the normal case and is not shown: the notch stays narrow (owner request).
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text("\(model.workingCount)")
                         .font(FleetType.mono(size: 12, weight: .medium))
@@ -37,22 +34,18 @@ struct FleetClosedIndicator: View {
                         + Text(" working")
                         .font(.system(size: 12))
                         .foregroundColor(theme.text)
-                    Text("·")
-                        .font(.system(size: 12))
-                        .foregroundColor(theme.dim)
-                    if model.criticalCount == 0 {
-                        Text(FleetFormat.linked(model.linkedCount, of: model.agentCount))
-                            .font(FleetType.mono(size: 11))
+                    if let alert = FleetFormat.closedAlert(critical: model.criticalCount,
+                                                           linked: model.linkedCount, of: model.agentCount) {
+                        Text("·")
+                            .font(.system(size: 12))
                             .foregroundColor(theme.dim)
-                    } else {
-                        Text(FleetFormat.status(model.criticalCount))
+                        Text(alert)
                             .font(FleetType.mono(size: 11))
                             .foregroundColor(theme.hotText)
                     }
                 }
                 .lineLimit(1)
                 .fixedSize()
-                .frame(width: sideWidth, alignment: .trailing)
 
                 // Hardware-notch gap spacer: notch width plus 5 pt clearance per side
                 Rectangle()
@@ -75,7 +68,7 @@ struct FleetClosedIndicator: View {
                         .font(FleetType.mono(size: 11))
                         .foregroundColor(theme.dim)
                 }
-                .frame(width: sideWidth, alignment: .leading)
+                .fixedSize()
             }
             .frame(height: vm.effectiveClosedNotchHeight)
         } else {
@@ -87,6 +80,34 @@ struct FleetClosedIndicator: View {
                     height: vm.effectiveClosedNotchHeight
                 )
         }
+    }
+}
+
+// MARK: - Equal Sides Layout
+
+/// Lays out [left, gap, right] with both sides as wide as the wider of the two (see
+/// `FleetPanelMetrics.closedRowSide`): the left text hugs the gap from the left, the right text from
+/// the right, and the gap stays on the row's centre, over the camera.
+struct FleetEqualSidesLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard subviews.count == 3 else { return .zero }
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let side = FleetPanelMetrics.closedRowSide(left: sizes[0].width, right: sizes[2].width)
+        return CGSize(width: side * 2 + sizes[1].width, height: sizes.map(\.height).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 3 else { return }
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let side = FleetPanelMetrics.closedRowSide(left: sizes[0].width, right: sizes[2].width)
+        let leftWidth = min(sizes[0].width, side)
+        let rightWidth = min(sizes[2].width, side)
+        subviews[0].place(at: CGPoint(x: bounds.minX + side - leftWidth, y: bounds.midY), anchor: .leading,
+                          proposal: ProposedViewSize(width: leftWidth, height: sizes[0].height))
+        subviews[1].place(at: CGPoint(x: bounds.minX + side, y: bounds.midY), anchor: .leading,
+                          proposal: ProposedViewSize(width: sizes[1].width, height: sizes[1].height))
+        subviews[2].place(at: CGPoint(x: bounds.minX + side + sizes[1].width, y: bounds.midY), anchor: .leading,
+                          proposal: ProposedViewSize(width: rightWidth, height: sizes[2].height))
     }
 }
 
