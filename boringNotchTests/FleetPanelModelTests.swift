@@ -80,10 +80,15 @@ final class FleetPanelModelTests: XCTestCase {
         return lane
     }
 
+    /// The panel model for a feed whose last poll answered: every test but the stale ones reads fresh data.
+    private func panel(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetPanelModel {
+        FleetPanelModelBuilder.build(fleet: fleet, activity: activity, fleetLive: true)
+    }
+
     // MARK: - Empty snapshots
 
     func testNilSnapshotsGiveOfflineLanesAndUnknownFooterReadings() {
-        let model = FleetPanelModelBuilder.build(fleet: nil, activity: nil)
+        let model = panel(fleet: nil, activity: nil)
         XCTAssertEqual(model.origin.id, "case")
         XCTAssertEqual(model.origin.label, "case")
         XCTAssertEqual(model.origin.state, .offline)
@@ -106,7 +111,7 @@ final class FleetPanelModelTests: XCTestCase {
         // The footer keeps its five slots even when the fleet never answers: no readings, no arcs.
         XCTAssertEqual(model.hosts.map(\.label), ["case", "frank", "claire", "dali", "mac"])
         for host in model.hosts {
-            XCTAssertFalse(host.online, "\(host.id) must be offline")
+            XCTAssertFalse(host.live, "\(host.id) must be offline")
             for kind in FleetRingKind.allCases {
                 XCTAssertNil(host.value(kind), "\(host.id) \(kind.rawValue) must report no value")
                 XCTAssertNil(host.arcFraction(kind), "\(host.id) \(kind.rawValue) must draw no arc")
@@ -116,7 +121,7 @@ final class FleetPanelModelTests: XCTestCase {
     }
 
     func testAgentOrderIsFixedAndLanesStartWithCase() {
-        let model = FleetPanelModelBuilder.build(fleet: nil, activity: nil)
+        let model = panel(fleet: nil, activity: nil)
         XCTAssertEqual(FleetPanelModelBuilder.agentIds, ["frank", "claire", "ciri", "dali", "nova", "pika", "odin"])
         XCTAssertEqual(model.agents.map(\.id), FleetPanelModelBuilder.agentIds)
         XCTAssertEqual(model.lanes.first?.id, "case")
@@ -133,7 +138,7 @@ final class FleetPanelModelTests: XCTestCase {
                               lastStep: "reviewing the diff", elapsedSec: 120)]
         guard let f = fleet(onlineFleetJSON()),
               let a = activity(activityJSON([deviceJSON("frank", busy: true, items: items, tokPerSec: 42.4)])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let frank = lane(model, "frank") else { return }
         XCTAssertEqual(frank.state, .busy)
         XCTAssertTrue(frank.isLinked)
@@ -160,7 +165,7 @@ final class FleetPanelModelTests: XCTestCase {
               let a = activity(activityJSON([deviceJSON("frank", busy: false, slotsUsed: 2),        // slots carry it
                                              deviceJSON("dali", busy: true, items: []),             // busy flag alone
                                              deviceJSON("ciri", busy: false, slotsUsed: 0)])) else { return } // neither
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let frank = lane(model, "frank"), let dali = lane(model, "dali"), let ciri = lane(model, "ciri") else { return }
         XCTAssertEqual(frank.state, .busy)                                 // slots.used > 0 counts as busy
         XCTAssertTrue(frank.jobs.isEmpty)
@@ -179,7 +184,7 @@ final class FleetPanelModelTests: XCTestCase {
                               machineJSON("macbook"), machineJSON("odin")])
         let daliDevice = deviceJSON("dali", busy: true, items: [itemJSON("dali-x", device: "dali")])
         guard let f = fleet(json), let a = activity(activityJSON([daliDevice])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let dali = lane(model, "dali") else { return }
         XCTAssertEqual(dali.state, .offline)                                // offline wins over the busy device
         XCTAssertFalse(dali.isLinked)
@@ -203,7 +208,7 @@ final class FleetPanelModelTests: XCTestCase {
         guard let f = fleet(onlineFleetJSON()),
               let a = activity(activityJSON([deviceJSON("case", busy: true,
                                                         items: [qwen, openrouter, plain, delegated])])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let nova = lane(model, "nova") else { return }
         XCTAssertEqual(nova.id, "nova")
         XCTAssertEqual(nova.label, "nova")
@@ -224,7 +229,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.criticalCount, 0)
         // Qwen-only activity leaves nova idle (case keeps working via its items).
         guard let a2 = activity(activityJSON([deviceJSON("case", busy: true, items: [qwen])])) else { return }
-        guard let nova2 = lane(FleetPanelModelBuilder.build(fleet: f, activity: a2), "nova") else { return }
+        guard let nova2 = lane(panel(fleet: f, activity: a2), "nova") else { return }
         XCTAssertEqual(nova2.state, .idle)
         XCTAssertTrue(nova2.isLinked)
         XCTAssertTrue(nova2.jobs.isEmpty)
@@ -239,7 +244,7 @@ final class FleetPanelModelTests: XCTestCase {
         let orItem = itemJSON("or-job", device: "cloud", model: "openrouter/deepseek",
                               since: "2026-10-02T06:10:00.000Z", elapsedSec: 60)
         guard let a = activity(activityJSON([deviceJSON("case", busy: true, items: [orItem])])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: nil, activity: a)
+        let model = panel(fleet: nil, activity: a)
         guard let nova = lane(model, "nova") else { return }
         XCTAssertEqual(nova.state, .offline)                                 // no fleet snapshot -> unknown
         XCTAssertFalse(nova.isLinked)
@@ -265,7 +270,7 @@ final class FleetPanelModelTests: XCTestCase {
         guard let f = fleet(onlineFleetJSON()),
               let a = activity(activityJSON([deviceJSON("case", busy: true, items: [shared, own, slow]),
                                              deviceJSON("frank", busy: true, items: [frankCopy])])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         XCTAssertEqual(model.origin.state, .busy)
         XCTAssertEqual(model.origin.jobs.count, 3)
         XCTAssertEqual(model.runningTaskCount, 3)                              // unique keys: frank's copy of /tmp/a.jsonl counted once
@@ -285,7 +290,7 @@ final class FleetPanelModelTests: XCTestCase {
         let own = itemJSON("own", device: "case", since: "2026-10-02T06:20:00.000Z", elapsedSec: 30, file: "/tmp/b.jsonl")
         guard let f = fleet(onlineFleetJSON()),
               let a = activity(activityJSON([deviceJSON("case", busy: true, items: [own])])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         XCTAssertEqual(model.origin.state, .busy)
         XCTAssertEqual(model.workingCount, 0)                                  // no *agent* is working
         XCTAssertTrue(model.isBusy)                                             // origin busy is enough
@@ -312,7 +317,7 @@ final class FleetPanelModelTests: XCTestCase {
               let a = activity(activityJSON([deviceJSON("case", busy: true, items: [shared, openrouter]),
                                              deviceJSON("frank", busy: true, items: [shared, frankOwn]),
                                              deviceJSON("dali", busy: true, items: [retained])])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let dali = lane(model, "dali") else { return }
         XCTAssertEqual(dali.state, .offline)
         XCTAssertEqual(dali.jobs.map(\.key), ["/tmp/dali-retained.jsonl"])     // jobs survive on the offline lane…
@@ -329,18 +334,18 @@ final class FleetPanelModelTests: XCTestCase {
                        deviceJSON("dali", busy: true, tokPerSec: 10),
                        deviceJSON("ciri", busy: false)]                        // no rate reported
         guard let f = fleet(onlineFleetJSON()), let a = activity(activityJSON(devices)) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         XCTAssertEqual(model.workingCount, 2)                                  // frank + dali
         XCTAssertEqual(model.totalTokPerSec ?? 0, 52.4, accuracy: 0.001)       // case's 999 excluded
         // No agent reports a rate: nil, not 0.
         let silent = [deviceJSON("case", busy: true), deviceJSON("frank", busy: false), deviceJSON("dali", busy: false)]
         guard let a2 = activity(activityJSON(silent)) else { return }
-        let silentModel = FleetPanelModelBuilder.build(fleet: f, activity: a2)
+        let silentModel = panel(fleet: f, activity: a2)
         XCTAssertNil(silentModel.totalTokPerSec)                    // nil only when no agent reports a rate at all
         XCTAssertEqual(FleetFormat.fleetOutput(silentModel.totalTokPerSec), FleetFormat.unknown)
         // One reporting agent: its rate alone is the total.
         guard let a3 = activity(activityJSON([deviceJSON("frank", busy: true, tokPerSec: 7)])) else { return }
-        XCTAssertEqual(FleetPanelModelBuilder.build(fleet: f, activity: a3).totalTokPerSec ?? 0, 7, accuracy: 0.001)
+        XCTAssertEqual(panel(fleet: f, activity: a3).totalTokPerSec ?? 0, 7, accuracy: 0.001)
     }
 
     func testAgentReportingZeroThroughputShowsZeroNotDash() {
@@ -348,7 +353,7 @@ final class FleetPanelModelTests: XCTestCase {
                        deviceJSON("frank", busy: false, tokPerSec: 0),         // idle frank reports a real 0
                        deviceJSON("dali", busy: false)]                         // no other agent reports a rate
         guard let f = fleet(onlineFleetJSON()), let a = activity(activityJSON(devices)) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         XCTAssertFalse(model.isBusy)
         XCTAssertEqual(model.totalTokPerSec, 0)                                  // 0, not nil
         XCTAssertEqual(FleetFormat.fleetOutput(model.totalTokPerSec), "0")       // renders "0", not "—"
@@ -356,7 +361,7 @@ final class FleetPanelModelTests: XCTestCase {
         let mixed = [deviceJSON("frank", busy: false, tokPerSec: 0),
                      deviceJSON("dali", busy: true, tokPerSec: 12.4)]
         guard let a2 = activity(activityJSON(mixed)) else { return }
-        let mixedModel = FleetPanelModelBuilder.build(fleet: f, activity: a2)
+        let mixedModel = panel(fleet: f, activity: a2)
         XCTAssertEqual(mixedModel.totalTokPerSec ?? 0, 12.4, accuracy: 0.001)
         XCTAssertEqual(FleetFormat.fleetOutput(mixedModel.totalTokPerSec), "12")
     }
@@ -367,10 +372,10 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(FleetPanelModelBuilder.footerHosts.map(\.id), ["case", "frank", "claire", "dali", "macbook"])
         XCTAssertEqual(FleetPanelModelBuilder.footerHosts.map(\.label), ["case", "frank", "claire", "dali", "mac"])
         guard let f = fleet(onlineFleetJSON()) else { return }
-        let hosts = FleetPanelModelBuilder.build(fleet: f, activity: nil).hosts
+        let hosts = panel(fleet: f, activity: nil).hosts
         XCTAssertEqual(hosts.map(\.id), ["case", "frank", "claire", "dali", "macbook"])
         XCTAssertEqual(hosts.map(\.label), ["case", "frank", "claire", "dali", "mac"])
-        XCTAssertTrue(hosts.allSatisfy { $0.online }, "every machine in this payload is online")
+        XCTAssertTrue(hosts.allSatisfy { $0.live }, "every machine in this payload is online")
         // Online machines that report nothing still hold their slot, with no arcs.
         XCTAssertTrue(hosts.allSatisfy { $0.cpu == nil && $0.gpu == nil && $0.ram == nil })
         XCTAssertTrue(hosts.allSatisfy { host in FleetRingKind.allCases.allSatisfy { host.arcFraction($0) == nil } })
@@ -383,7 +388,7 @@ final class FleetPanelModelTests: XCTestCase {
                               machineJSON("dali", title: "Dali Studio", cpu: 3, gpu: 0, ram: 57),
                               machineJSON("macbook", title: "MacBook", cpu: 13, gpu: 13, ram: 75.4)])
         guard let f = fleet(json) else { return }
-        let hosts = FleetPanelModelBuilder.build(fleet: f, activity: nil).hosts
+        let hosts = panel(fleet: f, activity: nil).hosts
         XCTAssertEqual(hosts.map(\.cpu), [6, 0, 0, 3, 13])          // not a fleet-wide peak: each machine keeps its own
         XCTAssertEqual(hosts.map(\.gpu), [33, 0, 0, 0, 13])
         XCTAssertEqual(hosts.map(\.ram), [50, 84, 88, 57, 75])      // 75.4 shows as 75
@@ -396,17 +401,48 @@ final class FleetPanelModelTests: XCTestCase {
     func testOfflineMachineDrawsNoArcsButKeepsItsLastReadings() {
         let json = fleetJSON([machineJSON("frank", state: "unreachable", cpu: 13, gpu: 94, ram: 86)])
         guard let f = fleet(json) else { return }
-        let hosts = FleetPanelModelBuilder.build(fleet: f, activity: nil).hosts
+        let hosts = panel(fleet: f, activity: nil).hosts
         let frank = hosts[1]
-        XCTAssertFalse(frank.online)
+        XCTAssertFalse(frank.live)
         XCTAssertEqual(frank.ram, 86, "the last reported value stays readable as the cluster's text")
         for kind in FleetRingKind.allCases {
             XCTAssertNil(frank.arcFraction(kind), "an offline machine must draw no arc for \(kind.rawValue)")
         }
         let caseHost = hosts[0]
-        XCTAssertFalse(caseHost.online, "a machine the payload never mentions is offline")
+        XCTAssertFalse(caseHost.live, "a machine the payload never mentions is offline")
         XCTAssertNil(caseHost.cpu)
         XCTAssertEqual(FleetFormat.ringHeadline(caseHost), "—")
+    }
+
+    func testStaleFeedDrawsNoArcsAndTurnsTheNamesOff() {
+        let json = fleetJSON([machineJSON("case"), machineJSON("frank", cpu: 13, gpu: 94, ram: 86),
+                              machineJSON("claire"), machineJSON("dali"), machineJSON("macbook")])
+        guard let f = fleet(json) else { return }
+        // A failed poll leaves the store with its last snapshot: those readings are stale, so they must
+        // not be presented as live arcs and names, even though the machines themselves report online.
+        let stale = FleetPanelModelBuilder.build(fleet: f, activity: nil, fleetLive: false)
+        XCTAssertEqual(stale.hosts.count, 5)
+        XCTAssertTrue(stale.hosts.allSatisfy { !$0.live }, "a stale feed leaves every reading not live")
+        for host in stale.hosts {
+            for kind in FleetRingKind.allCases {
+                XCTAssertNil(host.arcFraction(kind), "\(host.id) \(kind.rawValue) must draw no arc while stale")
+            }
+        }
+        // The last known numbers stay readable as text, so the footer still says what the machines said.
+        XCTAssertEqual(stale.hosts[1].ram, 86)
+        XCTAssertEqual(FleetFormat.ringHeadline(stale.hosts[1]), "GPU 94")
+        // The same payload on a live feed is live again.
+        let live = FleetPanelModelBuilder.build(fleet: f, activity: nil, fleetLive: true)
+        XCTAssertTrue(live.hosts[1].live)
+        XCTAssertEqual(live.hosts[1].arcFraction(.ram) ?? 0, 0.86, accuracy: 0.001)
+    }
+
+    func testStaleFeedLeavesAMachineThatIsOfflineOffAsWell() {
+        let json = fleetJSON([machineJSON("case"), machineJSON("frank", state: "unreachable", cpu: 13, gpu: 94, ram: 86)])
+        guard let f = fleet(json) else { return }
+        let model = FleetPanelModelBuilder.build(fleet: f, activity: nil, fleetLive: true)
+        XCTAssertFalse(model.hosts[1].live, "the machine's own offline state still wins")
+        XCTAssertNil(model.hosts[1].arcFraction(.ram))
     }
 
     // MARK: - Malformed items
@@ -420,7 +456,7 @@ final class FleetPanelModelTests: XCTestCase {
                      itemJSON("bare", device: "odin")]
         guard let f = fleet(onlineFleetJSON()),
               let a = activity(activityJSON([deviceJSON("odin", busy: false, items: items)])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let odin = lane(model, "odin") else { return }
         XCTAssertEqual(odin.state, .busy)                                        // items alone make it busy
         XCTAssertEqual(odin.jobs.map(\.label), ["timed", "alpha", "beta", "bare"])
@@ -442,7 +478,7 @@ final class FleetPanelModelTests: XCTestCase {
 
     /// pika with no data row at all: idle/grey, never a red offline node, never a crash.
     func testPikaDefaultsToIdleWithoutADataRow() {
-        let model = FleetPanelModelBuilder.build(fleet: nil, activity: nil)
+        let model = panel(fleet: nil, activity: nil)
         guard let pika = model.lanes.first(where: { $0.id == "pika" }) else {
             return XCTFail("no pika lane; lanes are \(model.lanes.map(\.id))")
         }
@@ -458,10 +494,10 @@ final class FleetPanelModelTests: XCTestCase {
         guard let onlineFleet = fleet(fleetJSON(otherMachines + [machineJSON("pika", state: "online")])),
               let busyActivity = activity(activityJSON([deviceJSON("pika", busy: true, items: [pikaJob])])),
               let offlineFleet = fleet(fleetJSON(otherMachines + [machineJSON("pika", state: "offline")])) else { return }
-        let busy = FleetPanelModelBuilder.build(fleet: onlineFleet, activity: busyActivity)
+        let busy = panel(fleet: onlineFleet, activity: busyActivity)
         XCTAssertEqual(busy.lanes.first { $0.id == "pika" }?.state, .busy)
 
-        let down = FleetPanelModelBuilder.build(fleet: offlineFleet, activity: nil)
+        let down = panel(fleet: offlineFleet, activity: nil)
         XCTAssertEqual(down.lanes.first { $0.id == "pika" }?.state, .offline)
     }
 
@@ -470,7 +506,7 @@ final class FleetPanelModelTests: XCTestCase {
     func testPikaBusyDeviceWithoutAMachineRowCountsAsWorking() {
         let job = itemJSON("pika-run", device: "pika", since: "2026-10-02T06:00:00.000Z", elapsedSec: 30)
         guard let act = activity(activityJSON([deviceJSON("pika", busy: true, items: [job])])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: nil, activity: act)
+        let model = panel(fleet: nil, activity: act)
 
         XCTAssertEqual(model.lanes.first { $0.id == "pika" }?.state, .busy,
                        "a busy pika device with no machine row is busy, not idle")
@@ -489,7 +525,7 @@ final class FleetPanelModelTests: XCTestCase {
     func testOdinNeedsDecisionTurnsTheLaneRedAndCarriesTheAlert() {
         guard let f = fleet(onlineFleetJSON()),
               let a = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: needsDecisionStatus())])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let odin = lane(model, "odin") else { return }
         XCTAssertEqual(odin.state, .idle)
         XCTAssertEqual(odin.label, "odin")                                      // only the view renames it
@@ -510,7 +546,7 @@ final class FleetPanelModelTests: XCTestCase {
     func testOdinWithoutAStatusBlockStaysIdle() {
         guard let f = fleet(onlineFleetJSON()),
               let a = activity(activityJSON([deviceJSON("odin", busy: false)])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let odin = lane(model, "odin") else { return }
         XCTAssertEqual(odin.state, .idle)
         XCTAssertNil(odin.decision)
@@ -521,7 +557,7 @@ final class FleetPanelModelTests: XCTestCase {
         guard let f = fleet(onlineFleetJSON()) else { return }
         for state in ["idle", "reviewing", "done"] {
             guard let a = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: "{\"state\":\"\(state)\"}")])) else { return }
-            let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+            let model = panel(fleet: f, activity: a)
             guard let odin = lane(model, "odin") else { return }
             XCTAssertEqual(odin.state, .idle, "\"\(state)\" must not raise the alert")
             XCTAssertNil(model.decision, "\"\(state)\" must not raise the alert")
@@ -529,7 +565,7 @@ final class FleetPanelModelTests: XCTestCase {
         // A really running review stays the ordinary busy lane.
         let review = itemJSON("Reviewing boring.notch#13", device: "odin", since: "2026-10-02T06:00:00.000Z")
         guard let a = activity(activityJSON([deviceJSON("odin", busy: true, items: [review], odinStatus: "{\"state\":\"reviewing\"}")])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let odin = lane(model, "odin") else { return }
         XCTAssertEqual(odin.state, .busy)
         XCTAssertNil(model.decision)
@@ -538,7 +574,7 @@ final class FleetPanelModelTests: XCTestCase {
 
     func testNeedsDecisionSurvivesAMissingFleetSnapshot() {
         guard let a = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: needsDecisionStatus())])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: nil, activity: a)
+        let model = panel(fleet: nil, activity: a)
         guard let odin = lane(model, "odin") else { return }
         XCTAssertEqual(odin.state, .offline)                                    // the *alert* survives a missing probe (the decisions, the strip and the pip), not the node state
         XCTAssertEqual(odin.decision?.pr, 4)
@@ -565,7 +601,7 @@ final class FleetPanelModelTests: XCTestCase {
               let a = activity(activityJSON([deviceJSON("odin", busy: false,
                                                         odinStatus: "{\"state\":\"idle\"}",
                                                         odinOpen: twoOpenDecisions())])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let odin = lane(model, "odin") else { return }
         XCTAssertEqual(odin.state, .idle)                                       // the idle status cannot veto the list
         XCTAssertEqual(odin.decisions, twoOpenDecisionList())                     // every entry, in file order
@@ -588,7 +624,7 @@ final class FleetPanelModelTests: XCTestCase {
               let a = activity(activityJSON([deviceJSON("odin", busy: true, items: [review],
                                                         odinStatus: "{\"state\":\"reviewing\"}",
                                                         odinOpen: twoOpenDecisions())])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let odin = lane(model, "odin") else { return }
         XCTAssertEqual(odin.state, .busy)
         XCTAssertTrue(odin.hasOpenDecision)
@@ -604,7 +640,7 @@ final class FleetPanelModelTests: XCTestCase {
               let a = activity(activityJSON([deviceJSON("odin", busy: false,
                                                         odinStatus: "{\"state\":\"needs_decision\",\"job\":\"stale-job\",\"pr\":9}",
                                                         odinOpen: "[]")])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let odin = lane(model, "odin") else { return }
         // The list is the truth, so a stale status cannot resurrect a closed decision.
         XCTAssertEqual(odin.state, .idle, "an open list of [] must beat the stale needs_decision status")
@@ -616,7 +652,7 @@ final class FleetPanelModelTests: XCTestCase {
     func testMissingOpenListFallsBackToTheNeedsDecisionStatus() {
         guard let f = fleet(onlineFleetJSON()),
               let a = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: needsDecisionStatus())])) else { return }
-        let model = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let model = panel(fleet: f, activity: a)
         guard let odin = lane(model, "odin") else { return }
         // No open key at all: an older dashboard, so the single status drives the lane.
         XCTAssertEqual(odin.state, .idle)
@@ -625,7 +661,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertTrue(model.hasOpenDecision)
         // And with neither an open list nor a needs-decision status, nothing is open.
         guard let a2 = activity(activityJSON([deviceJSON("odin", busy: false, odinStatus: "{\"state\":\"idle\"}")])) else { return }
-        let idleModel = FleetPanelModelBuilder.build(fleet: f, activity: a2)
+        let idleModel = panel(fleet: f, activity: a2)
         guard let idleOdin = lane(idleModel, "odin") else { return }
         XCTAssertTrue(idleOdin.decisions.isEmpty)
         XCTAssertTrue(idleModel.decisions.isEmpty)
@@ -638,19 +674,19 @@ final class FleetPanelModelTests: XCTestCase {
               let a = activity(activityJSON([deviceJSON("odin", busy: false,
                                                         odinStatus: "{\"state\":\"idle\"}",
                                                         odinOpen: twoOpenDecisions())])) else { return }
-        let opened = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let opened = panel(fleet: f, activity: a)
         XCTAssertTrue(opened.hasOpenDecision, "the successful poll that reported the open list must raise the pip")
         // A failed poll leaves the store's snapshots untouched (it only assigns them
         // on success), so rebuilding from the very same snapshots is what the failed
         // poll leaves behind: the last known decisions must survive it.
-        let failedPoll = FleetPanelModelBuilder.build(fleet: f, activity: a)
+        let failedPoll = panel(fleet: f, activity: a)
         XCTAssertTrue(failedPoll.hasOpenDecision, "a failed poll must keep the last known open decisions")
         XCTAssertEqual(failedPoll.decisions.count, 2, "a failed poll must keep every last known decision")
         // A later successful poll whose open list is empty clears the pip.
         guard let clearedActivity = activity(activityJSON([deviceJSON("odin", busy: false,
                                                                        odinStatus: "{\"state\":\"idle\"}",
                                                                        odinOpen: "[]")])) else { return }
-        let cleared = FleetPanelModelBuilder.build(fleet: f, activity: clearedActivity)
+        let cleared = panel(fleet: f, activity: clearedActivity)
         XCTAssertFalse(cleared.hasOpenDecision, "a later successful empty open list must clear the pip")
     }
 
@@ -661,7 +697,7 @@ final class FleetPanelModelTests: XCTestCase {
         {"generatedAt":"2026-10-11T18:00:00.000Z","speed":{"current":154.4,"lastAt":"2026-10-11T17:59:50.000Z","trend":[120.0,null],"stepSec":10},"devices":[{"device":"frank","items":[{"id":"j1","label":"job","device":"frank"}],"state":"ok","speed":38.5},{"device":"ciri","items":[],"state":"ok","speed":12.0},{"device":"case","items":[{"id":"c1","label":"cloud job","device":"cloud","model":"openrouter/deepseek"}],"state":"ok"}]}
         """
         let activity = try ActivitySnapshot.decode(Data(json.utf8))
-        let model = FleetPanelModelBuilder.build(fleet: nil, activity: activity)
+        let model = panel(fleet: nil, activity: activity)
         XCTAssertEqual(model.speed?.current, 154.4)
         XCTAssertEqual(model.agents.first { $0.id == "frank" }?.speed, 38.5)
         XCTAssertEqual(model.agents.first { $0.id == "ciri" }?.speed, 12.0)
@@ -676,7 +712,7 @@ final class FleetPanelModelTests: XCTestCase {
         {"generatedAt":"2026-10-11T18:00:00.000Z","devices":[{"device":"frank","items":[{"id":"j1","label":"job","device":"frank"}],"state":"ok","speed":38.5},{"device":"claire","items":[],"state":"ok"},{"device":"dali","items":[],"state":"ok"}]}
         """
         let activity = try ActivitySnapshot.decode(Data(json.utf8))
-        let model = FleetPanelModelBuilder.build(fleet: nil, activity: activity)
+        let model = panel(fleet: nil, activity: activity)
         XCTAssertEqual(model.speed?.current ?? 0, 38.5, accuracy: 0.001)
         XCTAssertEqual(FleetFormat.speedNumberText(model.speed), "39")
     }
@@ -686,14 +722,14 @@ final class FleetPanelModelTests: XCTestCase {
         let withBlock = """
         {"generatedAt":"2026-10-11T18:00:00.000Z","speed":{"current":154.4,"lastAt":null,"trend":[],"stepSec":10},"devices":[{"device":"frank","items":[{"id":"j1","label":"job","device":"frank"}],"state":"ok","speed":38.5}]}
         """
-        let blocked = FleetPanelModelBuilder.build(
+        let blocked = panel(
             fleet: nil, activity: try ActivitySnapshot.decode(Data(withBlock.utf8)))
         XCTAssertEqual(blocked.speed?.current ?? 0, 154.4, accuracy: 0.001)
 
         let silent = """
         {"generatedAt":"2026-10-11T18:00:00.000Z","devices":[{"device":"frank","items":[],"state":"ok"}]}
         """
-        let quiet = FleetPanelModelBuilder.build(
+        let quiet = panel(
             fleet: nil, activity: try ActivitySnapshot.decode(Data(silent.utf8)))
         XCTAssertNil(quiet.speed)
     }

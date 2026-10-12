@@ -28,7 +28,9 @@ final class FleetStore: ObservableObject {
     @Published private(set) var decisionError: String?
 
     var panelModel: FleetPanelModel {
-        let model = FleetPanelModelBuilder.build(fleet: fleet, activity: activity)
+        // The footer's rings are live only while the fleet answered: the store keeps the last snapshot
+        // after a failed poll, and a retained snapshot must not be presented as live.
+        let model = FleetPanelModelBuilder.build(fleet: fleet, activity: activity, fleetLive: isReachable)
         return model.droppingDecisions(jobs: answeredJobs)
     }
 
@@ -151,7 +153,7 @@ final class FleetStore: ObservableObject {
     /// raw model, not from `panelModel` (which already hides the answered jobs).
     private func pruneAnsweredDecisions() {
         guard !answeredJobs.isEmpty else { return }
-        let open = Set(FleetPanelModelBuilder.build(fleet: fleet, activity: activity)
+        let open = Set(FleetPanelModelBuilder.build(fleet: fleet, activity: activity, fleetLive: isReachable)
                         .decisions.compactMap(\.job))
         answeredJobs.formIntersection(open)
     }

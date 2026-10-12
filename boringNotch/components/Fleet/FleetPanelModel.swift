@@ -84,15 +84,19 @@ enum FleetRingKind: String, CaseIterable, Hashable {
 enum FleetRingLevel: Equatable { case ok, hot, alert }
 
 /// One machine's three readings for the footer, in ring order: outer CPU, middle GPU, inner RAM.
-/// A reading the machine does not report is nil (that ring keeps its track only) and an offline
-/// machine draws no arcs, so the footer never shows a machine as healthier than it is.
+/// A reading the machine does not report is nil (that ring keeps its track only). A reading that is
+/// not live - the machine reports offline, or the fleet feed has not answered since its last failure -
+/// draws no arcs at all, so the footer never shows a machine as healthier than it is.
 struct FleetHostReading: Identifiable, Equatable {
     var id: String
     var label: String
     var cpu: Int?
     var gpu: Int?
     var ram: Int?
-    var online: Bool
+    /// Whether these readings can be trusted right now: the machine reports online AND the fleet feed
+    /// answered its last poll. The store keeps the last snapshot when a poll fails, so a retained
+    /// payload must read as stale, not as live.
+    var live: Bool
 
     /// The reading for one ring: whole percent, nil when the machine reports none.
     func value(_ kind: FleetRingKind) -> Int? {
@@ -103,10 +107,10 @@ struct FleetHostReading: Identifiable, Equatable {
         }
     }
 
-    /// The arc's 0…1 sweep, or nil when the machine is offline or the reading is missing: the ring
-    /// then shows its track only.
+    /// The arc's 0…1 sweep, or nil when the reading is not live or missing. A machine that is offline
+    /// or whose feed has failed draws no arc; a missing reading leaves its ring with the track only.
     func arcFraction(_ kind: FleetRingKind) -> Double? {
-        guard online, let percent = value(kind) else { return nil }
+        guard live, let percent = value(kind) else { return nil }
         return FleetFormat.fraction(Double(percent))
     }
 
@@ -127,7 +131,8 @@ struct FleetPanelModel: Equatable {
     /// The fleet-wide decode speed (tokens/s and its trend), from the fleet payload's block with
     /// the activity payload's block as fallback; nil when neither reports one.
     var speed: FleetSpeed?
-    /// One reading per footer machine, always in `FleetPanelModelBuilder.footerHosts` order.
+    /// One reading per footer machine, always in `FleetPanelModelBuilder.footerHosts` order. A reading
+    /// is live only while the fleet feed's last poll answered and its own machine reports online.
     var hosts: [FleetHostReading]
 
     /// case first, then the agents.
@@ -216,7 +221,9 @@ enum FleetPanelModelBuilder {
         return "other"
     }
 
-    static func build(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetPanelModel {
+    /// `fleetLive` is the store's reachability: false once a poll has failed, so a retained snapshot
+    /// reads as stale instead of live.
+    static func build(fleet: FleetSnapshot?, activity: ActivitySnapshot?, fleetLive: Bool) -> FleetPanelModel {
         // case runs its own jobs AND the delegated ones routed to frank/claire/dali.
         let origin = machineLane(id: "case", fleet: fleet, activity: activity)
         let agents: [FleetLane] = [
@@ -246,7 +253,7 @@ enum FleetPanelModelBuilder {
                                // When neither sends a block, the median of the reporting devices is used, so
                                // the header is never a sum.
                                speed: speed,
-                               hosts: hosts(from: fleet))
+                               hosts: hosts(from: fleet, live: fleetLive))
     }
 
     // MARK: - Lane builders
@@ -315,7 +322,8 @@ enum FleetPanelModelBuilder {
 
     /// One reading per footer machine, always in `footerHosts` order: a machine the payload never
     /// mentions keeps its slot with no readings and no arcs, so the strip never changes width.
-    private static func hosts(from fleet: FleetSnapshot?) -> [FleetHostReading] {
+    /// A reading is live only while the feed answered its last poll AND the machine reports online.
+    private static func hosts(from fleet: FleetSnapshot?, live: Bool) -> [FleetHostReading] {
         footerHosts.map { entry in
             let machine = machine(id: entry.id, in: fleet)
             return FleetHostReading(id: entry.id,
@@ -323,7 +331,7 @@ enum FleetPanelModelBuilder {
                                     cpu: percent(machine?.cpuLoadPct),
                                     gpu: percent(machine?.gpuUtilPct),
                                     ram: percent(machine?.ramUsedPct),
-                                    online: machineOnline(machine))
+                                    live: live && machineOnline(machine))
         }
     }
 
