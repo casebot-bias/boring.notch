@@ -17,8 +17,8 @@ struct FleetClosedIndicator: View {
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
     // Both sides share one fixed width so the camera gap sits on the physical notch's
     // centre; unequal sides would push the gap off-centre and the notch would cover text.
-    // Wide enough for the full "3 critical" / "1 working" strings and the right-hand speed, so
-    // neither side block truncates at 11 pt.
+    // Wide enough for the one-line "12 working · 7/7 linked" / "· 3 critical" and the right-hand
+    // speed, so neither side block truncates at 11 pt.
     private var sideWidth: CGFloat { FleetPanelMetrics.closedRowSideWidth }
 
     private var visible: Bool {
@@ -29,29 +29,29 @@ struct FleetClosedIndicator: View {
         if visible {
             let model = store.panelModel
             HStack(spacing: 0) {
-                // Left block: working / status text, right-aligned toward the gap (no mini map: owner request)
-                HStack(spacing: 10) {
-                    // Working count over link / critical status
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(model.workingCount)")
-                            .font(FleetType.mono(size: 12, weight: .medium))
-                            .foregroundColor(theme.text)
-                            + Text(" working")
-                            .font(.system(size: 12))
-                            .foregroundColor(theme.text)
-                        if model.criticalCount == 0 {
-                            Text(FleetFormat.linked(model.linkedCount, of: model.agentCount))
-                                .font(FleetType.mono(size: 11))
-                                .foregroundColor(theme.dim)
-                                .lineLimit(1)
-                        } else {
-                            Text(FleetFormat.status(model.criticalCount))
-                                .font(FleetType.mono(size: 11))
-                                .foregroundColor(theme.hotText)
-                                .lineLimit(1)
-                        }
+                // Left block: one line, "2 working · 7/7 linked" (or "· 3 critical"), right-aligned toward the gap.
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text("\(model.workingCount)")
+                        .font(FleetType.mono(size: 12, weight: .medium))
+                        .foregroundColor(theme.text)
+                        + Text(" working")
+                        .font(.system(size: 12))
+                        .foregroundColor(theme.text)
+                    Text("·")
+                        .font(.system(size: 12))
+                        .foregroundColor(theme.dim)
+                    if model.criticalCount == 0 {
+                        Text(FleetFormat.linked(model.linkedCount, of: model.agentCount))
+                            .font(FleetType.mono(size: 11))
+                            .foregroundColor(theme.dim)
+                    } else {
+                        Text(FleetFormat.status(model.criticalCount))
+                            .font(FleetType.mono(size: 11))
+                            .foregroundColor(theme.hotText)
                     }
                 }
+                .lineLimit(1)
+                .fixedSize()
                 .frame(width: sideWidth, alignment: .trailing)
 
                 // Hardware-notch gap spacer: notch width plus 5 pt clearance per side

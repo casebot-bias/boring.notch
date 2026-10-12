@@ -252,11 +252,12 @@ final class FleetFormatTests: XCTestCase {
             monospacedWidth("Needs you", size: FleetPanelMetrics.minTextSize),
             FleetPanelMetrics.responseMapColumnWidth - 11,
             "Needs you fits the alert row's detail room (that row has no badge)")
-        for status in ["1 working", "3 critical", FleetFormat.linked(7, of: 7)] {
+        // The closed row is one line per side; the longest left lines must fit the side budget.
+        for line in ["12 working · " + FleetFormat.linked(7, of: 7), "12 working · 3 critical", "120 tok/s"] {
             XCTAssertLessThanOrEqual(
-                monospacedWidth(status, size: FleetPanelMetrics.minTextSize),
+                monospacedWidth(line, size: FleetPanelMetrics.minTextSize),
                 FleetPanelMetrics.closedRowTextWidth,
-                "\(status) does not fit the closed row's text budget")
+                "\(line) does not fit the closed row's text budget")
         }
     }
 
@@ -278,14 +279,14 @@ final class FleetFormatTests: XCTestCase {
     }
 
     /// A response-map column cannot be narrower than its furniture plus the detail budget, and the
-    /// closed row's side block cannot be narrower than its mini map, gap and text budget.
+    /// closed row's side block cannot be narrower than its one-line text budget.
     func testBlockWidthsCoverTheirContents() {
         XCTAssertGreaterThanOrEqual(FleetPanelMetrics.responseMapColumnWidth,
                                     FleetPanelMetrics.responseMapRowOverhead + 50)
         XCTAssertGreaterThanOrEqual(FleetPanelMetrics.responseMapWidth,
                                     2 * FleetPanelMetrics.responseMapColumnWidth + 60)
         XCTAssertGreaterThanOrEqual(FleetPanelMetrics.closedRowSideWidth,
-                                    FleetPanelMetrics.closedRowMapWidth + 10 + FleetPanelMetrics.closedRowTextWidth)
+                                    FleetPanelMetrics.closedRowTextWidth)
     }
 
     // MARK: - actionNeededLabel

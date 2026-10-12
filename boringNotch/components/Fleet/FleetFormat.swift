@@ -303,10 +303,11 @@ enum FleetPanelMetrics {
     /// the tab strip that carries the health text free the room the map's four rows need, so the
     /// notch does not grow.
     static let fleetSectionHeight: CGFloat = 300
-    /// The closed-notch row: the mini map's width, the gap after it, and the text budget.
-    static let closedRowMapWidth: CGFloat = 46
-    static let closedRowTextWidth: CGFloat = 72
-    static var closedRowSideWidth: CGFloat { closedRowMapWidth + 10 + closedRowTextWidth }
+    /// The closed-notch row: one line per side ("2 working · 7/7 linked" / the speed), no mini map.
+    /// The budget holds the longest left line in 11 pt monospaced width (a safe upper bound for the
+    /// 12 pt proportional "working"); both sides share it so the camera gap stays centred.
+    static let closedRowTextWidth: CGFloat = 160
+    static var closedRowSideWidth: CGFloat { closedRowTextWidth }
     /// A pulsing status dot breathes by size, never by opacity: dimming an alert dot would drop it
     /// under the 3:1 dot floor. The busy cells keep their own dim pulse.
     static let alertPulseScale: CGFloat = 1.35
