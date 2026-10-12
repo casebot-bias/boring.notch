@@ -322,7 +322,7 @@ final class FleetDecodingTests: XCTestCase {
         {"state":"needs_decision","job":"no-choices","pr":1,"options":[]}]}}]}
         """
         let snapshot = try ActivitySnapshot.decode(Data(json.utf8))
-        let model = FleetPanelModelBuilder.build(fleet: nil, activity: snapshot)
+        let model = FleetPanelModelBuilder.build(fleet: nil, activity: snapshot, fleetLive: true)
         XCTAssertEqual(model.decisions.count, 2)
         let first = try XCTUnwrap(model.decision)
         XCTAssertEqual(first.job, "ciri-skill-trim")

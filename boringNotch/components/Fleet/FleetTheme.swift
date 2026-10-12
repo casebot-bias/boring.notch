@@ -113,6 +113,31 @@ struct FleetTheme {
         LinearGradient(colors: [panelTop, panelBottom], startPoint: .top, endPoint: .bottom)
     }
 }
+extension FleetTheme {
+    /// The arc's colour for a reading at `level`: while a reading is under 70 % the RAM ring keeps
+    /// the memory blue (the mock's rule), every other ok-level ring uses the skin's accent; the hot
+    /// orange from 70 % and the alert red from 90 %.
+    func ringArcColor(_ level: FleetRingLevel, kind: FleetRingKind) -> Color {
+        switch level {
+        case .ok: return kind == .ram ? memory : accent
+        case .hot: return hot
+        case .alert: return alert
+        }
+    }
+
+    /// The reading text's colour at `level`: the level's text-grade token, never the mark colour.
+    /// `alert` is a dot colour that stays under the 7:1 text floor by contract, and bare `hot`
+    /// measures about 5.8:1 on the olive panel, so 11 pt words draw in their text twins. A missing
+    /// reading (nil) is `dim`.
+    func ringTextColor(_ level: FleetRingLevel?) -> Color {
+        switch level {
+        case .ok: return accent
+        case .hot: return hotText
+        case .alert: return alertChipText
+        case nil: return dim
+        }
+    }
+}
 
 extension Defaults.Keys {
     static let fleetSkin = Key<FleetSkin>("fleetSkin", default: .black)

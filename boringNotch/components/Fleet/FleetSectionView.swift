@@ -3,8 +3,8 @@
 //  boringNotch
 //
 //  Right-hand Fleet column of the opened notch: 1 px divider, a one-line header,
-//  the FLEET / ODIN tab strip carrying the health line, then the FLEET tab (map
-//  next to current work, footer of peaks and Open Fleet) or the ODIN tab.
+//  the FLEET / DECISIONS tab strip carrying the health line, then the FLEET tab (map
+//  next to current work, footer of per-machine rings and Open Fleet) or the DECISIONS tab.
 //  Colours are driven by FleetTheme (skin: FleetSkin).
 //
 
@@ -172,11 +172,12 @@ struct FleetSectionView: View {
 
     // MARK: - Footer
 
-    /// CPU/GPU/RAM peak rings on the left, the bordered Open Fleet button on
-    /// the right.
+    /// One triple ring per fleet machine on the left, the bordered Open Fleet
+    /// button on the right.
+    /// 10 pt keeps the last machine's reading clear of the button, a 100 % reading included.
     private var footer: some View {
-        HStack(alignment: .center, spacing: 0) {
-            FleetPressureView(peaks: store.panelModel.peaks)
+        HStack(alignment: .center, spacing: 10) {
+            FleetPressureView(hosts: store.panelModel.hosts)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: openFleet) {
                 Text("Open Fleet →")

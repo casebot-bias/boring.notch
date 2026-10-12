@@ -275,6 +275,34 @@ final class FleetThemeTests: XCTestCase {
         }
     }
 
+    /// The footer's reading text is data at 11 pt, so every level's words must clear the text floor on
+    /// both skins, and the alert level must never borrow the alert red itself (a dot colour held below
+    /// 7:1 on purpose). The RAM ring's ok-level arc is the memory blue, a mark: 3:1.
+    func testRingLevelColoursClearTheirFloors() {
+        for skin in FleetSkin.allCases {
+            let t = FleetTheme(skin: skin)
+            let bg = t.panelTop
+            for level in [FleetRingLevel.ok, .hot, .alert] {
+                let words = t.ringTextColor(level)
+                // `accent` and `hot` are the owner's exempt accent colours: 4.5:1 as words.
+                let floor: CGFloat = (level == .ok) ? 4.5 : 7.0
+                XCTAssertGreaterThanOrEqual(contrast(words, bg), floor,
+                                            "\(skin) \(level) ring words must clear their floor")
+            }
+            XCTAssertGreaterThanOrEqual(contrast(t.ringTextColor(nil), bg), 7.0,
+                                        "\(skin) a missing reading prints in dim text")
+            XCTAssertNotEqual(t.ringTextColor(.alert), t.alert,
+                              "\(skin) the alert level's words must not be the alert dot colour")
+            for kind in FleetRingKind.allCases {
+                XCTAssertGreaterThanOrEqual(contrast(t.ringArcColor(.ok, kind: kind), bg), 3.0,
+                                            "\(skin) the \(kind.rawValue) ok-level arc must reach 3:1")
+            }
+            XCTAssertEqual(t.ringArcColor(.ok, kind: .ram), t.memory, "\(skin) RAM keeps the memory blue under 70 %")
+            XCTAssertEqual(t.ringArcColor(.hot, kind: .cpu), t.hot, "\(skin) 70-89 % arcs use hot")
+            XCTAssertEqual(t.ringArcColor(.alert, kind: .gpu), t.alert, "\(skin) 90 %+ arcs use alert")
+        }
+    }
+
     /// The reading hierarchy the panel relies on: body text beats names, names beat muted, muted beats dim.
     func testTextHierarchyBeatsMutedBeatsDim() {
         for skin in FleetSkin.allCases {

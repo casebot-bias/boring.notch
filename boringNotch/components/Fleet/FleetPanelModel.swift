@@ -4,10 +4,12 @@
 //
 //  Data model for the opened fleet panel: the `case` origin at the centre of a
 //  response map, the seven agent signals (frank, claire, ciri, dali, nova, pika, odin),
-//  the current-work jobs, and the fleet-wide output / peak readings shown in the
-//  header and footer. Foundation only (no SwiftUI) so it compiles into both the
+//  the current-work jobs, the fleet-wide output shown in the header and one reading per
+//  machine in the footer. Foundation only (no SwiftUI) so it compiles into both the
 //  app target and the test target.
 //
+
+import Foundation
 
 /// Signal state of a node: busy, idle or offline. Offline beats busy: an offline/absent
 /// machine reports .offline even when its activity device claims work. An open decision is
@@ -67,24 +69,59 @@ extension FleetDecision {
     }
 }
 
-/// Fleet-wide peak for one hardware kind, shown in the panel footer.
-struct FleetPeak: Identifiable, Equatable {
-    enum Kind: String, CaseIterable, Equatable {
-        case cpu, gpu, ram
+/// One of the footer's three rings, outer to inner.
+enum FleetRingKind: String, CaseIterable, Hashable {
+    case cpu, gpu, ram
 
-        var title: String {
-            switch self {
-            case .cpu: return "CPU"
-            case .gpu: return "GPU"
-            case .ram: return "RAM"
-            }
+    var title: String {
+        switch self {
+        case .cpu: return "CPU"
+        case .gpu: return "GPU"
+        case .ram: return "RAM"
+        }
+    }
+}
+
+/// The colour level of a percent reading: under 70 % `ok`, 70-89 % `hot`, 90 % and over `alert`.
+enum FleetRingLevel: Equatable { case ok, hot, alert }
+
+/// One machine's three readings for the footer, in ring order: outer CPU, middle GPU, inner RAM.
+/// A reading the machine does not report is nil (that ring keeps its track only). A reading that is
+/// not live - the machine reports offline, or the fleet feed has not answered since its last failure -
+/// draws no arcs at all, so the footer never shows a machine as healthier than it is.
+struct FleetHostReading: Identifiable, Equatable {
+    var id: String
+    var label: String
+    var cpu: Int?
+    var gpu: Int?
+    var ram: Int?
+    /// Whether these readings can be trusted right now: the machine reports online AND the fleet feed
+    /// answered its last poll. The store keeps the last snapshot when a poll fails, so a retained
+    /// payload must read as stale, not as live.
+    var live: Bool
+
+    /// The reading for one ring: whole percent, nil when the machine reports none.
+    func value(_ kind: FleetRingKind) -> Int? {
+        switch kind {
+        case .cpu: return cpu
+        case .gpu: return gpu
+        case .ram: return ram
         }
     }
 
-    var kind: Kind
-    var value: Double?   // percent 0…100; nil when no host reported it
-    var host: String?    // machine title that reported the value
-    var id: String { kind.rawValue }
+    /// The arc's 0…1 sweep, or nil when the reading is not live or missing. A machine that is offline
+    /// or whose feed has failed draws no arc; a missing reading leaves its ring with the track only.
+    func arcFraction(_ kind: FleetRingKind) -> Double? {
+        guard live, let percent = value(kind) else { return nil }
+        return FleetFormat.fraction(Double(percent))
+    }
+
+    /// The highest of the three readings with its kind, cpu winning a tie; nil when nothing is reported.
+    var hottest: (kind: FleetRingKind, value: Int)? {
+        FleetRingKind.allCases.compactMap { kind in
+            value(kind).map { (kind, $0) }
+        }.max { $0.value < $1.value }
+    }
 }
 
 struct FleetPanelModel: Equatable {
@@ -96,7 +133,9 @@ struct FleetPanelModel: Equatable {
     /// The fleet-wide decode speed (tokens/s and its trend), from the fleet payload's block with
     /// the activity payload's block as fallback; nil when neither reports one.
     var speed: FleetSpeed?
-    var peaks: [FleetPeak]             // always cpu, gpu, ram in this order
+    /// One reading per footer machine, always in `FleetPanelModelBuilder.footerHosts` order. A reading
+    /// is live only while the fleet feed's last poll answered and its own machine reports online.
+    var hosts: [FleetHostReading]
 
     /// case first, then the agents.
     var lanes: [FleetLane] { [origin] + agents }
@@ -173,6 +212,55 @@ struct FleetPanelModel: Equatable {
     }
 }
 
+/// The notch's two fleet polls, each tracked on its own. One shared flag would let an activity answer
+/// declare the machine readings live again while the fleet poll keeps failing, so the footer's rings
+/// read `fleetIsLive` and never the shared reachability.
+struct FleetFeedFreshness: Equatable {
+    /// The two endpoints the store polls.
+    enum Source: Equatable { case fleet, activity }
+
+    private(set) var lastFleetSuccessAt: Date?
+    private(set) var lastFleetErrorAt: Date?
+    private(set) var lastActivitySuccessAt: Date?
+    private(set) var lastActivityErrorAt: Date?
+
+    mutating func markSuccess(_ source: Source, at date: Date) {
+        switch source {
+        case .fleet: lastFleetSuccessAt = date
+        case .activity: lastActivitySuccessAt = date
+        }
+    }
+
+    mutating func markFailure(_ source: Source, at date: Date) {
+        switch source {
+        case .fleet: lastFleetErrorAt = date
+        case .activity: lastActivityErrorAt = date
+        }
+    }
+
+    /// The fleet payload's own freshness, which is all the footer's rings read: a failed fleet poll
+    /// leaves them stale until the fleet answers again, whatever the activity feed does. Deliberately no
+    /// grace window - after a failed fleet poll the numbers are simply not current.
+    var fleetIsLive: Bool {
+        FleetFeedFreshness.answered(lastSuccessAt: lastFleetSuccessAt, lastErrorAt: lastFleetErrorAt)
+    }
+
+    /// The store's reachability, its meaning unchanged: either feed answering counts, until a later
+    /// failure outranks it. The closed notch's fleet row reads this.
+    var isReachable: Bool {
+        let success = [lastFleetSuccessAt, lastActivitySuccessAt].compactMap { $0 }.max()
+        let error = [lastFleetErrorAt, lastActivityErrorAt].compactMap { $0 }.max()
+        return FleetFeedFreshness.answered(lastSuccessAt: success, lastErrorAt: error)
+    }
+
+    /// Reachable once something has succeeded and no failure is newer than that success.
+    private static func answered(lastSuccessAt: Date?, lastErrorAt: Date?) -> Bool {
+        guard let lastSuccessAt else { return false }
+        guard let lastErrorAt else { return true }
+        return lastSuccessAt >= lastErrorAt
+    }
+}
+
 enum FleetPanelModelBuilder {
     static let agentIds = ["frank", "claire", "ciri", "dali", "nova", "pika", "odin"]
 
@@ -184,7 +272,9 @@ enum FleetPanelModelBuilder {
         return "other"
     }
 
-    static func build(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetPanelModel {
+    /// `fleetLive` is the store's reachability: false once a poll has failed, so a retained snapshot
+    /// reads as stale instead of live.
+    static func build(fleet: FleetSnapshot?, activity: ActivitySnapshot?, fleetLive: Bool) -> FleetPanelModel {
         // case runs its own jobs AND the delegated ones routed to frank/claire/dali.
         let origin = machineLane(id: "case", fleet: fleet, activity: activity)
         let agents: [FleetLane] = [
@@ -214,7 +304,7 @@ enum FleetPanelModelBuilder {
                                // When neither sends a block, the median of the reporting devices is used, so
                                // the header is never a sum.
                                speed: speed,
-                               peaks: peaks(from: fleet))
+                               hosts: hosts(from: fleet, live: fleetLive))
     }
 
     // MARK: - Lane builders
@@ -273,26 +363,33 @@ enum FleetPanelModelBuilder {
         return [FleetDecision(status)]
     }
 
-    // MARK: - Peaks
+    // MARK: - Footer hosts
 
-    /// Highest available cpu/gpu/ram reading across every fleet machine, always in
-    /// cpu, gpu, ram order; nil value/host when nothing reported.
-    private static func peaks(from fleet: FleetSnapshot?) -> [FleetPeak] {
-        FleetPeak.Kind.allCases.map { kind in
-            var best: (value: Double, host: String)?
-            for machine in fleet?.machines ?? [] {
-                let reading: Reading
-                switch kind {
-                case .cpu: reading = machine.cpuLoadPct
-                case .gpu: reading = machine.gpuUtilPct
-                case .ram: reading = machine.ramUsedPct
-                }
-                guard reading.isAvailable, let value = reading.value,
-                      best == nil || value > best!.value else { continue }
-                best = (value, machine.title.isEmpty ? machine.id : machine.title)
-            }
-            return FleetPeak(kind: kind, value: best?.value, host: best?.host)
+    /// The footer's five machines in the owner's order; macbook shows as "mac", like the panel's
+    /// other lowercase names.
+    static let footerHosts: [(id: String, label: String)] = [
+        ("case", "case"), ("frank", "frank"), ("claire", "claire"), ("dali", "dali"), ("macbook", "mac"),
+    ]
+
+    /// One reading per footer machine, always in `footerHosts` order: a machine the payload never
+    /// mentions keeps its slot with no readings and no arcs, so the strip never changes width.
+    /// A reading is live only while the feed answered its last poll AND the machine reports online.
+    private static func hosts(from fleet: FleetSnapshot?, live: Bool) -> [FleetHostReading] {
+        footerHosts.map { entry in
+            let machine = machine(id: entry.id, in: fleet)
+            return FleetHostReading(id: entry.id,
+                                    label: entry.label,
+                                    cpu: percent(machine?.cpuLoadPct),
+                                    gpu: percent(machine?.gpuUtilPct),
+                                    ram: percent(machine?.ramUsedPct),
+                                    live: live && machineOnline(machine))
         }
+    }
+
+    /// A reading as the footer's whole percent, nil when it is unavailable or carries no value.
+    private static func percent(_ reading: Reading?) -> Int? {
+        guard let reading, reading.isAvailable, let value = reading.value else { return nil }
+        return Int(value.rounded())
     }
 
     // MARK: - Lookup helpers
