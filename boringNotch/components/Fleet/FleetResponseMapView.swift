@@ -9,8 +9,9 @@
 //  FleetTheme(skin:); nothing draws a background (the notch is already black).
 //  The animations are the busy-pulse of the mini signals and the dots
 //  travelling along the busy wires, both honoured off under Reduce Motion.
-//  A node with an open decision (an open Odin decision) draws `theme.alert` and
-//  is titled "Decision" in both maps; the alert outranks the node's activity state.
+//  A node with an open decision (an open Odin decision) draws `theme.alert` and outranks the
+//  node's activity state. The response map keeps its name and says "Needs you" in `hot`; the grid
+//  is one row per `responseMapMinRowHeight`.
 //
 
 import Defaults
@@ -34,6 +35,8 @@ struct FleetResponseMapView: View {
     /// Left column: the first three agents. Right column: the rest (four with pika).
     private var leftIndexes: [Int] { Array(lanes.indices.prefix(3)) }
     private var rightIndexes: [Int] { Array(lanes.indices.dropFirst(3)) }
+    /// The map's grid: as many rows as its longer agent column (four with pika).
+    private var gridRows: Int { max(leftIndexes.count, rightIndexes.count) }
 
     // MARK: - Layout constants
 
@@ -72,16 +75,16 @@ struct FleetResponseMapView: View {
         let working = lanes.filter { $0.state == .busy }.count
         return HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text("RESPONSE MAP")
-                .font(.system(size: 11, design: .monospaced))
-                .tracking(0.5)
-                .foregroundColor(theme.dim)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.9)
+                .foregroundColor(theme.muted)
             Spacer(minLength: 0)
             (Text("\(working)")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundColor(theme.muted)
+                .font(FleetType.mono(size: 11))
+                .foregroundColor(theme.dim)
              + Text(" WORKING")
-                .font(.system(size: 11, design: .monospaced))
-                .tracking(0.5)
+                .font(FleetType.mono(size: 11))
+                .tracking(0)
                 .foregroundColor(theme.dim))
         }
     }
@@ -94,7 +97,6 @@ struct FleetResponseMapView: View {
     /// overlap the box; the Canvas wire anchors sit on the columns' inner edges.
     private var map: some View {
         GeometryReader { geo in
-            let gridRows = max(leftIndexes.count, rightIndexes.count)
             let rowHeight = geo.size.height / CGFloat(max(1, gridRows))
             // The column floor leaves room for the name and detail lines, so no status truncates
             // at 11 pt; a wider map still gets the freed space.
@@ -129,6 +131,10 @@ struct FleetResponseMapView: View {
                 }
             }
         }
+        // The grid is exactly one `responseMapMinRowHeight` per row: the columns and the Canvas
+        // wires read `rowHeight` off this same geometry, so the anchors stay on the row centres,
+        // and the panel's spare room stays below the map.
+        .frame(height: FleetPanelMetrics.responseMapHeight(rows: gridRows), alignment: .top)
     }
 
     /// One cubic per agent: starts at its column's inner edge on the row
@@ -231,31 +237,43 @@ struct FleetResponseMapView: View {
         .frame(width: colWidth)
     }
 
-    /// Signal square, name over detail line, job-count badge at the column's
-    /// far right. A node with an open decision draws its signal in `theme.alert`,
-    /// is titled "Decision" in place of the agent label, shows the decision
-    /// detail and drops the badge; the alert outranks the activity state.
+    /// Signal square, name over the state line, job badge at the column's far right. Busy and
+    /// open-decision names are L1 (`text`, semibold); idle and offline names are L2 (`muted`, and
+    /// `nameOff` for offline, medium). An offline signal is a hollow square; an open-decision lane draws its signal
+    /// in `theme.alert`, keeps its own name, says "Needs you" in `hotText` and drops the badge.
     @ViewBuilder
     private func agentRow(lane: FleetLane) -> some View {
+        let needsYou = lane.hasOpenDecision
+        let live = needsYou || lane.state == .busy
+        let nameColor: Color = live ? theme.text : (lane.state == .offline ? theme.nameOff : theme.muted)
         HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(lane.hasOpenDecision ? theme.alert : signalColor(lane.state))
-                .frame(width: signalSize, height: signalSize)
+            Group {
+                if lane.state == .offline && !needsYou {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .stroke(theme.off, lineWidth: 1)
+                } else {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(needsYou ? theme.alert : signalColor(lane.state))
+                }
+            }
+            .frame(width: signalSize, height: signalSize)
             VStack(alignment: .leading, spacing: 1) {
-                Text(lane.hasOpenDecision ? "Decision" : lane.label)
-                    .font(.system(size: 12))
-                    .foregroundColor(lane.hasOpenDecision ? theme.hot : nameColor(lane.state))
+                Text(lane.label)
+                    .font(.system(size: 12, weight: live ? .semibold : .medium))
+                    .foregroundColor(nameColor)
                     .lineLimit(1)
-                Text(lane.hasOpenDecision ? FleetFormat.decisionDetail(lane) : FleetFormat.responseDetail(lane))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(theme.dim)
+                Text(FleetFormat.responseDetail(lane))
+                    .font(!needsYou && FleetFormat.speedDetail(lane) != nil
+                          ? FleetType.mono(size: 11, weight: .medium)
+                          : FleetType.mono(size: 11))
+                    .foregroundColor(needsYou ? theme.hotText : theme.dim)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
-            if !lane.hasOpenDecision, let badge = FleetFormat.jobBadge(lane.jobs.count) {
+            if !needsYou, let badge = FleetFormat.jobBadge(lane.jobs.count) {
                 Text(badge)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(theme.muted)
+                    .font(FleetType.mono(size: 11))
+                    .foregroundColor(theme.dim)
                     .lineLimit(1)
             }
         }
@@ -271,10 +289,10 @@ struct FleetResponseMapView: View {
             .overlay {
                 VStack(spacing: 2) {
                     Text(origin.label)
-                        .font(.system(size: 12))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(theme.text)
                     Text(origin.state == .offline ? "Offline" : "Online")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(FleetType.mono(size: 11))
                         .foregroundColor(theme.dim)
                 }
             }
@@ -286,15 +304,7 @@ struct FleetResponseMapView: View {
         switch state {
         case .busy: return theme.accent
         case .idle: return theme.off
-        case .offline: return theme.hot
-        }
-    }
-
-    private func nameColor(_ state: FleetNodeState) -> Color {
-        switch state {
-        case .busy: return theme.text
-        case .idle: return theme.nameText
-        case .offline: return theme.nameOff
+        case .offline: return theme.off
         }
     }
 
@@ -403,7 +413,7 @@ struct FleetMiniSignalMap: View {
         switch lane.state {
         case .busy: return theme.accent
         case .idle: return theme.off
-        case .offline: return theme.hot
+        case .offline: return theme.off
         }
     }
 

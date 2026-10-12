@@ -629,4 +629,48 @@ final class FleetPanelModelTests: XCTestCase {
         let cleared = FleetPanelModelBuilder.build(fleet: f, activity: clearedActivity)
         XCTAssertFalse(cleared.hasOpenDecision, "a later successful empty open list must clear the pip")
     }
+
+    /// The fleet-wide speed rides on the model; a machine lane carries its device's own reading and the
+    /// cloud pool (nova) never does.
+    func testSpeedReachesTheModelAndTheMachineLanes() throws {
+        let json = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","speed":{"current":154.4,"lastAt":"2026-10-11T17:59:50.000Z","trend":[120.0,null],"stepSec":10},"devices":[{"device":"frank","items":[{"id":"j1","label":"job","device":"frank"}],"state":"ok","speed":38.5},{"device":"ciri","items":[],"state":"ok","speed":12.0},{"device":"case","items":[{"id":"c1","label":"cloud job","device":"cloud","model":"openrouter/deepseek"}],"state":"ok"}]}
+        """
+        let activity = try ActivitySnapshot.decode(Data(json.utf8))
+        let model = FleetPanelModelBuilder.build(fleet: nil, activity: activity)
+        XCTAssertEqual(model.speed?.current, 154.4)
+        XCTAssertEqual(model.agents.first { $0.id == "frank" }?.speed, 38.5)
+        XCTAssertEqual(model.agents.first { $0.id == "ciri" }?.speed, 12.0)
+        XCTAssertNil(model.agents.first { $0.id == "nova" }?.speed)
+        XCTAssertNil(model.agents.first { $0.id == "odin" }?.speed)
+    }
+
+    /// No speed block in either payload: the fleet number is the median of the devices that report one, so a
+    /// single writer's own speed becomes the fleet's (never their sum).
+    func testFleetSpeedFallsBackToTheDeviceMedian() throws {
+        let json = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","devices":[{"device":"frank","items":[{"id":"j1","label":"job","device":"frank"}],"state":"ok","speed":38.5},{"device":"claire","items":[],"state":"ok"},{"device":"dali","items":[],"state":"ok"}]}
+        """
+        let activity = try ActivitySnapshot.decode(Data(json.utf8))
+        let model = FleetPanelModelBuilder.build(fleet: nil, activity: activity)
+        XCTAssertEqual(model.speed?.current ?? 0, 38.5, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.speedNumberText(model.speed), "39")
+    }
+
+    /// A payload block still wins over the device median, and no readings at all stay nil.
+    func testPayloadSpeedBlockWinsAndNoReadingsStayNil() throws {
+        let withBlock = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","speed":{"current":154.4,"lastAt":null,"trend":[],"stepSec":10},"devices":[{"device":"frank","items":[{"id":"j1","label":"job","device":"frank"}],"state":"ok","speed":38.5}]}
+        """
+        let blocked = FleetPanelModelBuilder.build(
+            fleet: nil, activity: try ActivitySnapshot.decode(Data(withBlock.utf8)))
+        XCTAssertEqual(blocked.speed?.current ?? 0, 154.4, accuracy: 0.001)
+
+        let silent = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","devices":[{"device":"frank","items":[],"state":"ok"}]}
+        """
+        let quiet = FleetPanelModelBuilder.build(
+            fleet: nil, activity: try ActivitySnapshot.decode(Data(silent.utf8)))
+        XCTAssertNil(quiet.speed)
+    }
 }

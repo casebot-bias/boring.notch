@@ -29,22 +29,27 @@ private struct PeakReading: View {
     let peak: FleetPeak
     let theme: FleetTheme
 
-    private var highPressure: Bool {
-        guard let value = peak.value else { return false }
-        return FleetFormat.isHighPressure(value)
+    /// The rounded percent shown by `FleetFormat.percent`, so the colour tracks the number the user reads.
+    private var displayedPercent: Int? {
+        peak.value.map { Int($0.rounded()) }
+    }
+
+    /// Level colour shared by ring and number: < 70 % accent, 70-89 % hot, >= 90 % alert,
+    /// `dim` when the peak has no reading.
+    private var levelColor: Color {
+        guard let percent = displayedPercent else { return theme.dim }
+        if percent >= 90 { return theme.alert }
+        if percent >= 70 { return theme.hot }
+        return theme.accent
     }
 
     private var arcColor: Color {
-        highPressure ? theme.hot : theme.accent
+        displayedPercent == nil ? theme.line : levelColor
     }
 
     private var valueText: String {
         guard let value = peak.value else { return FleetFormat.unknown }
         return FleetFormat.percent(value)
-    }
-
-    private var valueColor: Color {
-        highPressure ? theme.hot : theme.text
     }
 
     private var hostText: String {
@@ -58,16 +63,15 @@ private struct PeakReading: View {
                 .frame(width: 24, height: 24)
 
             VStack(alignment: .leading, spacing: 1) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                (
                     Text(peak.kind.title)
-                        .font(.system(size: 12))
                         .foregroundColor(theme.muted)
-                    Text(valueText)
-                        .font(.system(size: 12))
-                        .foregroundColor(valueColor)
-                }
+                    + Text(" \(valueText)")
+                        .foregroundColor(levelColor)
+                )
+                .font(FleetType.mono(size: 13, weight: .medium))
                 Text(hostText)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(FleetType.mono(size: 11))
                     .foregroundColor(theme.dim)
             }
         }

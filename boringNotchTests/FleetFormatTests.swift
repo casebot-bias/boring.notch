@@ -153,20 +153,6 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.fraction(0), 0.0, accuracy: 0.0001)
     }
 
-    // MARK: - isHighPressure
-
-    func testHighPressureJustBelowNinetyFiveIsFalse() {
-        XCTAssertFalse(FleetFormat.isHighPressure(94.9))
-    }
-
-    func testHighPressureAtNinetyFiveIsTrue() {
-        XCTAssertTrue(FleetFormat.isHighPressure(95))
-    }
-
-    func testHighPressureAtFullIsTrue() {
-        XCTAssertTrue(FleetFormat.isHighPressure(100))
-    }
-
     // MARK: - responseDetail
 
     func testResponseDetailBusyCountsJobs() {
@@ -185,20 +171,10 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.responseDetail(lane(.offline)), "Offline")
     }
 
-    // MARK: - decisionDetail
-
-    /// The alert's detail line reads the first open entry's pull request, falling back to
-    /// "No PR" when none was reported — the fallback has to fit the row's 54 pt detail budget.
-    /// `responseDetail` stays the lane's activity detail: a busy lane still reads "Working"
-    /// even with an open decision.
-    func testDecisionDetailReadsTheFirstOpenEntry() {
-        let monitor = FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: "no_progress", round: 4)
-        let other = FleetDecision(job: "other-job", pr: nil, reason: nil, round: nil)
-        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [monitor])), "PR #4")
-        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other])), "No PR")
-        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [monitor, other])), "PR #4")
-        XCTAssertEqual(FleetFormat.decisionDetail(lane(.idle, decisions: [other, monitor])), "No PR")
-        XCTAssertEqual(FleetFormat.responseDetail(lane(.busy, decisions: [monitor])), "Working")
+    func testResponseDetailSaysNeedsYouForALaneWithAnOpenDecision() {
+        let alert = lane(.idle, decisions: [FleetDecision(job: "notch-map-overlap", pr: 4)])
+        XCTAssertEqual(FleetFormat.responseDetail(alert), "Needs you")
+        XCTAssertEqual(FleetFormat.responseDetail(lane(.busy, decisions: [])), "Working")
     }
 
     func testDecisionReasonMapsTheThreeReasonsToPlainWords() {
@@ -215,37 +191,6 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.decisionReason(nil, round: 4), "decision needed")
         XCTAssertEqual(FleetFormat.decisionReason("", round: nil), "decision needed")
         XCTAssertEqual(FleetFormat.decisionReason("something_new", round: nil), "decision needed")
-    }
-
-    func testDecisionSubjectJoinsJobAndPullRequest() {
-        XCTAssertEqual(FleetFormat.decisionSubject(
-            FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: nil, round: nil)),
-                       "monitor-landscape-scale · PR #4")
-    }
-
-    func testDecisionSubjectToleratesMissingParts() {
-        XCTAssertEqual(FleetFormat.decisionSubject(
-            FleetDecision(job: "monitor-landscape-scale", pr: nil, reason: nil, round: nil)),
-                       "monitor-landscape-scale")
-        XCTAssertEqual(FleetFormat.decisionSubject(FleetDecision(job: nil, pr: 4, reason: nil, round: nil)), "PR #4")
-        XCTAssertEqual(FleetFormat.decisionSubject(FleetDecision(job: "   ", pr: 4, reason: nil, round: nil)), "PR #4")
-        XCTAssertEqual(FleetFormat.decisionSubject(
-            FleetDecision(job: nil, pr: nil, reason: nil, round: nil)),
-                       FleetFormat.unknown)
-    }
-
-    // MARK: - decision staleness
-
-    func testDecisionStalenessMarksOnlyAnUnreachableFeed() {
-        XCTAssertNil(FleetFormat.decisionStaleness(true))
-        XCTAssertEqual(FleetFormat.decisionStaleness(false), "last known")
-    }
-
-    func testDecisionCountLabelOnlyAppearsAboveOne() {
-        XCTAssertNil(FleetFormat.decisionCountLabel(0))
-        XCTAssertNil(FleetFormat.decisionCountLabel(1))
-        XCTAssertEqual(FleetFormat.decisionCountLabel(2), "2 open")
-        XCTAssertEqual(FleetFormat.decisionCountLabel(5), "5 open")
     }
 
     // MARK: - fleetBaseURL
@@ -294,29 +239,42 @@ final class FleetFormatTests: XCTestCase {
     /// side block `closedRowTextWidth`; every string those blocks can hold has to fit.
     func testMapAndClosedRowStringsFitTheirMetrics() {
         let detailBudget = FleetPanelMetrics.responseMapColumnWidth - FleetPanelMetrics.responseMapRowOverhead
-        for detail in ["Idle", "Offline", "Working", "1 job", "2 jobs"] {
+        for detail in ["Idle", "Offline", "Working", "1 job", "2 jobs", "39 tok/s"] {
             XCTAssertLessThanOrEqual(
                 monospacedWidth(detail, size: FleetPanelMetrics.minTextSize), detailBudget,
                 "\(detail) does not fit the response-map detail budget")
         }
-        // The alert row shares that budget: the pull-request label and the short fallback the row
-        // shows when the loaded decision carries no PR. "Needs decision" measured ~95 pt here and
-        // truncated, which is why the fallback is short.
-        let withPullRequest = lane(.busy, decisions: [FleetDecision(job: "monitor-landscape-scale", pr: 4, reason: nil, round: nil)])
-        let withoutPullRequest = lane(.busy, decisions: [FleetDecision(job: "monitor-landscape-scale", pr: nil, reason: nil, round: nil)])
-        for detail in [FleetFormat.decisionDetail(withPullRequest), FleetFormat.decisionDetail(withoutPullRequest)] {
-            XCTAssertLessThanOrEqual(
-                monospacedWidth(detail, size: FleetPanelMetrics.minTextSize), detailBudget,
-                "the alert detail \(detail) does not fit the response-map detail budget")
-        }
-        XCTAssertEqual(FleetFormat.decisionDetail(withoutPullRequest), "No PR",
-                       "the fallback is the label the row shows when a decision has no PR")
+        // The alert lane reads "Needs you" from FleetFormat.responseDetail.
+        let alertLane = FleetLane(id: "odin", label: "odin", state: .idle, jobs: [],
+                                  decisions: [FleetDecision(job: "notch-map-overlap", pr: 4)])
+        XCTAssertEqual(FleetFormat.responseDetail(alertLane), "Needs you")
+        XCTAssertLessThanOrEqual(
+            monospacedWidth("Needs you", size: FleetPanelMetrics.minTextSize),
+            FleetPanelMetrics.responseMapColumnWidth - 11,
+            "Needs you fits the alert row's detail room (that row has no badge)")
         for status in ["1 working", "3 critical", FleetFormat.linked(7, of: 7)] {
             XCTAssertLessThanOrEqual(
                 monospacedWidth(status, size: FleetPanelMetrics.minTextSize),
                 FleetPanelMetrics.closedRowTextWidth,
                 "\(status) does not fit the closed row's text budget")
         }
+    }
+
+    /// The new design must not make the notch taller: the panel is the 300 pt it always was, and the
+    /// map still has room for four rows of `responseMapMinRowHeight`.
+    func testPanelStaysAtItsOldHeightAndFitsTheMapRows() {
+        XCTAssertEqual(FleetPanelMetrics.fleetSectionHeight, 300,
+                       "the new design must not make the notch taller")
+        XCTAssertGreaterThanOrEqual(FleetPanelMetrics.responseMapHeight(rows: 4),
+                                    4 * FleetPanelMetrics.responseMapMinRowHeight,
+                                    "the map's grid is four rows of responseMapMinRowHeight")
+        let nameLine = NSFont.systemFont(ofSize: 12)
+        let statusLine = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        let linePair = (nameLine.ascender - nameLine.descender + nameLine.leading)
+            + 1
+            + (statusLine.ascender - statusLine.descender + statusLine.leading)
+        XCTAssertGreaterThanOrEqual(FleetPanelMetrics.responseMapMinRowHeight, linePair,
+                                    "one map row fits the 12 pt name line and the 11 pt status line")
     }
 
     /// A response-map column cannot be narrower than its furniture plus the detail budget, and the
@@ -328,5 +286,122 @@ final class FleetFormatTests: XCTestCase {
                                     2 * FleetPanelMetrics.responseMapColumnWidth + 60)
         XCTAssertGreaterThanOrEqual(FleetPanelMetrics.closedRowSideWidth,
                                     FleetPanelMetrics.closedRowMapWidth + 10 + FleetPanelMetrics.closedRowTextWidth)
+    }
+
+    // MARK: - actionNeededLabel
+
+    func testActionNeededLabelCounts() {
+        XCTAssertNil(FleetFormat.actionNeededLabel(0))
+        XCTAssertEqual(FleetFormat.actionNeededLabel(1), "1 ACTION NEEDED")
+        XCTAssertEqual(FleetFormat.actionNeededLabel(4), "4 ACTIONS NEEDED")
+    }
+
+    // MARK: - decisionChip
+
+    func testDecisionChipNamesTheJobAndThePR() {
+        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision(job: "ciri-skill-trim", pr: 9)),
+                       "ciri-skill-trim #9")
+        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision(job: "notch-map-overlap")), "notch-map-overlap")
+        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision(pr: 4)), "#4")
+        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision()), "—")
+    }
+
+    // MARK: - decisionWhy
+
+    func testDecisionWhyAddsTheRoundExceptWhenTheReasonNamesIt() {
+        XCTAssertEqual(FleetFormat.decisionWhy(FleetDecision(reason: "repeat_finding", round: 4)),
+                       "same problem came back · round 4 of 4")
+        XCTAssertEqual(FleetFormat.decisionWhy(FleetDecision(reason: "no_progress", round: 3)),
+                       "fixes not reducing problems · round 3 of 4")
+        XCTAssertEqual(FleetFormat.decisionWhy(FleetDecision(reason: "product_choice")), "product choice")
+        XCTAssertEqual(FleetFormat.decisionWhy(FleetDecision(reason: "round_limit", round: 4)),
+                       "4 fix rounds used")
+    }
+
+    // MARK: - decisionQuestion
+
+    func testDecisionQuestionFallsBackToTheReason() {
+        XCTAssertEqual(FleetFormat.decisionQuestion(FleetDecision(question: "Remove the other 29 skills?")),
+                       "Remove the other 29 skills?")
+        XCTAssertEqual(FleetFormat.decisionQuestion(FleetDecision(reason: "product_choice", question: "   ")),
+                       "Odin stopped: product choice. How do we go on?")
+        XCTAssertEqual(FleetFormat.decisionQuestion(FleetDecision(reason: "repeat_finding", round: 4)),
+                       "Odin stopped: same problem came back. How do we go on?")
+    }
+
+    // MARK: - decisionProgress
+
+    func testDecisionProgressReadsOneOpenOrNOfM() {
+        XCTAssertEqual(FleetFormat.decisionProgress(index: 0, count: 1), "1 open")
+        XCTAssertEqual(FleetFormat.decisionProgress(index: 0, count: 4), "1 of 4")
+        XCTAssertEqual(FleetFormat.decisionProgress(index: 2, count: 4), "3 of 4")
+        XCTAssertEqual(FleetFormat.decisionProgress(index: 9, count: 4), "4 of 4")
+    }
+
+    // MARK: - healthLine
+
+    func testHealthLineReadsTasksLinkedAndStatus() {
+        XCTAssertEqual(FleetFormat.healthLine(runningTasks: 0, linked: 7, of: 7, critical: 0),
+                       "0 tasks · 7/7 linked · All clear")
+        XCTAssertEqual(FleetFormat.healthLine(runningTasks: 1, linked: 6, of: 7, critical: 1),
+                       "1 task · 6/7 linked · 1 critical")
+    }
+
+    // MARK: - speed
+
+    func testSpeedNumberTextReadsCurrentThenLastThenUnknown() {
+        XCTAssertEqual(FleetFormat.speedNumberText(FleetSpeed(current: 154.4, lastAt: "x")), "154")
+        XCTAssertEqual(FleetFormat.speedNumberText(FleetSpeed(current: 38.5, lastAt: "x")), "39")
+        XCTAssertEqual(FleetFormat.speedNumberText(FleetSpeed(current: nil, lastAt: "x", trend: [120, nil, 38.5])), "39")
+        XCTAssertEqual(FleetFormat.speedNumberText(FleetSpeed(current: nil, lastAt: nil, trend: [nil, nil])), "—")
+        XCTAssertEqual(FleetFormat.speedNumberText(nil), "—")
+    }
+
+    func testSpeedIsIdleOnlyWithoutACurrentReading() {
+        XCTAssertTrue(FleetFormat.speedIsIdle(FleetSpeed(current: nil, lastAt: nil)))
+        XCTAssertTrue(FleetFormat.speedIsIdle(nil))
+        XCTAssertFalse(FleetFormat.speedIsIdle(FleetSpeed(current: 0, lastAt: nil)))
+    }
+
+    func testSpeedDetailOnlyForABusyLaneWithAReading() {
+        let busy = FleetLane(id: "frank", label: "frank", state: .busy, jobs: [], speed: 38.5)
+        XCTAssertEqual(FleetFormat.speedDetail(busy), "39 tok/s")
+        XCTAssertEqual(FleetFormat.responseDetail(busy), "39 tok/s")
+        let idle = FleetLane(id: "frank", label: "frank", state: .idle, jobs: [], speed: 38.5)
+        XCTAssertNil(FleetFormat.speedDetail(idle))
+        XCTAssertEqual(FleetFormat.responseDetail(idle), "Idle")
+        let busyWithout = FleetLane(id: "frank", label: "frank", state: .busy, jobs: [])
+        XCTAssertNil(FleetFormat.speedDetail(busyWithout))
+        XCTAssertEqual(FleetFormat.responseDetail(busyWithout), "Working")
+    }
+
+    func testMedianSpeedIsTheMedianOfTheReportingDevices() {
+        XCTAssertNil(FleetFormat.medianSpeed([]))
+        XCTAssertNil(FleetFormat.medianSpeed([nil, nil]))
+        XCTAssertNil(FleetFormat.medianSpeed([nil]))
+        XCTAssertEqual(FleetFormat.medianSpeed([nil, 38.5, nil]) ?? 0, 38.5, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.medianSpeed([30, 10, 20]) ?? 0, 20, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.medianSpeed([10, 20]) ?? 0, 15, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.medianSpeed([0, 40, nil]) ?? 0, 20, accuracy: 0.001)
+    }
+
+    /// The owner's case: with a single writer the fleet number is that writer's own speed.
+    func testOneWriterAtThirtyNineIsTheFleetNumberAndTheHeaderText() {
+        let fleet = FleetSpeed(current: FleetFormat.medianSpeed([nil, 38.5, nil, nil]), lastAt: nil)
+        XCTAssertEqual(fleet.current ?? 0, 38.5, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.speedNumberText(fleet), "39")
+        XCTAssertFalse(FleetFormat.speedIsIdle(fleet))
+    }
+
+    /// Answering the 4th of 4 decisions leaves three: the index clamps to 2, so the third chip stays
+    /// selected and the steppers step from there.
+    func testClampedIndexKeepsAChipSelectedWhenTheListShrinks() {
+        XCTAssertEqual(FleetFormat.clampedIndex(3, count: 4), 3)
+        XCTAssertEqual(FleetFormat.clampedIndex(3, count: 3), 2)
+        XCTAssertEqual(FleetFormat.clampedIndex(2, count: 3), 2)
+        XCTAssertEqual(FleetFormat.clampedIndex(0, count: 3), 0)
+        XCTAssertEqual(FleetFormat.clampedIndex(9, count: 4), 3)
+        XCTAssertEqual(FleetFormat.clampedIndex(-2, count: 4), 0)
+        XCTAssertEqual(FleetFormat.clampedIndex(2, count: 0), 0)
     }
 }

@@ -36,19 +36,21 @@ struct FleetClosedIndicator: View {
 
                     // Working count over link / critical status
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(model.workingCount) working")
+                        Text("\(model.workingCount)")
+                            .font(FleetType.mono(size: 12, weight: .medium))
+                            .foregroundColor(theme.text)
+                            + Text(" working")
                             .font(.system(size: 12))
-                            .monospacedDigit()
                             .foregroundColor(theme.text)
                         if model.criticalCount == 0 {
                             Text(FleetFormat.linked(model.linkedCount, of: model.agentCount))
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(FleetType.mono(size: 11))
                                 .foregroundColor(theme.dim)
                                 .lineLimit(1)
                         } else {
                             Text(FleetFormat.status(model.criticalCount))
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(theme.hot)
+                                .font(FleetType.mono(size: 11))
+                                .foregroundColor(theme.hotText)
                                 .lineLimit(1)
                         }
                     }
@@ -63,16 +65,17 @@ struct FleetClosedIndicator: View {
                         height: vm.effectiveClosedNotchHeight
                     )
 
-                // Right block: total output, left-aligned away from the gap
+                // Right block: decode speed (live, idle or no reading), left-aligned away from the gap
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    let total = FleetFormat.fleetOutput(model.totalTokPerSec)
-                    Text(total)
-                        .font(.system(size: 20, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundColor(model.totalTokPerSec == nil ? theme.dim : theme.accent)
+                    let speed = model.speed
+                    let idle = FleetFormat.speedIsIdle(speed)
+                    let last = FleetFormat.speedLastValue(speed)
+                    Text(FleetFormat.speedNumberText(speed))
+                        .font(FleetType.mono(size: 20, weight: .medium))
+                        .foregroundColor(idle ? theme.dim : theme.accent)
                         .lineLimit(1)
-                    Text("tok/s")
-                        .font(.system(size: 11, design: .monospaced))
+                    Text(idle && last != nil ? " idle" : " tok/s")
+                        .font(FleetType.mono(size: 11))
                         .foregroundColor(theme.dim)
                 }
                 .frame(width: sideWidth, alignment: .leading)
@@ -100,10 +103,15 @@ struct FleetUpdatedLabel: View {
     var body: some View {
         if Defaults[.showFleet], store.isReachable, let lastUpdated = store.lastUpdated {
             let age = max(0, Int(Date().timeIntervalSince(lastUpdated)))
-            Text("updated \(age)s ago")
+            Text("updated ")
                 .font(.system(size: 11))
                 .foregroundColor(theme.muted)
-                .monospacedDigit()
+            + Text("\(age)")
+                .font(FleetType.mono(size: 11, weight: .medium))
+                .foregroundColor(theme.muted)
+            + Text("s ago")
+                .font(.system(size: 11))
+                .foregroundColor(theme.muted)
         }
     }
 }

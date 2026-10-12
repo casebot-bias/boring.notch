@@ -39,7 +39,9 @@ struct FleetTheme {
             accent        = rgb(0x9FB38A)
             memory        = rgb(0x7F9BB5)
             hot           = rgb(0xD9824B)
+            hotText       = rgb(0xE8A87A)
             alert         = rgb(0xE5484D)
+            alertChipText = rgb(0xF2A3A5)
             off           = rgb(0x6D7166)
             muted         = rgb(0xA7ACA0)
             nameText      = rgb(0xB9BCB1)
@@ -58,7 +60,9 @@ struct FleetTheme {
             accent        = rgb(0xC9A77C)
             memory        = rgb(0x8FA6B4)
             hot           = rgb(0xD9824B)
+            hotText       = rgb(0xE8A87A)
             alert         = rgb(0xE5484D)
+            alertChipText = rgb(0xF2A3A5)
             off           = rgb(0x75865C)
             muted         = rgb(0xBFB78F)
             nameText      = rgb(0xB9BCB1)
@@ -88,6 +92,12 @@ struct FleetTheme {
     /// notch's pip. A dot colour, not a text colour — it clears 3:1 on both panels (5.4:1 black,
     /// 4.3:1 olive) but not the 7:1 text floor, so the alert's words draw in `hot`.
     let alert: Color
+    /// The words on the ODIN tab's action-needed chip: text, so it clears the 7:1 floor against
+    /// both panel tops (the chip's own red-washed background sits between it and the panel).
+    let alertChipText: Color
+    /// Words that need attention (`hot`'s lighter twin). `hot` is a mark colour: at 11 pt on the olive
+    /// panel it measures ≈5.8:1, under the 7:1 floor for text below 12 pt, so attention words draw here.
+    let hotText: Color
     /// Status dots for idle/absent agents. At least 3:1 so an idle dot is visible, still quieter than `accent`.
     let off: Color
     /// Secondary numerals and labels. Above `dim`, below `nameText`, and at least 7:1 on the panel.

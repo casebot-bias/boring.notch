@@ -116,6 +116,14 @@
 		347F1CBC62380DB1BEF363D4 /* FleetClosedIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */; };
 		37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3E45FB207CA856A28D20FF /* FleetFormat.swift */; };
 		446035086F943DA68902F0D4 /* FleetClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AB008892470D0C770D6C4A /* FleetClient.swift */; };
+		A1D0C0DE0000000000000002 /* OdinDecisionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000001 /* OdinDecisionView.swift */; };
+		A1D0C0DE0000000000000004 /* FleetClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000003 /* FleetClientTests.swift */; };
+		A1D0C0DE0000000000000013 /* FleetTypeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000012 /* FleetTypeTests.swift */; };
+		A1D0C0DE0000000000000005 /* FleetClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AB008892470D0C770D6C4A /* FleetClient.swift */; };
+		A1D0C0DE0000000000000007 /* FleetType.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000006 /* FleetType.swift */; };
+		A1D0C0DE0000000000000008 /* FleetType.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000006 /* FleetType.swift */; };
+		A1D0C0DE0000000000000010 /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000009 /* Fonts */; };
+		A1D0C0DE0000000000000011 /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000009 /* Fonts */; };
 		4E5138FBA3E31F89684BBCF8 /* activity.json in Resources */ = {isa = PBXBuildFile; fileRef = 27FA6E93AA158A7572640437 /* activity.json */; };
 		507266DB2C908E2E00A2D00D /* HoverButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 507266DA2C908E2E00A2D00D /* HoverButton.swift */; };
 		5411D456ED82369EDE9D5BB1 /* FleetFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4F34CD9024D21FD870F3AD0 /* FleetFormatTests.swift */; };
@@ -303,6 +311,11 @@
 		14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Button+Bouncing.swift"; sourceTree = "<group>"; };
 		14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DataTypes+Extensions.swift"; sourceTree = "<group>"; };
 		19AB008892470D0C770D6C4A /* FleetClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetClient.swift; path = Fleet/FleetClient.swift; sourceTree = "<group>"; };
+		A1D0C0DE0000000000000001 /* OdinDecisionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OdinDecisionView.swift; path = Fleet/OdinDecisionView.swift; sourceTree = "<group>"; };
+		A1D0C0DE0000000000000003 /* FleetClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetClientTests.swift; path = boringNotchTests/FleetClientTests.swift; sourceTree = "<group>"; };
+		A1D0C0DE0000000000000012 /* FleetTypeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetTypeTests.swift; path = boringNotchTests/FleetTypeTests.swift; sourceTree = "<group>"; };
+		A1D0C0DE0000000000000006 /* FleetType.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetType.swift; path = Fleet/FleetType.swift; sourceTree = "<group>"; };
+		A1D0C0DE0000000000000009 /* Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources/Fonts; sourceTree = "<group>"; };
 		27FA6E93AA158A7572640437 /* activity.json */ = {isa = PBXFileReference; includeInIndex = 1; name = activity.json; path = boringNotchTests/Fixtures/activity.json; sourceTree = "<group>"; };
 		34D5B32FB0523DD750BA1CF7 /* boringNotchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = boringNotchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		507266DA2C908E2E00A2D00D /* HoverButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverButton.swift; sourceTree = "<group>"; };
@@ -655,6 +668,7 @@
 				1153BD8E2D986B1F00979FB0 /* MediaControllers */,
 				B15063502C63D3F600EBB0E3 /* extensions */,
 				1471639B2C5D362F0068B555 /* components */,
+				A1D0C0DE0000000000000009 /* Fonts */,
 				14CEF4152C5CAED300855D72 /* boringNotchApp.swift */,
 				14CEF4172C5CAED300855D72 /* ContentView.swift */,
 				B17266E02C6532560031BA0D /* Localizable.xcstrings */,
@@ -736,6 +750,8 @@
 				DD4809E4B9876FEE672F1C96 /* FleetPanelModelTests.swift */,
 				F7E0A1000000000000000004 /* FleetThemeTests.swift */,
 				F7E0A1000000000000000204 /* NotchWindowPlannerTests.swift */,
+				A1D0C0DE0000000000000003 /* FleetClientTests.swift */,
+				A1D0C0DE0000000000000012 /* FleetTypeTests.swift */,
 				C013CA219D7597EB6A9F2104 /* Fixtures */,
 			);
 			name = boringNotchTests;
@@ -771,6 +787,8 @@
 				19AB008892470D0C770D6C4A /* FleetClient.swift */,
 				51B263B9B9718A79CB57973D /* FleetStore.swift */,
 				C10D4356B8C14E68D8309B2A /* FleetResponseMapView.swift */,
+				A1D0C0DE0000000000000001 /* OdinDecisionView.swift */,
+				A1D0C0DE0000000000000006 /* FleetType.swift */,
 				89CA111D99EBAD7362EB7B5B /* FleetWorkView.swift */,
 				F7E0A1000000000000000107 /* FleetPressureView.swift */,
 				CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */,
@@ -1041,6 +1059,7 @@
 			files = (
 				14CEF41D2C5CAED400855D72 /* Preview Assets.xcassets in Resources */,
 				14CEF41A2C5CAED400855D72 /* Assets.xcassets in Resources */,
+				A1D0C0DE0000000000000010 /* Fonts in Resources */,
 				112B0EB82E30DD0F00562D6C /* MediaRemoteAdapterTestClient in Resources */,
 				112B0EB92E30DD0F00562D6C /* mediaremote-adapter.pl in Resources */,
 				B17266E12C6532560031BA0D /* Localizable.xcstrings in Resources */,
@@ -1054,6 +1073,7 @@
 			files = (
 				F8012D4610FA8764B14C7E60 /* fleet.json in Resources */,
 				4E5138FBA3E31F89684BBCF8 /* activity.json in Resources */,
+				A1D0C0DE0000000000000011 /* Fonts in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1065,6 +1085,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				ECAFCF11E67C413CA9E34329 /* FleetModels.swift in Sources */,
+				A1D0C0DE0000000000000005 /* FleetClient.swift in Sources */,
+				A1D0C0DE0000000000000008 /* FleetType.swift in Sources */,
+				A1D0C0DE0000000000000004 /* FleetClientTests.swift in Sources */,
+				A1D0C0DE0000000000000013 /* FleetTypeTests.swift in Sources */,
 				37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */,
 				F7E0A1000000000000000003 /* FleetTheme.swift in Sources */,
 				F7E0A1000000000000000005 /* FleetThemeTests.swift in Sources */,
@@ -1210,6 +1234,8 @@
 				446035086F943DA68902F0D4 /* FleetClient.swift in Sources */,
 				FBD3015DA3435EF4D90C5BF7 /* FleetStore.swift in Sources */,
 				1FFC639F3F9E275F506106F0 /* FleetResponseMapView.swift in Sources */,
+				A1D0C0DE0000000000000002 /* OdinDecisionView.swift in Sources */,
+				A1D0C0DE0000000000000007 /* FleetType.swift in Sources */,
 				0A026C5285A22320E55161C8 /* FleetWorkView.swift in Sources */,
 				F7E0A1000000000000000106 /* FleetPressureView.swift in Sources */,
 				F7E0A1000000000000000200 /* NotchWindowPlanner.swift in Sources */,

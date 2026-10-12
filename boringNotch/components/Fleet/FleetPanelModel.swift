@@ -31,6 +31,8 @@ struct FleetLane: Identifiable, Equatable {
     var label: String
     var state: FleetNodeState
     var jobs: [FleetJob]
+    /// The device's own decode speed in tokens/s; nil when the device reports none (nova: never).
+    var speed: Double?
     var decisions: [FleetDecision] = []
 
     /// The lane's first open decision, kept for the single-decision call sites.
@@ -47,15 +49,21 @@ struct FleetLane: Identifiable, Equatable {
 /// panel's alert strip and on the collapsed notch's red dot.
 struct FleetDecision: Equatable {
     var job: String?
+    var repo: String?
     var pr: Int?
     var reason: String?
     var round: Int?
+    var found: [String] = []
+    var question: String?
+    var options: [OdinOption] = OdinOption.defaults
 }
 
 extension FleetDecision {
     /// The one place an Odin stop record becomes a decision.
     fileprivate init(_ status: OdinStatus) {
-        self.init(job: status.job, pr: status.pr, reason: status.reason, round: status.round)
+        self.init(job: status.job, repo: status.repo, pr: status.pr, reason: status.reason,
+                  round: status.round, found: status.found, question: status.question,
+                  options: status.options)
     }
 }
 
@@ -85,6 +93,9 @@ struct FleetPanelModel: Equatable {
     /// Sum of the agents' reported rates; nil only when no agent reports a rate;
     /// a reported 0 counts as 0.
     var totalTokPerSec: Double?
+    /// The fleet-wide decode speed (tokens/s and its trend), from the fleet payload's block with
+    /// the activity payload's block as fallback; nil when neither reports one.
+    var speed: FleetSpeed?
     var peaks: [FleetPeak]             // always cpu, gpu, ram in this order
 
     /// case first, then the agents.
@@ -144,6 +155,22 @@ struct FleetPanelModel: Equatable {
     /// independent of reachability: a failed poll keeps the last known decision until a
     /// later successful status clears it.
     var hasOpenDecision: Bool { !decisions.isEmpty }
+
+    /// The model with the given jobs' decisions dropped: what the notch shows once the owner has
+    /// answered one, until a later fetch stops reporting it.
+    func droppingDecisions(jobs: Set<String>) -> FleetPanelModel {
+        guard !jobs.isEmpty else { return self }
+        var copy = self
+        copy.agents = agents.map { lane in
+            var lane = lane
+            lane.decisions = lane.decisions.filter { decision in
+                guard let job = decision.job else { return true }
+                return !jobs.contains(job)
+            }
+            return lane
+        }
+        return copy
+    }
 }
 
 enum FleetPanelModelBuilder {
@@ -179,9 +206,14 @@ enum FleetPanelModelBuilder {
         ]
         let rates = agentIds.compactMap { device(id: $0, in: activity)?.tokPerSec }
         let totalTokPerSec = rates.isEmpty ? nil : rates.reduce(0, +)
+        let speed = fleet?.speed ?? activity?.speed ?? Self.medianSpeed(from: activity)
         return FleetPanelModel(origin: origin,
                                agents: agents,
                                totalTokPerSec: totalTokPerSec,
+                               // The fleet payload's speed block wins; the activity payload's is the fallback.
+                               // When neither sends a block, the median of the reporting devices is used, so
+                               // the header is never a sum.
+                               speed: speed,
                                peaks: peaks(from: fleet))
     }
 
@@ -193,7 +225,8 @@ enum FleetPanelModelBuilder {
         let machine = machine(id: id, in: fleet)
         let device = device(id: id, in: activity)
         let state: FleetNodeState = machineOnline(machine) ? (deviceBusy(device) ? .busy : .idle) : .offline
-        return FleetLane(id: id, label: id, state: state, jobs: toJobs(device?.items ?? []))
+        return FleetLane(id: id, label: id, state: state, jobs: toJobs(device?.items ?? []),
+                         speed: device?.speed)
     }
 
     /// nova's state comes from the fleet snapshot's presence and its own cloud jobs,
@@ -201,7 +234,9 @@ enum FleetPanelModelBuilder {
     private static func novaLane(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetLane {
         let openrouterItems = caseCloudItems(activity).filter { cloudProvider($0.model) == "openrouter" }
         let state: FleetNodeState = fleet == nil ? .offline : (openrouterItems.isEmpty ? .idle : .busy)
-        return FleetLane(id: "nova", label: "nova", state: state, jobs: toJobs(openrouterItems))
+        // nova is a pool of cloud runs, not a machine, so it has no device speed.
+        return FleetLane(id: "nova", label: "nova", state: state, jobs: toJobs(openrouterItems),
+                         speed: nil)
     }
 
     /// pika's state: a fleet row that exists but is not online means offline; with no fleet row at
@@ -213,7 +248,8 @@ enum FleetPanelModelBuilder {
         let state: FleetNodeState = machine(id: "pika", in: fleet)
             .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
             ?? (deviceBusy(device) ? .busy : .idle)
-        return FleetLane(id: "pika", label: "pika", state: state, jobs: toJobs(device?.items ?? []))
+        return FleetLane(id: "pika", label: "pika", state: state, jobs: toJobs(device?.items ?? []),
+                         speed: device?.speed)
     }
 
     /// Odin's lane: its state is the plain machine/device rule — busy while a review runs, so
@@ -225,7 +261,7 @@ enum FleetPanelModelBuilder {
         let device = device(id: "odin", in: activity)
         let state: FleetNodeState = machineOnline(machine) ? (deviceBusy(device) ? .busy : .idle) : .offline
         return FleetLane(id: "odin", label: "odin", state: state, jobs: toJobs(device?.items ?? []),
-                         decisions: decisions(from: device?.odin))
+                         speed: device?.speed, decisions: decisions(from: device?.odin))
     }
 
     /// The open decisions of an Odin report, in file order. The feed's open-decisions
@@ -267,6 +303,15 @@ enum FleetPanelModelBuilder {
 
     private static func device(id: String, in activity: ActivitySnapshot?) -> DeviceActivity? {
         activity?.devices.first { $0.device == id }
+    }
+
+    /// The contract's fleet speed when neither payload carries a block: the median of the devices that
+    /// report one. nil when no device does, so the header keeps its "—".
+    private static func medianSpeed(from activity: ActivitySnapshot?) -> FleetSpeed? {
+        guard let current = FleetFormat.medianSpeed((activity?.devices ?? []).map(\.speed)) else {
+            return nil
+        }
+        return FleetSpeed(current: current, lastAt: nil)
     }
 
     /// The cloud-routed items the case runs (nova's raw feed before provider split).

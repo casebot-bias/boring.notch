@@ -13,14 +13,18 @@ let downloadSneakSize: CGSize = .init(width: 65, height: 1)
 let batterySneakSize: CGSize = .init(width: 160, height: 1)
 
 let shadowPadding: CGFloat = 20
-let fleetSectionWidth: CGFloat = 560
-let fleetMusicWidth: CGFloat = 220
+// The music column gives up 44 pt and the fleet column takes it, so the opened notch keeps
+// its width while the panel's own columns get wider.
+let fleetSectionWidth: CGFloat = 604
+let fleetMusicWidth: CGFloat = 176
 /// Hard cap for the cover in the compact column, whatever the art size or shape.
 /// 150 pt keeps the cover, the track block, the progress bar and the control
-/// toolbar inside the opened notch's 300 pt height.
+/// toolbar inside the opened notch's fleetSectionHeight.
 let fleetCoverMaxSide: CGFloat = 150
 let fleetSectionSpacing: CGFloat = 15
-let fleetSectionHeight: CGFloat = 300
+/// The opened Fleet column: a flat 300 pt, the height the notch always had, read from
+/// `FleetPanelMetrics.fleetSectionHeight` so the section view and the window can never disagree.
+let fleetSectionHeight: CGFloat = FleetPanelMetrics.fleetSectionHeight
 private let baseOpenNotchSize: CGSize = .init(width: 640, height: 190)
 
 var openNotchSize: CGSize { panelSizes.open }
