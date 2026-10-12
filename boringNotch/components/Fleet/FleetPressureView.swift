@@ -45,6 +45,9 @@ private struct HostRings: View {
             }
         }
         .fixedSize(horizontal: true, vertical: false)
+        .help(FleetFormat.ringDetail(host))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(FleetFormat.ringDetail(host))
     }
 }
 
