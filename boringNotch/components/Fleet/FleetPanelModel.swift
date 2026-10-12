@@ -9,6 +9,8 @@
 //  app target and the test target.
 //
 
+import Foundation
+
 /// Signal state of a node: busy, idle or offline. Offline beats busy: an offline/absent
 /// machine reports .offline even when its activity device claims work. An open decision is
 /// a separate dimension (`FleetLane.hasOpenDecision`), never a node state, so a lane that is
@@ -207,6 +209,55 @@ struct FleetPanelModel: Equatable {
             return lane
         }
         return copy
+    }
+}
+
+/// The notch's two fleet polls, each tracked on its own. One shared flag would let an activity answer
+/// declare the machine readings live again while the fleet poll keeps failing, so the footer's rings
+/// read `fleetIsLive` and never the shared reachability.
+struct FleetFeedFreshness: Equatable {
+    /// The two endpoints the store polls.
+    enum Source: Equatable { case fleet, activity }
+
+    private(set) var lastFleetSuccessAt: Date?
+    private(set) var lastFleetErrorAt: Date?
+    private(set) var lastActivitySuccessAt: Date?
+    private(set) var lastActivityErrorAt: Date?
+
+    mutating func markSuccess(_ source: Source, at date: Date) {
+        switch source {
+        case .fleet: lastFleetSuccessAt = date
+        case .activity: lastActivitySuccessAt = date
+        }
+    }
+
+    mutating func markFailure(_ source: Source, at date: Date) {
+        switch source {
+        case .fleet: lastFleetErrorAt = date
+        case .activity: lastActivityErrorAt = date
+        }
+    }
+
+    /// The fleet payload's own freshness, which is all the footer's rings read: a failed fleet poll
+    /// leaves them stale until the fleet answers again, whatever the activity feed does. Deliberately no
+    /// grace window - after a failed fleet poll the numbers are simply not current.
+    var fleetIsLive: Bool {
+        FleetFeedFreshness.answered(lastSuccessAt: lastFleetSuccessAt, lastErrorAt: lastFleetErrorAt)
+    }
+
+    /// The store's reachability, its meaning unchanged: either feed answering counts, until a later
+    /// failure outranks it. The closed notch's fleet row reads this.
+    var isReachable: Bool {
+        let success = [lastFleetSuccessAt, lastActivitySuccessAt].compactMap { $0 }.max()
+        let error = [lastFleetErrorAt, lastActivityErrorAt].compactMap { $0 }.max()
+        return FleetFeedFreshness.answered(lastSuccessAt: success, lastErrorAt: error)
+    }
+
+    /// Reachable once something has succeeded and no failure is newer than that success.
+    private static func answered(lastSuccessAt: Date?, lastErrorAt: Date?) -> Bool {
+        guard let lastSuccessAt else { return false }
+        guard let lastErrorAt else { return true }
+        return lastSuccessAt >= lastErrorAt
     }
 }
 

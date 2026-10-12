@@ -733,4 +733,44 @@ final class FleetPanelModelTests: XCTestCase {
             fleet: nil, activity: try ActivitySnapshot.decode(Data(silent.utf8)))
         XCTAssertNil(quiet.speed)
     }
+
+    // MARK: - Feed freshness
+
+    /// The sequence the PM flagged: the fleet poll fails while the activity poll keeps answering. The
+    /// shared reachability is happy again, but the rings must still read stale, because the fleet
+    /// payload is what they show.
+    func testFleetFailureStaysStaleWhenAnActivityFetchSucceeds() {
+        var freshness = FleetFeedFreshness()
+        let start = Date(timeIntervalSince1970: 1_000)
+        freshness.markSuccess(.fleet, at: start)
+        XCTAssertTrue(freshness.fleetIsLive)
+        freshness.markFailure(.fleet, at: start.addingTimeInterval(5))
+        freshness.markSuccess(.activity, at: start.addingTimeInterval(6))
+        XCTAssertFalse(freshness.fleetIsLive, "the rings must stay stale after a failed fleet poll")
+        XCTAssertTrue(freshness.isReachable, "the activity answer keeps the shared reachability true")
+        // Only the fleet answering again makes the rings live.
+        freshness.markSuccess(.fleet, at: start.addingTimeInterval(10))
+        XCTAssertTrue(freshness.fleetIsLive)
+    }
+
+    /// The shared reachability keeps its old meaning: something succeeded and no later failure outranks it.
+    func testSharedReachabilitySpansBothFeeds() {
+        var freshness = FleetFeedFreshness()
+        XCTAssertFalse(freshness.isReachable, "nothing has answered yet")
+        let start = Date(timeIntervalSince1970: 2_000)
+        freshness.markSuccess(.fleet, at: start)
+        XCTAssertTrue(freshness.isReachable)
+        freshness.markFailure(.activity, at: start.addingTimeInterval(2))
+        XCTAssertFalse(freshness.isReachable, "a later failure outranks the last success")
+        freshness.markSuccess(.activity, at: start.addingTimeInterval(4))
+        XCTAssertTrue(freshness.isReachable)
+        XCTAssertTrue(freshness.fleetIsLive, "a stale activity feed does not touch the fleet's own freshness")
+    }
+
+    func testFleetNeverAnsweredIsNotLive() {
+        var freshness = FleetFeedFreshness()
+        freshness.markFailure(.fleet, at: Date(timeIntervalSince1970: 3_000))
+        XCTAssertFalse(freshness.fleetIsLive)
+        XCTAssertFalse(freshness.isReachable)
+    }
 }

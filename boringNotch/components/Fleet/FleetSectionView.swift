@@ -3,8 +3,8 @@
 //  boringNotch
 //
 //  Right-hand Fleet column of the opened notch: 1 px divider, a one-line header,
-//  the FLEET / ODIN tab strip carrying the health line, then the FLEET tab (map
-//  next to current work, footer of per-machine rings and Open Fleet) or the ODIN tab.
+//  the FLEET / DECISIONS tab strip carrying the health line, then the FLEET tab (map
+//  next to current work, footer of per-machine rings and Open Fleet) or the DECISIONS tab.
 //  Colours are driven by FleetTheme (skin: FleetSkin).
 //
 

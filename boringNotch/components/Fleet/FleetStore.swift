@@ -28,9 +28,9 @@ final class FleetStore: ObservableObject {
     @Published private(set) var decisionError: String?
 
     var panelModel: FleetPanelModel {
-        // The footer's rings are live only while the fleet answered: the store keeps the last snapshot
-        // after a failed poll, and a retained snapshot must not be presented as live.
-        let model = FleetPanelModelBuilder.build(fleet: fleet, activity: activity, fleetLive: isReachable)
+        // The rings read the fleet payload's own freshness, never the shared reachability, which an
+        // activity answer can set back to true while the fleet poll keeps failing.
+        let model = FleetPanelModelBuilder.build(fleet: fleet, activity: activity, fleetLive: freshness.fleetIsLive)
         return model.droppingDecisions(jobs: answeredJobs)
     }
 
@@ -49,8 +49,9 @@ final class FleetStore: ObservableObject {
     private var activityTask: Task<Void, Never>?
     private var showFleetCancellable: AnyCancellable?
     private var notchOpen = false
-    private var lastSuccessAt: Date?
-    private var lastErrorAt: Date?
+    /// Each poll's freshness, tracked apart: the rings must not go live again just because an activity
+    /// poll answered while the fleet poll keeps failing.
+    private var freshness = FleetFeedFreshness()
     /// Jobs answered from this notch: dropped from the panel until a fetch stops reporting them.
     private var answeredJobs: Set<String> = []
 
@@ -153,7 +154,7 @@ final class FleetStore: ObservableObject {
     /// raw model, not from `panelModel` (which already hides the answered jobs).
     private func pruneAnsweredDecisions() {
         guard !answeredJobs.isEmpty else { return }
-        let open = Set(FleetPanelModelBuilder.build(fleet: fleet, activity: activity, fleetLive: isReachable)
+        let open = Set(FleetPanelModelBuilder.build(fleet: fleet, activity: activity, fleetLive: freshness.fleetIsLive)
                         .decisions.compactMap(\.job))
         answeredJobs.formIntersection(open)
     }
@@ -217,23 +218,23 @@ final class FleetStore: ObservableObject {
 
     private func fetchFleet() async {
         guard let baseURL = baseURL() else {
-            markFailure()
+            markFailure(.fleet)
             return
         }
         do {
             let snapshot = try await FleetClient(baseURL: baseURL, session: session).fetchFleet()
             fleet = snapshot
-            markSuccess()
+            markSuccess(.fleet)
         } catch {
             if !Task.isCancelled {
-                markFailure()
+                markFailure(.fleet)
             }
         }
     }
 
     private func fetchActivity() async {
         guard let baseURL = baseURL() else {
-            markFailure()
+            markFailure(.activity)
             return
         }
         do {
@@ -241,10 +242,10 @@ final class FleetStore: ObservableObject {
             activity = snapshot
             pruneAnsweredDecisions()
             sentDecisionJob = nil
-            markSuccess()
+            markSuccess(.activity)
         } catch {
             if !Task.isCancelled {
-                markFailure()
+                markFailure(.activity)
             }
         }
     }
@@ -256,27 +257,17 @@ final class FleetStore: ObservableObject {
 
     // MARK: - Reachability bookkeeping
 
-    private func markSuccess() {
+    /// Records the outcome of one poll and republishes the store's reachability, which both feeds share.
+    private func markSuccess(_ source: FleetFeedFreshness.Source) {
         let now = Date()
-        lastSuccessAt = now
+        freshness.markSuccess(source, at: now)
         lastUpdated = now
-        isReachable = computeIsReachable()
+        isReachable = freshness.isReachable
     }
 
-    private func markFailure() {
-        lastErrorAt = Date()
-        isReachable = computeIsReachable()
-    }
-
-    /// Reachable once something has succeeded and no failure is newer than the last success.
-    private func computeIsReachable() -> Bool {
-        guard let lastSuccessAt else {
-            return false
-        }
-        guard let lastErrorAt else {
-            return true
-        }
-        return lastSuccessAt >= lastErrorAt
+    private func markFailure(_ source: FleetFeedFreshness.Source) {
+        freshness.markFailure(source, at: Date())
+        isReachable = freshness.isReachable
     }
 
     private static func nanoseconds(_ interval: TimeInterval) -> UInt64 {
