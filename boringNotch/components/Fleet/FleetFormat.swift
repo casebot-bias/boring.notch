@@ -161,6 +161,16 @@ enum FleetFormat {
         return "\(criticalCount) critical"
     }
 
+    // MARK: - closed alert
+
+    /// The closed row's optional second item: "3 critical" wins, then "2 down" (machines not
+    /// linked); nil when all is well, so the row stays "1 working" and the notch stays narrow.
+    static func closedAlert(critical: Int, linked: Int, of total: Int) -> String? {
+        if critical > 0 { return status(critical) }
+        if linked < total { return "\(total - linked) down" }
+        return nil
+    }
+
     // MARK: - linked
 
     /// linked -> "6/6 linked" style counter.
@@ -303,11 +313,16 @@ enum FleetPanelMetrics {
     /// the tab strip that carries the health text free the room the map's four rows need, so the
     /// notch does not grow.
     static let fleetSectionHeight: CGFloat = 300
-    /// The closed-notch row: one line per side ("2 working · 7/7 linked" / the speed), no mini map.
-    /// The budget holds the longest left line in 11 pt monospaced width (a safe upper bound for the
-    /// 12 pt proportional "working"); both sides share it so the camera gap stays centred.
+    /// The closed-notch row: one line per side ("2 working" or "2 working · 1 down" / the speed).
+    /// Both sides are as wide as the wider text, so the camera gap stays centred and the notch is
+    /// only as wide as it needs to be. This cap holds the longest left line in 11 pt monospaced
+    /// width (a safe upper bound for the 12 pt proportional "working").
     static let closedRowTextWidth: CGFloat = 160
     static var closedRowSideWidth: CGFloat { closedRowTextWidth }
+    /// One side's width: the wider of the two texts, never past the cap.
+    static func closedRowSide(left: CGFloat, right: CGFloat) -> CGFloat {
+        min(closedRowSideWidth, max(left, right))
+    }
     /// A pulsing status dot breathes by size, never by opacity: dimming an alert dot would drop it
     /// under the 3:1 dot floor. The busy cells keep their own dim pulse.
     static let alertPulseScale: CGFloat = 1.35

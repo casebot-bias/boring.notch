@@ -135,6 +135,27 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.linked(5, of: 6), "5/6 linked")
     }
 
+    // MARK: - closed alert
+
+    func testClosedAlertIsHiddenWhenAllIsWell() {
+        XCTAssertNil(FleetFormat.closedAlert(critical: 0, linked: 7, of: 7))
+    }
+
+    func testClosedAlertShowsDownMachines() {
+        XCTAssertEqual(FleetFormat.closedAlert(critical: 0, linked: 5, of: 7), "2 down")
+    }
+
+    func testClosedAlertCriticalWinsOverDown() {
+        XCTAssertEqual(FleetFormat.closedAlert(critical: 3, linked: 5, of: 7), "3 critical")
+    }
+
+    /// Both sides take the wider text, never past the cap: a short row makes a narrow notch.
+    func testClosedRowSideTakesTheWiderTextUpToTheCap() {
+        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 60, right: 70), 70)
+        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 90, right: 70), 90)
+        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 400, right: 70), FleetPanelMetrics.closedRowSideWidth)
+    }
+
     // MARK: - fraction
 
     func testFractionMapsPercentOntoUnitRange() {
@@ -253,7 +274,7 @@ final class FleetFormatTests: XCTestCase {
             FleetPanelMetrics.responseMapColumnWidth - 11,
             "Needs you fits the alert row's detail room (that row has no badge)")
         // The closed row is one line per side; the longest left lines must fit the side budget.
-        for line in ["12 working · " + FleetFormat.linked(7, of: 7), "12 working · 3 critical", "120 tok/s"] {
+        for line in ["12 working · 7 down", "12 working · 3 critical", "120 tok/s"] {
             XCTAssertLessThanOrEqual(
                 monospacedWidth(line, size: FleetPanelMetrics.minTextSize),
                 FleetPanelMetrics.closedRowTextWidth,
