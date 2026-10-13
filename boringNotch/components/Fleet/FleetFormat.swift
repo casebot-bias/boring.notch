@@ -12,9 +12,13 @@ enum FleetFormat {
 
     static let unknown = "—"
 
-    /// The unit both fleet speed readouts print. The API's `speed.current` is the sum of the devices'
-    /// rates, so the number is labelled as a total; the notch itself adds nothing up.
-    static let tokenRateUnit = " tok/s total"
+    /// The unit a fleet speed readout prints. The API's `speed.current` is the sum of the devices'
+    /// rates, so a number that came from a payload's speed block is labelled as a total; the notch's
+    /// own median stand-in - used only when neither feed reports a block - is one writer's rate, and a
+    /// dash is not a total either.
+    static func tokenRateUnit(total: Bool) -> String {
+        total ? " tok/s total" : " tok/s"
+    }
 
     // MARK: - percent
 
@@ -256,16 +260,18 @@ enum FleetFormat {
     /// reading, else the last trend value dimmed and followed by "idle"), otherwise, while jobs run,
     /// their count instead of a bare dash ("2 jobs" - the case's cloud jobs report no tok/s at all).
     /// The dash stays when neither is known, so the row never invents a number.
+    /// The unit reads as a total only for a number the API reported as one (see `tokenRateUnit(total:)`);
+    /// the job-count case and the " idle" case are unchanged.
     struct FleetClosedRightReading: Equatable {
         var number: String
         var unit: String
         var dim: Bool
     }
 
-    static func closedRightReading(speed: FleetSpeed?, jobs: Int) -> FleetClosedRightReading {
+    static func closedRightReading(speed: FleetSpeed?, jobs: Int, total: Bool) -> FleetClosedRightReading {
         if speed?.current != nil || speedLastValue(speed) != nil {
             return FleetClosedRightReading(number: speedNumberText(speed),
-                                           unit: speedIsIdle(speed) ? " idle" : tokenRateUnit,
+                                           unit: speedIsIdle(speed) ? " idle" : tokenRateUnit(total: total),
                                            dim: speedIsIdle(speed))
         }
         if jobs > 0 {
@@ -273,7 +279,7 @@ enum FleetFormat {
                                            unit: jobs == 1 ? " job" : " jobs",
                                            dim: false)
         }
-        return FleetClosedRightReading(number: unknown, unit: tokenRateUnit, dim: true)
+        return FleetClosedRightReading(number: unknown, unit: tokenRateUnit(total: false), dim: true)
     }
 
     // MARK: - linked

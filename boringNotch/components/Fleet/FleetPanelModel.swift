@@ -134,8 +134,13 @@ struct FleetPanelModel: Equatable {
     /// a reported 0 counts as 0.
     var totalTokPerSec: Double?
     /// The fleet-wide decode speed (tokens/s and its trend), from the fleet payload's block with
-    /// the activity payload's block as fallback; nil when neither reports one.
+    /// the activity payload's block as fallback; when neither sends one, the median of the devices that
+    /// report a rate. nil when no device does.
     var speed: FleetSpeed?
+    /// Whether `speed` came from a payload's own speed block - the API reports that number as the fleet
+    /// total, so the readouts label it as one. It is false for the device median below, which is one
+    /// writer's rate standing in for the fleet, and false while no speed is known at all.
+    var speedIsTotal: Bool
     /// One reading per footer machine, always in `FleetPanelModelBuilder.footerHosts` order. A reading
     /// is live only while the fleet feed's last poll answered and its own machine reports online.
     var hosts: [FleetHostReading]
@@ -320,9 +325,10 @@ enum FleetPanelModelBuilder {
                                agents: agents,
                                totalTokPerSec: totalTokPerSec,
                                // The fleet payload's speed block wins; the activity payload's is the fallback.
-                               // When neither sends a block, the median of the reporting devices is used, so
-                               // the header is never a sum.
+                               // When neither sends a block, the median of the devices that report a rate is
+                               // used, so the header is never a sum.
                                speed: speed,
+                               speedIsTotal: fleet?.speed != nil || activity?.speed != nil,
                                hosts: hosts(from: fleet, live: fleetLive),
                                caseJobs: caseJobs?.jobs ?? [])
     }
@@ -336,7 +342,7 @@ enum FleetPanelModelBuilder {
         let device = device(id: id, in: activity)
         let state: FleetNodeState = machineOnline(machine) ? (deviceBusy(device) ? .busy : .idle) : .offline
         return FleetLane(id: id, label: id, state: state, jobs: toJobs(device?.items ?? []),
-                         speed: device?.speed, probeFailed: probeFailed(device))
+                         speed: laneSpeed(device), probeFailed: probeFailed(device))
     }
 
     /// nova's state comes from the fleet snapshot's presence and its own cloud jobs,
@@ -359,7 +365,7 @@ enum FleetPanelModelBuilder {
             .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
             ?? (deviceBusy(device) ? .busy : .idle)
         return FleetLane(id: "pika", label: "pika", state: state, jobs: toJobs(device?.items ?? []),
-                         speed: device?.speed, probeFailed: probeFailed(device))
+                         speed: laneSpeed(device), probeFailed: probeFailed(device))
     }
 
     /// morpheus's state, pika's rule exactly: a fleet row that exists but is not online means
@@ -372,7 +378,7 @@ enum FleetPanelModelBuilder {
             .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
             ?? (deviceBusy(device) ? .busy : .idle)
         return FleetLane(id: "morpheus", label: "morpheus", state: state, jobs: toJobs(device?.items ?? []),
-                         speed: device?.speed, probeFailed: probeFailed(device))
+                         speed: laneSpeed(device), probeFailed: probeFailed(device))
     }
 
     /// Odin's lane: its state is the plain machine/device rule — busy while a review runs, so
@@ -384,7 +390,7 @@ enum FleetPanelModelBuilder {
         let device = device(id: "odin", in: activity)
         let state: FleetNodeState = machineOnline(machine) ? (deviceBusy(device) ? .busy : .idle) : .offline
         return FleetLane(id: "odin", label: "odin", state: state, jobs: toJobs(device?.items ?? []),
-                         speed: device?.speed, decisions: decisions(from: device?.odin),
+                         speed: laneSpeed(device), decisions: decisions(from: device?.odin),
                          probeFailed: probeFailed(device))
     }
 
@@ -436,10 +442,10 @@ enum FleetPanelModelBuilder {
         activity?.devices.first { $0.device == id }
     }
 
-    /// The contract's fleet speed when neither payload carries a block: the median of the devices that
-    /// report one. nil when no device does, so the header keeps its "—".
+    /// The fleet speed when neither payload carries a block: the median of the devices that report a
+    /// rate (`laneSpeed`). nil when no device does, so the header keeps its "—".
     private static func medianSpeed(from activity: ActivitySnapshot?) -> FleetSpeed? {
-        guard let current = FleetFormat.medianSpeed((activity?.devices ?? []).map(\.speed)) else {
+        guard let current = FleetFormat.medianSpeed((activity?.devices ?? []).map { laneSpeed($0) }) else {
             return nil
         }
         return FleetSpeed(current: current, lastAt: nil)
@@ -453,6 +459,12 @@ enum FleetPanelModelBuilder {
     /// The activity probe of this device failed (`state: "error"`).
     private static func probeFailed(_ device: DeviceActivity?) -> Bool {
         device?.state == "error"
+    }
+
+    /// A lane's own decode rate: the dashboard's per-device `speed` wins, else the older `tokPerSec`
+    /// the same device may report alone. Both are that device's own rate; the API sends either.
+    private static func laneSpeed(_ device: DeviceActivity?) -> Double? {
+        device?.speed ?? device?.tokPerSec
     }
 
     private static func machineOnline(_ machine: FleetMachine?) -> Bool {

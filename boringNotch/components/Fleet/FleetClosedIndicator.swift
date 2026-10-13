@@ -54,12 +54,14 @@ struct FleetClosedIndicator: View {
                         height: vm.effectiveClosedNotchHeight
                     )
 
-                // Right block: the fleet's total decode speed while the feed reports one; while only
-                // cloud jobs run (the case's model reports no tok/s) the row shows how many jobs run
-                // instead of a bare dash.
+                // Right block: the fleet's total decode speed while the API reported one
+                // (the unit reads "tok/s total"); while only cloud jobs run (the case's
+                // model reports no tok/s) the row shows how many jobs run instead of a
+                // bare dash.
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     let reading = FleetFormat.closedRightReading(speed: model.speed,
-                                                                 jobs: model.runningTaskCount)
+                                                                 jobs: model.runningTaskCount,
+                                                                 total: model.speedIsTotal)
                     Text(reading.number)
                         .font(FleetType.mono(size: 20, weight: .medium))
                         .foregroundColor(reading.dim ? theme.dim : theme.accent)

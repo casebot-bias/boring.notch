@@ -343,7 +343,8 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(FleetFormat.caseBoxState(model.origin), "Working")
         XCTAssertEqual(FleetFormat.caseBoxJobs(model.origin), "1 job")
         XCTAssertNil(FleetFormat.speedDetail(model.origin), "a cloud model reports no tok/s, so the box shows no speed line")
-        let closed = FleetFormat.closedRightReading(speed: model.speed, jobs: model.runningTaskCount)
+        let closed = FleetFormat.closedRightReading(speed: model.speed, jobs: model.runningTaskCount,
+                                                    total: model.speedIsTotal)
         XCTAssertEqual(closed.number, "1")
         XCTAssertEqual(closed.unit, " job")
         // The same box on a quiet fleet keeps its old wording.
@@ -835,6 +836,52 @@ final class FleetPanelModelTests: XCTestCase {
         let quiet = panel(
             fleet: nil, activity: try ActivitySnapshot.decode(Data(silent.utf8)))
         XCTAssertNil(quiet.speed)
+    }
+
+    /// Case's own model reports its rate through `tokPerSec` while the dashboard's per-device `speed`
+    /// stays null: the box must still show the rate.
+    func testCaseOriginWithOnlyTokPerSecShowsItsRate() throws {
+        let json = """
+        {"generatedAt":"2026-10-14T09:00:00.000Z","devices":[{"device":"case","busy":true,"items":[{"label":"boring-notch-wt-fix-case-box-busy","agent":"main","model":"qwencloud/deepseek-v4.1-flash","device":"cloud","since":"2026-10-13T22:23:17.558Z","elapsedSec":1201}],"tokPerSec":42.5,"state":"ok"}]}
+        """
+        guard let f = fleet(onlineFleetJSON()) else { return }
+        let model = panel(fleet: f, activity: try ActivitySnapshot.decode(Data(json.utf8)))
+        XCTAssertEqual(model.origin.state, .busy)
+        XCTAssertEqual(model.origin.speed ?? 0, 42.5, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.caseBoxState(model.origin), "Working")
+        XCTAssertEqual(FleetFormat.caseBoxJobs(model.origin), "1 job")
+        XCTAssertEqual(FleetFormat.speedDetail(model.origin), "43 tok/s", "the box's fourth line, rounded")
+        XCTAssertFalse(model.speedIsTotal, "no payload speed block, so nothing here is a fleet total")
+    }
+
+    /// The dashboard's own per-device rate wins over the raw `tokPerSec` (the live feed sends both).
+    func testALanePrefersTheDashboardsRateOverRawTokPerSec() throws {
+        let json = """
+        {"generatedAt":"2026-10-14T09:00:00.000Z","devices":[{"device":"frank","busy":true,"items":[{"label":"job","device":"frank"}],"tokPerSec":43.7,"speed":16.4,"state":"ok"}]}
+        """
+        guard let f = fleet(onlineFleetJSON()) else { return }
+        let model = panel(fleet: f, activity: try ActivitySnapshot.decode(Data(json.utf8)))
+        XCTAssertEqual(lane(model, "frank")?.speed ?? 0, 16.4, accuracy: 0.001)
+    }
+
+    /// The fleet number is labelled a total only while a payload reported it; the median stand-in is
+    /// one writer's rate and must not read as a total.
+    func testTheFleetSpeedIsATotalOnlyWhenAPayloadReportedIt() throws {
+        let withBlock = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","speed":{"current":154.4,"lastAt":null,"trend":[],"stepSec":10},"devices":[]}
+        """
+        let blocked = panel(fleet: nil, activity: try ActivitySnapshot.decode(Data(withBlock.utf8)))
+        XCTAssertTrue(blocked.speedIsTotal)
+        XCTAssertEqual(FleetFormat.tokenRateUnit(total: blocked.speedIsTotal), " tok/s total")
+
+        // No block anywhere: the median of the devices that report a rate, `tokPerSec` included.
+        let medians = """
+        {"generatedAt":"2026-10-11T18:00:00.000Z","devices":[{"device":"frank","items":[],"state":"ok","tokPerSec":30.0},{"device":"dali","items":[],"state":"ok","tokPerSec":10.0},{"device":"claire","items":[],"state":"ok"}]}
+        """
+        let standIn = panel(fleet: nil, activity: try ActivitySnapshot.decode(Data(medians.utf8)))
+        XCTAssertFalse(standIn.speedIsTotal)
+        XCTAssertEqual(standIn.speed?.current ?? 0, 20, accuracy: 0.001)
+        XCTAssertEqual(FleetFormat.tokenRateUnit(total: standIn.speedIsTotal), " tok/s")
     }
 
     // MARK: - Feed freshness
