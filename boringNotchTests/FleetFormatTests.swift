@@ -646,6 +646,10 @@ final class FleetFormatTests: XCTestCase {
     /// that one line.
     @MainActor
     func testBusyCaseBoxDrawsItsWorkInTheAccentColour() throws {
+        // The box's data lines ask FleetType for the mono face, whose registration is memoised once
+        // per process. Register the test bundle's own faces first: without this the render would pin
+        // the system fallback for every later test, and FleetTypeTests would fail on our account.
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
         let theme = FleetTheme(skin: .black)
         let idle = origin(.idle)
         let busy = origin(.busy, jobs: 2)
