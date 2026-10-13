@@ -12,6 +12,8 @@
 //  A node with an open decision (an open Odin decision) draws `theme.alert` and outranks the
 //  node's activity state. The response map keeps its name and says "Needs you" in `hot`; the grid
 //  is one row per `responseMapMinRowHeight`.
+//  While the origin runs, the case box says "Working" with its job count (its own tok/s when its
+//  model reports one); otherwise it says "Online" or "Offline".
 //
 
 import Defaults
@@ -24,6 +26,7 @@ import SwiftUI
 struct FleetResponseMapView: View {
     let lanes: [FleetLane]
     let origin: FleetLane
+    let workingCount: Int
 
     @Default(.fleetSkin) private var fleetSkin
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -70,9 +73,10 @@ struct FleetResponseMapView: View {
     // MARK: - Label row
 
     /// "RESPONSE MAP" leading, the working-agent count trailing; the count and
-    /// word render even at zero.
+    /// word render even at zero. The count is every working node, the case box
+    /// included (the model counts the box while the origin runs).
     private var labelRow: some View {
-        let working = lanes.filter { $0.state == .busy }.count
+        let working = workingCount
         return HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text("RESPONSE MAP")
                 .font(.system(size: 11, weight: .semibold))
@@ -124,7 +128,7 @@ struct FleetResponseMapView: View {
                     column(indexes: leftIndexes, colWidth: colWidth, rowHeight: rowHeight)
                         .frame(maxHeight: .infinity, alignment: .center)
                     Spacer(minLength: 0)
-                    caseBox
+                    FleetCaseBoxView(lane: origin, theme: theme, size: caseSize)
                     Spacer(minLength: 0)
                     column(indexes: rightIndexes, colWidth: colWidth, rowHeight: rowHeight)
                         .frame(maxHeight: .infinity, alignment: .center)
@@ -280,25 +284,6 @@ struct FleetResponseMapView: View {
                     .lineLimit(1)
             }
         }
-    }
-
-    // MARK: - Case box
-
-    /// The centred origin node: name over Online/Offline inside a 1 px square.
-    private var caseBox: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(theme.line, lineWidth: 1)
-            .frame(width: caseSize, height: caseSize)
-            .overlay {
-                VStack(spacing: 2) {
-                    Text(origin.label)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(theme.text)
-                    Text(origin.state == .offline ? "Offline" : "Online")
-                        .font(FleetType.mono(size: 11))
-                        .foregroundColor(theme.dim)
-                }
-            }
     }
 
     // MARK: - Palette helpers

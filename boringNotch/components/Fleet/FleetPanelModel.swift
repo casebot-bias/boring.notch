@@ -149,7 +149,10 @@ struct FleetPanelModel: Equatable {
     var lanes: [FleetLane] { [origin] + agents }
 
     var agentCount: Int { agents.count }
-    var workingCount: Int { agents.filter { $0.state == .busy }.count }
+    /// Nodes that are working now: the busy agents plus the case origin while it runs its own or
+    /// delegated jobs - the response map draws exactly these, and the map's "N WORKING" and the closed
+    /// notch row's "N working" both read this.
+    var workingCount: Int { lanes.filter { $0.state == .busy }.count }
     var linkedCount: Int { agents.filter(\.isLinked).count }
     var criticalCount: Int { agents.filter { !$0.isLinked }.count }
     /// Machines that are on but whose model / probe does not answer ("1 down").

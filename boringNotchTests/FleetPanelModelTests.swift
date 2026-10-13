@@ -253,7 +253,7 @@ final class FleetPanelModelTests: XCTestCase {
         // The case origin still owns every delegated item, branded by provider.
         XCTAssertEqual(model.origin.jobs.map(\.label), ["to-frank", "or-job", "plain-job", "qwen-job"])
         XCTAssertEqual(model.origin.jobs.map(\.pill), ["frank", "nova", "case", "case"])
-        XCTAssertEqual(model.workingCount, 1)                                // nova (agents only; case is origin)
+        XCTAssertEqual(model.workingCount, 2)                                // nova and the busy case box
         XCTAssertEqual(model.runningTaskCount, 4)     // case's 4 items; nova's openrouter run is one of them, counted once
         XCTAssertEqual(model.runningTaskCount, model.nowJobs.count)            // same keys as the deduped walk
         XCTAssertEqual(model.linkedCount, 8)
@@ -323,11 +323,37 @@ final class FleetPanelModelTests: XCTestCase {
               let a = activity(activityJSON([deviceJSON("case", busy: true, items: [own])])) else { return }
         let model = panel(fleet: f, activity: a)
         XCTAssertEqual(model.origin.state, .busy)
-        XCTAssertEqual(model.workingCount, 0)                                  // no *agent* is working
+        XCTAssertEqual(model.workingCount, 1)                                  // the case box is the only working node
         XCTAssertTrue(model.isBusy)                                             // origin busy is enough
         XCTAssertEqual(model.runningTaskCount, 1)
         XCTAssertEqual(model.runningTaskCount, model.nowJobs.count)
         XCTAssertEqual(model.nowJobs.map(\.key), ["/tmp/b.jsonl"])
+    }
+
+    func testCaseOriginBusyShowsItsWorkInItsBox() throws {
+        let json = """
+        {"generatedAt":"2026-10-14T09:00:00.000Z","devices":[{"device":"case","busy":true,"items":[{"label":"boring-notch-wt-fix-case-box-busy","agent":"main","model":"qwencloud/deepseek-v4.1-flash","device":"cloud","since":"2026-10-13T22:23:17.558Z","lastStep":"Checking the wiring","elapsedSec":1201}],"slots":null,"tokPerSec":null,"speed":null,"kvCachePct":null,"running":null,"waiting":null,"state":"ok"}]}
+        """
+        let busyActivity = try ActivitySnapshot.decode(Data(json.utf8))
+        guard let f = fleet(onlineFleetJSON()) else { return }
+        let model = panel(fleet: f, activity: busyActivity)
+        XCTAssertEqual(model.origin.state, .busy)
+        XCTAssertEqual(model.workingCount, 1, "the busy case box counts as working")
+        XCTAssertEqual(model.runningTaskCount, 1)
+        XCTAssertEqual(FleetFormat.caseBoxState(model.origin), "Working")
+        XCTAssertEqual(FleetFormat.caseBoxJobs(model.origin), "1 job")
+        XCTAssertNil(FleetFormat.speedDetail(model.origin), "a cloud model reports no tok/s, so the box shows no speed line")
+        let closed = FleetFormat.closedRightReading(speed: model.speed, jobs: model.runningTaskCount)
+        XCTAssertEqual(closed.number, "1")
+        XCTAssertEqual(closed.unit, " job")
+        // The same box on a quiet fleet keeps its old wording.
+        let idle = panel(fleet: f, activity: nil)
+        XCTAssertEqual(idle.origin.state, .idle)
+        XCTAssertEqual(FleetFormat.caseBoxState(idle.origin), "Online")
+        XCTAssertNil(FleetFormat.caseBoxJobs(idle.origin))
+        XCTAssertEqual(idle.workingCount, 0)
+        let offline = panel(fleet: nil, activity: nil)
+        XCTAssertEqual(FleetFormat.caseBoxState(offline.origin), "Offline")
     }
 
     func testRunningTaskCountCountsUniqueKeysAcrossBusyLanesAndSkipsOfflineLanes() {
@@ -366,7 +392,7 @@ final class FleetPanelModelTests: XCTestCase {
                        deviceJSON("ciri", busy: false)]                        // no rate reported
         guard let f = fleet(onlineFleetJSON()), let a = activity(activityJSON(devices)) else { return }
         let model = panel(fleet: f, activity: a)
-        XCTAssertEqual(model.workingCount, 2)                                  // frank + dali
+        XCTAssertEqual(model.workingCount, 3)                                  // frank + dali + the busy case box
         XCTAssertEqual(model.totalTokPerSec ?? 0, 52.4, accuracy: 0.001)       // case's 999 excluded
         // No agent reports a rate: nil, not 0.
         let silent = [deviceJSON("case", busy: true), deviceJSON("frank", busy: false), deviceJSON("dali", busy: false)]

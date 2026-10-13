@@ -12,6 +12,10 @@ enum FleetFormat {
 
     static let unknown = "—"
 
+    /// The unit both fleet speed readouts print. The API's `speed.current` is the sum of the devices'
+    /// rates, so the number is labelled as a total; the notch itself adds nothing up.
+    static let tokenRateUnit = " tok/s total"
+
     // MARK: - percent
 
     /// 72 -> "72%"; 86.34 -> "86%" (rounds half away from zero).
@@ -248,6 +252,30 @@ enum FleetFormat {
         critical > 0 || down > 0 ? status(critical, down: down) : nil
     }
 
+    /// The collapsed notch row's right side: the fleet's decode speed while it reports one (the current
+    /// reading, else the last trend value dimmed and followed by "idle"), otherwise, while jobs run,
+    /// their count instead of a bare dash ("2 jobs" - the case's cloud jobs report no tok/s at all).
+    /// The dash stays when neither is known, so the row never invents a number.
+    struct FleetClosedRightReading: Equatable {
+        var number: String
+        var unit: String
+        var dim: Bool
+    }
+
+    static func closedRightReading(speed: FleetSpeed?, jobs: Int) -> FleetClosedRightReading {
+        if speed?.current != nil || speedLastValue(speed) != nil {
+            return FleetClosedRightReading(number: speedNumberText(speed),
+                                           unit: speedIsIdle(speed) ? " idle" : tokenRateUnit,
+                                           dim: speedIsIdle(speed))
+        }
+        if jobs > 0 {
+            return FleetClosedRightReading(number: "\(jobs)",
+                                           unit: jobs == 1 ? " job" : " jobs",
+                                           dim: false)
+        }
+        return FleetClosedRightReading(number: unknown, unit: tokenRateUnit, dim: true)
+    }
+
     // MARK: - linked
 
     /// linked -> "6/6 linked" style counter.
@@ -309,6 +337,27 @@ enum FleetFormat {
         }
         guard !base.isEmpty else { return nil }
         return URL(string: base)
+    }
+
+    // MARK: - case box
+
+    /// The case box's state line: "Working" while the origin runs work, "Online" while it is idle,
+    /// "Offline" when it is unreachable. The box shows the origin's work the way an agent row shows its own.
+    static func caseBoxState(_ lane: FleetLane) -> String {
+        switch lane.state {
+        case .busy: return "Working"
+        case .idle: return "Online"
+        case .offline: return "Offline"
+        }
+    }
+
+    /// The case box's job-count line: "1 job" / "2 jobs" while the origin is busy with reported jobs,
+    /// nil otherwise - an idle or offline box shows no count, and a busy box with no reported jobs keeps
+    /// "Working" alone.
+    static func caseBoxJobs(_ lane: FleetLane) -> String? {
+        guard lane.state == .busy else { return nil }
+        let count = lane.jobs.count
+        return count > 0 ? jobs(count) : nil
     }
 
     // MARK: - speed
