@@ -3,11 +3,11 @@
 //  boringNotch
 //
 //  The RESPONSE MAP column of the expanded Fleet panel: the agent signals
-//  (frank, claire, ciri | dali, nova, pika, odin) flank the centred `case` box, thin
-//  wires drawn in a Canvas overlay tying every signal to the box, plus its
-//  compact companion for the closed notch. Colours come only from
-//  FleetTheme(skin:); nothing draws a background (the notch is already black).
-//  The animations are the busy-pulse of the mini signals and the dots
+//  (frank, claire, ciri, morpheus | dali, nova, pika, odin) flank the centred
+//  `case` box, thin wires drawn in a Canvas overlay tying every signal to the
+//  box, plus its compact companion for the closed notch. Colours come only
+//  from FleetTheme(skin); nothing draws a background (the notch is already
+//  black). The animations are the busy-pulse of the mini signals and the dots
 //  travelling along the busy wires, both honoured off under Reduce Motion.
 //  A node with an open decision (an open Odin decision) draws `theme.alert` and outranks the
 //  node's activity state. The response map keeps its name and says "Needs you" in `hot`; the grid
@@ -20,7 +20,7 @@ import SwiftUI
 // MARK: - Response Map
 
 /// Expanded-panel response map: a label row over two columns of agent
-/// signals (three left, the rest right) with the case box centred between them.
+/// signals (four left, the other four right) with the case box centred between them.
 struct FleetResponseMapView: View {
     let lanes: [FleetLane]
     let origin: FleetLane
@@ -32,10 +32,10 @@ struct FleetResponseMapView: View {
     /// True while any lane runs; only then does the dot clock need to tick.
     private var hasBusyLane: Bool { lanes.contains { $0.state == .busy } }
 
-    /// Left column: the first three agents. Right column: the rest (four with pika).
-    private var leftIndexes: [Int] { Array(lanes.indices.prefix(3)) }
-    private var rightIndexes: [Int] { Array(lanes.indices.dropFirst(3)) }
-    /// The map's grid: as many rows as its longer agent column (four with pika).
+    /// Left column: the first four agents (frank, claire, ciri, morpheus). Right column: the
+    private var leftIndexes: [Int] { Array(lanes.indices.prefix(4)) }
+    private var rightIndexes: [Int] { Array(lanes.indices.dropFirst(4)) }
+    /// The map's grid: as many rows as its longer agent column (four both sides with morpheus and pika).
     private var gridRows: Int { max(leftIndexes.count, rightIndexes.count) }
 
     // MARK: - Layout constants
@@ -212,7 +212,7 @@ struct FleetResponseMapView: View {
     }
 
     /// Loop phase `t` in 0…1 for the dot on `row`: the clock drives it 0 → 1
-    /// over `busyDotCycle` seconds with a per-row stagger so the three wires
+    /// over `busyDotCycle` seconds with a per-row stagger so the four wires
     /// of a column do not move in lockstep; the static frame parks it at
     /// `busyDotStaticPhase`.
     private func dotPhase(clock: Double?, row: Int) -> CGFloat {
@@ -262,6 +262,9 @@ struct FleetResponseMapView: View {
                     .font(.system(size: 12, weight: live ? .semibold : .medium))
                     .foregroundColor(nameColor)
                     .lineLimit(1)
+                    // A long name plus a job badge can run short of the column; the longest agent
+                    // name ("morpheus") shrinks a little rather than reading as "morph…".
+                    .minimumScaleFactor(0.75)
                 Text(FleetFormat.responseDetail(lane))
                     .font(!needsYou && FleetFormat.speedDetail(lane) != nil
                           ? FleetType.mono(size: 11, weight: .medium)
