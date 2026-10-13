@@ -112,15 +112,15 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.origin.state, .offline)
         XCTAssertFalse(model.origin.isLinked)
         XCTAssertTrue(model.origin.jobs.isEmpty)
-        XCTAssertEqual(model.agents.map(\.id), ["frank", "claire", "ciri", "dali", "nova", "pika", "odin"])
-        XCTAssertEqual(model.agents.map(\.label), ["frank", "claire", "ciri", "dali", "nova", "pika", "odin"])
+        XCTAssertEqual(model.agents.map(\.id), ["frank", "claire", "ciri", "morpheus", "dali", "nova", "pika", "odin"])
+        XCTAssertEqual(model.agents.map(\.label), ["frank", "claire", "ciri", "morpheus", "dali", "nova", "pika", "odin"])
         XCTAssertEqual(model.agents.map(\.state),
-                       [.offline, .offline, .offline, .offline, .offline, .idle, .offline])
+                       [.offline, .offline, .offline, .idle, .offline, .offline, .idle, .offline])
         XCTAssertEqual(model.agents.map(\.isLinked),
-                       [false, false, false, false, false, true, false])
-        XCTAssertEqual(model.agentCount, 7)
+                       [false, false, false, true, false, false, true, false])
+        XCTAssertEqual(model.agentCount, 8)
         XCTAssertEqual(model.workingCount, 0)
-        XCTAssertEqual(model.linkedCount, 1)
+        XCTAssertEqual(model.linkedCount, 2)
         XCTAssertEqual(model.criticalCount, 6)
         XCTAssertFalse(model.isBusy)
         XCTAssertNil(model.totalTokPerSec)
@@ -140,7 +140,7 @@ final class FleetPanelModelTests: XCTestCase {
 
     func testAgentOrderIsFixedAndLanesStartWithCase() {
         let model = panel(fleet: nil, activity: nil)
-        XCTAssertEqual(FleetPanelModelBuilder.agentIds, ["frank", "claire", "ciri", "dali", "nova", "pika", "odin"])
+        XCTAssertEqual(FleetPanelModelBuilder.agentIds, ["frank", "claire", "ciri", "morpheus", "dali", "nova", "pika", "odin"])
         XCTAssertEqual(model.agents.map(\.id), FleetPanelModelBuilder.agentIds)
         XCTAssertEqual(model.lanes.first?.id, "case")
         XCTAssertEqual(model.lanes, [model.origin] + model.agents)
@@ -169,7 +169,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.origin.state, .idle)
         XCTAssertTrue(model.origin.isLinked)
         XCTAssertEqual(model.workingCount, 1)
-        XCTAssertEqual(model.linkedCount, 7)
+        XCTAssertEqual(model.linkedCount, 8)
         XCTAssertEqual(model.criticalCount, 0)
         XCTAssertTrue(model.isBusy)
         XCTAssertEqual(model.runningTaskCount, 2)                          // frank's two jobs, nothing else
@@ -220,7 +220,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(dali.state, .offline)                                // offline wins over the busy device
         XCTAssertFalse(dali.isLinked)
         XCTAssertEqual(model.workingCount, 0)
-        XCTAssertEqual(model.linkedCount, 6)
+        XCTAssertEqual(model.linkedCount, 7)
         XCTAssertEqual(model.criticalCount, 1)
         XCTAssertFalse(model.isBusy)
         XCTAssertNil(model.totalTokPerSec)
@@ -256,7 +256,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.workingCount, 1)                                // nova (agents only; case is origin)
         XCTAssertEqual(model.runningTaskCount, 4)     // case's 4 items; nova's openrouter run is one of them, counted once
         XCTAssertEqual(model.runningTaskCount, model.nowJobs.count)            // same keys as the deduped walk
-        XCTAssertEqual(model.linkedCount, 7)
+        XCTAssertEqual(model.linkedCount, 8)
         XCTAssertEqual(model.criticalCount, 0)
         // Qwen-only activity leaves nova idle (case keeps working via its items).
         guard let a2 = activity(activityJSON([deviceJSON("case", busy: true, items: [qwen])])) else { return }
@@ -515,7 +515,7 @@ final class FleetPanelModelTests: XCTestCase {
         }
         XCTAssertEqual(pika.state, .idle)
         XCTAssertTrue(pika.jobs.isEmpty)
-        XCTAssertEqual(model.agents.map(\.id), ["frank", "claire", "ciri", "dali", "nova", "pika", "odin"])
+        XCTAssertEqual(model.agents.map(\.id), ["frank", "claire", "ciri", "morpheus", "dali", "nova", "pika", "odin"])
     }
 
     /// A fleet row that exists but is not online is genuine offline; reporting work makes it busy.
@@ -547,6 +547,52 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.nowJobs.map(\.key), ["pika-run-2026-10-02T06:00:00.000Z"])
     }
 
+    // MARK: - morpheus
+
+    /// morpheus with no data row at all: idle/grey, never a red offline node, never a crash.
+    func testMorpheusDefaultsToIdleWithoutADataRow() {
+        let model = panel(fleet: nil, activity: nil)
+        guard let morpheus = model.lanes.first(where: { $0.id == "morpheus" }) else {
+            return XCTFail("no morpheus lane; lanes are \(model.lanes.map(\.id))")
+        }
+        XCTAssertEqual(morpheus.state, .idle)
+        XCTAssertTrue(morpheus.jobs.isEmpty)
+        XCTAssertEqual(model.agents.map(\.id),
+                       ["frank", "claire", "ciri", "morpheus", "dali", "nova", "pika", "odin"])
+    }
+
+    /// A fleet row that exists but is not online is genuine offline; reporting work makes it busy.
+    func testMorpheusOnlineReportsBusyAndOfflineRowStaysOffline() {
+        let otherMachines = ["case", "frank", "claire", "ciri", "dali", "macbook", "odin"].map { machineJSON($0) }
+        let job = itemJSON("morpheus-job", device: "morpheus", since: "2026-10-02T06:00:00.000Z", elapsedSec: 90)
+        guard let onlineFleet = fleet(fleetJSON(otherMachines + [machineJSON("morpheus", state: "online")])),
+              let busyActivity = activity(activityJSON([deviceJSON("morpheus", busy: true, items: [job],
+                                                                   tokPerSec: 12.5)])),
+              let offlineFleet = fleet(fleetJSON(otherMachines + [machineJSON("morpheus", state: "offline")])) else { return }
+        let busy = panel(fleet: onlineFleet, activity: busyActivity)
+        XCTAssertEqual(busy.lanes.first { $0.id == "morpheus" }?.state, .busy)
+
+        let down = panel(fleet: offlineFleet, activity: nil)
+        XCTAssertEqual(down.lanes.first { $0.id == "morpheus" }?.state, .offline)
+    }
+
+    /// The API promises a morpheus *device*: a busy one with no matching fleet machine row must
+    /// still be busy, and its run must appear in the working count, the current-work list and the
+    /// header's tok/s.
+    func testMorpheusBusyDeviceWithoutAMachineRowCountsAsWorking() {
+        let job = itemJSON("morpheus-run", device: "morpheus", since: "2026-10-02T06:00:00.000Z", elapsedSec: 30)
+        guard let act = activity(activityJSON([deviceJSON("morpheus", busy: true, items: [job], tokPerSec: 12.5)])) else { return }
+        let model = panel(fleet: nil, activity: act)
+
+        XCTAssertEqual(model.lanes.first { $0.id == "morpheus" }?.state, .busy,
+                       "a busy morpheus device with no machine row is busy, not idle")
+        XCTAssertEqual(model.workingCount, 1, "the busy morpheus lane counts as working")
+        XCTAssertEqual(model.runningTaskCount, 1, "its run is one running task")
+        XCTAssertEqual(model.nowJobs.map(\.key), ["morpheus-run-2026-10-02T06:00:00.000Z"])
+        XCTAssertEqual(model.nowJobs.first?.pill, "morpheus")
+        XCTAssertEqual(model.totalTokPerSec ?? 0, 12.5, accuracy: 0.001, "its rate lands in the fleet total")
+    }
+
     // MARK: - Odin needs decision
 
     private func needsDecisionStatus() -> String {
@@ -567,7 +613,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(model.decision, odin.decision)
         // The alert leaves the tallies alone.
         XCTAssertEqual(model.workingCount, 0)
-        XCTAssertEqual(model.linkedCount, 7)
+        XCTAssertEqual(model.linkedCount, 8)
         XCTAssertEqual(model.criticalCount, 0)
         XCTAssertFalse(model.isBusy)
         XCTAssertEqual(model.runningTaskCount, 0)
@@ -641,7 +687,7 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertTrue(model.hasOpenDecision)
         // The alert leaves the tallies alone.
         XCTAssertEqual(model.workingCount, 0)
-        XCTAssertEqual(model.linkedCount, 7)
+        XCTAssertEqual(model.linkedCount, 8)
         XCTAssertEqual(model.criticalCount, 0)
         XCTAssertFalse(model.isBusy)
     }

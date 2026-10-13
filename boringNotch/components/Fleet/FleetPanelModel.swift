@@ -3,7 +3,7 @@
 //  boringNotch
 //
 //  Data model for the opened fleet panel: the `case` origin at the centre of a
-//  response map, the seven agent signals (frank, claire, ciri, dali, nova, pika, odin),
+//  response map, the eight agent signals (frank, claire, ciri, morpheus, dali, nova, pika, odin),
 //  the current-work jobs, the fleet-wide output shown in the header and one reading per
 //  machine in the footer. Foundation only (no SwiftUI) so it compiles into both the
 //  app target and the test target.
@@ -129,7 +129,7 @@ struct FleetHostReading: Identifiable, Equatable {
 
 struct FleetPanelModel: Equatable {
     var origin: FleetLane              // id/label "case"
-    var agents: [FleetLane]            // frank, claire, ciri, dali, nova, pika, odin
+    var agents: [FleetLane]            // frank, claire, ciri, morpheus, dali, nova, pika, odin
     /// Sum of the agents' reported rates; nil only when no agent reports a rate;
     /// a reported 0 counts as 0.
     var totalTokPerSec: Double?
@@ -272,7 +272,7 @@ struct FleetFeedFreshness: Equatable {
 }
 
 enum FleetPanelModelBuilder {
-    static let agentIds = ["frank", "claire", "ciri", "dali", "nova", "pika", "odin"]
+    static let agentIds = ["frank", "claire", "ciri", "morpheus", "dali", "nova", "pika", "odin"]
 
     /// "openrouter" | "qwencloud" | "other" (nil/empty/unknown model -> "other").
     static func cloudProvider(_ model: String?) -> String {
@@ -292,6 +292,11 @@ enum FleetPanelModelBuilder {
             machineLane(id: "frank", fleet: fleet, activity: activity),
             machineLane(id: "claire", fleet: fleet, activity: activity),
             machineLane(id: "ciri", fleet: fleet, activity: activity),
+            // morpheus is the design agent (GPT-6.1 Sol on Codex, 2 slots). Like pika it is a
+            // cloud helper: the fleet API reports device "morpheus". A row that says offline is
+            // offline, a busy device with no row is busy, and no data at all leaves the lane
+            // idle/grey - never a red node for missing data.
+            morpheusLane(fleet: fleet, activity: activity),
             machineLane(id: "dali", fleet: fleet, activity: activity),
             // nova is not a fleet machine: it is the pool of openrouter cloud jobs
             // the case runs.
@@ -351,6 +356,19 @@ enum FleetPanelModelBuilder {
             .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
             ?? (deviceBusy(device) ? .busy : .idle)
         return FleetLane(id: "pika", label: "pika", state: state, jobs: toJobs(device?.items ?? []),
+                         speed: device?.speed, probeFailed: probeFailed(device))
+    }
+
+    /// morpheus's state, pika's rule exactly: a fleet row that exists but is not online means
+    /// offline; with no fleet row at all the activity device decides - a busy device is busy,
+    /// otherwise idle/grey. Its jobs always come from the activity device, so a design run with
+    /// no machine record still counts in the working total and the current-work list.
+    private static func morpheusLane(fleet: FleetSnapshot?, activity: ActivitySnapshot?) -> FleetLane {
+        let device = device(id: "morpheus", in: activity)
+        let state: FleetNodeState = machine(id: "morpheus", in: fleet)
+            .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
+            ?? (deviceBusy(device) ? .busy : .idle)
+        return FleetLane(id: "morpheus", label: "morpheus", state: state, jobs: toJobs(device?.items ?? []),
                          speed: device?.speed, probeFailed: probeFailed(device))
     }
 
