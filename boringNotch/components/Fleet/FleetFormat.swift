@@ -257,21 +257,35 @@ enum FleetFormat {
     }
 
     /// The collapsed notch row's right side: a speed reading (number and unit) or a job count (number and
-    /// noun). A speed reading is the last measured value dimmed while nothing writes, followed by
-    /// "tok/s total · idle" / "tok/s · idle" / "t/s · idle", never a bare " idle" (see `closedRightReading`).
-    /// The unit reads as a total only for a number the API reported as one (see `tokenRateUnit(total:)`)
-    /// and only while it fits the row (see `closedSpeedUnit(number:total:idle:)`).
+    /// noun). The speed reading tracks the feed: the live sum bright while a model writes, then the last
+    /// measured value dimmed while the feed's clock still says the writing just stopped
+    /// (`speedIdleGraceSec`), then a dimmed zero. The unit never says "idle" - the sparkline the row draws
+    /// left of the number carries the "when did anything last write" story (see `closedRightReading`).
+    /// The number reads as a total only when the API reported it as one (see `tokenRateUnit(total:)`)
+    /// and only while it fits the row (see `closedSpeedUnit(number:total:)`).
     struct FleetClosedRightReading: Equatable {
         var number: String
         var unit: String
         var dim: Bool
     }
 
-    static func closedRightReading(speed: FleetSpeed?, jobs: Int, total: Bool) -> FleetClosedRightReading? {
+    /// The row's speed side: the live sum bright while the feed reports a current reading; after that the
+    /// last value it measured, dimmed while `speed.lastAt` is inside the grace window (`now` defaults to
+    /// the clock, so callers without one still get the honest reading) and a dimmed "0" once it is not -
+    /// a stale number is worse than an honest zero. Only when no speed was ever measured do running jobs
+    /// stand in, bright, and never as a total; no speed and no jobs leaves the side empty.
+    static func closedRightReading(speed: FleetSpeed?, jobs: Int, total: Bool, now: Date = Date()) -> FleetClosedRightReading? {
         if let speed, speed.current != nil || speedLastValue(speed) != nil {
-            let number = speedNumberText(speed)
+            let number: String
+            if let current = speed.current {
+                number = "\(Int(current.rounded()))"
+            } else if speedKeepsLastValue(speed, now: now), let last = speedLastValue(speed) {
+                number = "\(Int(last.rounded()))"
+            } else {
+                number = "0"
+            }
             return FleetClosedRightReading(number: number,
-                                           unit: closedSpeedUnit(number: number, total: total, idle: speedIsIdle(speed)),
+                                           unit: closedSpeedUnit(number: number, total: total),
                                            dim: speedIsIdle(speed))
         }
         if jobs > 0 {
@@ -347,14 +361,41 @@ enum FleetFormat {
 
     // MARK: - case box
 
-    /// The case box's state line: "Working" while the origin runs work, "Online" while it is idle,
-    /// "Offline" when it is unreachable. The box shows the origin's work the way an agent row shows its own.
+    /// The case box's state line: "Working" while the origin runs model work, "Offline" when it is
+    /// unreachable. An idle origin whose dashboard is waiting on a long test or build says what it is
+    /// waiting on - the oldest run's "Testing"/"Building"/"Running" - because the machine is doing
+    /// something the owner cares about even with no model writing. Otherwise the idle box is plain
+    /// "Online". Model work outranks a run: busy is busy whatever the run list says.
     static func caseBoxState(_ lane: FleetLane) -> String {
         switch lane.state {
         case .busy: return "Working"
-        case .idle: return "Online"
+        case .idle:
+            guard let oldest = oldestToolRun(lane.toolRuns) else { return "Online" }
+            return capitalized(toolRunVerb(oldest))
         case .offline: return "Offline"
         }
+    }
+
+    /// True while the state line earns the accent: the origin is busy, or idle with its own tool runs
+    /// (an idle box merely "Online" is a status, not activity, and stays in the plain colour).
+    static func caseBoxStateIsActive(_ lane: FleetLane) -> Bool {
+        switch lane.state {
+        case .busy: return true
+        case .idle: return !lane.toolRuns.isEmpty
+        case .offline: return false
+        }
+    }
+
+    /// The age line under an idle box's "Testing": the oldest run's age, nil for anything else - the
+    /// age only reads under a run word, so busy/offline/idle-without-runs boxes show none.
+    static func caseBoxToolRunAge(_ lane: FleetLane) -> String? {
+        guard lane.state == .idle, let oldest = oldestToolRun(lane.toolRuns) else { return nil }
+        return toolRunAge(oldest)
+    }
+
+    /// "testing" -> "Testing": the box's state line starts a sentence, the verbs inside the row don't.
+    private static func capitalized(_ word: String) -> String {
+        word.isEmpty ? word : word.prefix(1).uppercased() + word.dropFirst()
     }
 
     /// The case box's job-count line: "1 job" / "2 jobs" while the origin is busy with reported jobs,
@@ -364,6 +405,122 @@ enum FleetFormat {
         guard lane.state == .busy else { return nil }
         let count = lane.jobs.count
         return count > 0 ? jobs(count) : nil
+    }
+
+    // MARK: - tool runs
+
+    /// A run's elapsed seconds as the few characters the box and the closed row have: 45 -> "45s",
+    /// 600 -> "10m", 5400 -> "1h30m"; nil when the dashboard reports no elapsed time at all - a run
+    /// that never reported its clock has no age to show, and guessing one would be a lie.
+    static func toolRunAge(_ run: ToolRun) -> String? {
+        guard let elapsed = run.elapsedSec else { return nil }
+        let s = max(0, elapsed)
+        if s < 60 { return "\(s)s" }
+        if s < 3600 { return "\(s / 60)m" }
+        return "\(s / 3600)h" + String(format: "%02d", (s % 3600) / 60) + "m"
+    }
+
+    /// The run that has been going longest: the one the box names, because it is what the machine is
+    /// actually waiting on. A run that reports no elapsed time sorts after every run that does; ties
+    /// keep the feed's order. An empty list has none.
+    static func oldestToolRun(_ runs: [ToolRun]) -> ToolRun? {
+        var oldest: ToolRun?
+        for run in runs {
+            guard let best = oldest else { oldest = run; continue }
+            if (run.elapsedSec ?? Int.min) > (best.elapsedSec ?? Int.min) { oldest = run }
+        }
+        return oldest
+    }
+
+    /// The run's kind as the word the closed row and the case box print: "test" -> "testing",
+    /// "build" -> "building"; a kind the dashboard invented still reads honestly as "running".
+    static func toolRunVerb(_ run: ToolRun) -> String {
+        switch run.kind {
+        case "test": return "testing"
+        case "build": return "building"
+        default: return "running"
+        }
+    }
+
+    /// One run as the current-work list prints it: "monitor-platform-split · smoke.cjs · 10m". A part
+    /// the API leaves out leaves its segment out too; a run with nothing to say is the unknown dash.
+    static func toolRunLine(_ run: ToolRun) -> String {
+        var parts: [String] = []
+        if let job = run.job?.trimmingCharacters(in: .whitespacesAndNewlines), !job.isEmpty {
+            parts.append(job)
+        }
+        if let label = run.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
+            parts.append(label)
+        }
+        if let age = toolRunAge(run) { parts.append(age) }
+        guard !parts.isEmpty else { return unknown }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The closed row's left side while nobody works: a count (nil when one run speaks for itself),
+    /// the verb and the age that carry it.
+    struct FleetClosedToolRun: Equatable {
+        var number: String?
+        var word: String
+        var age: String?
+    }
+
+    /// The row's words for the runs Case is waiting on: ONE run names itself ("testing · 10m", no
+    /// number to prefix); SEVERAL cannot be named by one, so they count ("2 running"); none is nil,
+    /// which is what keeps a bare "0 working" out of the row.
+    static func closedToolRun(_ runs: [ToolRun]) -> FleetClosedToolRun? {
+        if runs.count == 1, let run = runs.first {
+            return FleetClosedToolRun(number: nil, word: toolRunVerb(run), age: toolRunAge(run))
+        }
+        guard !runs.isEmpty else { return nil }
+        return FleetClosedToolRun(number: "\(runs.count)", word: "running", age: nil)
+    }
+
+    /// The closed row's sparkline feed: exactly `count` readings, oldest first, the trend's nils read
+    /// as 0. A young trend gets front zeros, so the line keeps its right-aligned "now" and a flat
+    /// stretch means nobody wrote, not that the feed was short.
+    static func sparklineSeries(_ trend: [Double?], count: Int = 60) -> [Double] {
+        let width = max(0, count)
+        let values = trend.suffix(width).map { $0 ?? 0 }
+        guard values.count < width else { return values }
+        return Array(repeating: 0, count: width - values.count) + values
+    }
+
+    /// Seconds between the speed feed's last writing moment (`speed.lastAt`, ISO8601 with or without
+    /// fractional seconds) and `now`; nil when the feed names no time or the stamp does not parse -
+    /// the grace window must stay honest, so an unparsable clock is "no clock", not "long idle".
+    static func speedIdleSec(_ speed: FleetSpeed?, now: Date) -> Double? {
+        guard let lastAt = speed?.lastAt, let written = fleetDate(lastAt) else { return nil }
+        return now.timeIntervalSince(written)
+    }
+
+    /// How long after the last writing moment the closed row still prints the last measured number:
+    /// long enough that a paused answer or a poll gap does not blink the row through zero.
+    static let speedIdleGraceSec: Double = 30
+
+    /// True while the row may keep its last measured speed: with no clock to judge by (`speedIdleSec`
+    /// nil, and the feed stays trusted) or inside `speedIdleGraceSec` of the last writing moment.
+    static func speedKeepsLastValue(_ speed: FleetSpeed?, now: Date) -> Bool {
+        guard let idleSec = speedIdleSec(speed, now: now) else { return true }
+        return idleSec <= speedIdleGraceSec
+    }
+
+    /// The fleet feed's ISO8601 timestamps: the API stamps them with milliseconds
+    /// ("2026-10-13T23:41:59.737Z"), so that form parses first and the plain one follows.
+    private static let fleetFractionalDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    private static let fleetPlainDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static func fleetDate(_ stamp: String) -> Date? {
+        let trimmed = stamp.trimmingCharacters(in: .whitespacesAndNewlines)
+        return fleetFractionalDateFormatter.date(from: trimmed) ?? fleetPlainDateFormatter.date(from: trimmed)
     }
 
     // MARK: - speed
@@ -383,26 +540,26 @@ enum FleetFormat {
         return "\(Int(value.rounded()))"
     }
 
-    /// True when `number` and `unit` together stay inside the closed row's text budget: the number at
-    /// `FleetPanelMetrics.closedSpeedNumberSize` (medium), the unit at its `minTextSize`, joined by its
-    /// `closedSpeedSpacing`.
+    /// True when the number and unit together stay inside the closed row's text budget: the row also
+    /// draws the speed sparkline left of the number, so its width plus the gap to the number comes out
+    /// of the same budget. The number measures at `FleetPanelMetrics.closedSpeedNumberSize` (medium),
+    /// the unit at its `minTextSize`, joined by `closedSpeedSpacing`.
     static func closedSpeedFits(number: String, unit: String) -> Bool {
-        FleetType.monoWidth(text: number, size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium)
+        FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: number, size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium)
             + FleetPanelMetrics.closedSpeedSpacing
             + FleetType.monoWidth(text: unit, size: FleetPanelMetrics.minTextSize)
             <= FleetPanelMetrics.closedRowTextWidth
     }
 
     /// The closed row's speed unit: the first candidate that fits the reading by `closedSpeedFits`,
-    /// else the shortest one. While nothing writes (`idle`) the reading keeps its rate unit: the
-    /// candidates are the same rate units with " · idle" appended ("tok/s · idle", the web page's form).
-    /// When the row runs out of room the ladder drops "total" first, then shortens "tok/s" to "t/s";
-    /// the idle marker stays on every candidate. The reading must stay inside the closed row's text
-    /// budget so it neither truncates nor widens the notch.
-    static func closedSpeedUnit(number: String, total: Bool, idle: Bool = false) -> String {
+    /// else the shortest one. When the row runs out of room the ladder drops "total" first, then
+    /// shortens "tok/s" to "t/s". The idle reading keeps its rate unit too: nothing writes "idle" into
+    /// the unit any more, the sparkline beside the number says it. The reading must stay inside the
+    /// closed row's text budget so it neither truncates nor widens the notch.
+    static func closedSpeedUnit(number: String, total: Bool) -> String {
         let units = total ? [" tok/s total", " tok/s", " t/s"] : [" tok/s", " t/s"]
-        let candidates = idle ? units.map { $0 + " · idle" } : units
-        return candidates.first { closedSpeedFits(number: number, unit: $0) } ?? candidates[candidates.count - 1]
+        return units.first { closedSpeedFits(number: number, unit: $0) } ?? units[units.count - 1]
     }
 
     /// True while the feed reports no current speed (the header then dims the number and adds "idle").
@@ -485,6 +642,12 @@ enum FleetPanelMetrics {
     /// fit rule (`closedSpeedFits`) measures with the same numbers.
     static let closedSpeedNumberSize: CGFloat = 20
     static let closedSpeedSpacing: CGFloat = 3
+    /// The closed row's speed sparkline: the last ten minutes of trend readings drawn left of the
+    /// speed number, `closedSpeedSpacing` from it. Small on purpose - it only has to show *when* the
+    /// line last rose, and `closedSpeedFits` subtracts its width from the row's text budget.
+    static let closedSparklineWidth: CGFloat = 40
+    /// Short enough to sit inside the speed number's line box without pushing the row taller.
+    static let closedSparklineHeight: CGFloat = 14
     /// The current-work column: 604 pt section, less the 18 pt lead and 1 pt rule, the 292 pt map and
     /// the 20 + 1 + 20 pt around the hairline.
     static let workColumnWidth: CGFloat = 252

@@ -36,7 +36,9 @@ struct FleetClosedIndicator: View {
                                                        total: model.speedIsTotal),
                 theme: theme,
                 gapWidth: vm.closedNotchSize.width + 10,
-                height: vm.effectiveClosedNotchHeight
+                height: vm.effectiveClosedNotchHeight,
+                toolRuns: model.toolRuns,
+                trend: model.speed?.trend
             )
         } else {
             // Original spacer — keeps layout identical when fleet is unreachable

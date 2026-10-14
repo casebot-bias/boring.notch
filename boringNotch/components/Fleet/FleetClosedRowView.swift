@@ -10,9 +10,10 @@ import SwiftUI
 
 // MARK: - Closed Notch Row
 
-/// The collapsed-notch fleet row: "N working" with its alert on the left, the hardware gap in the
-/// middle and the speed reading on the right. Split out of `FleetClosedIndicator` (which owns the
-/// store, the skin default and the view model) so the row itself can be rendered without them.
+/// The collapsed-notch fleet row: "N working" with its alert on the left (the case's running test or
+/// build takes the count's place while nothing works), the hardware gap in the middle and the speed
+/// reading on the right. Split out of `FleetClosedIndicator` (which owns the store, the skin default
+/// and the view model) so the row itself can be rendered without them.
 struct FleetClosedRowView: View {
     let working: Int
     let alert: String?
@@ -23,6 +24,12 @@ struct FleetClosedRowView: View {
     /// The hardware notch plus 5 pt clearance per side.
     let gapWidth: CGFloat
     let height: CGFloat
+    /// The case's running tests and builds. Read only while nothing works: the left side then names
+    /// the run ("testing · 10m", "2 running") instead of "0 working".
+    var toolRuns: [ToolRun] = []
+    /// The speed trend behind the sparkline, 10 s apart, oldest first. nil draws no sparkline (the
+    /// job-count reading has none); an empty trend still draws, flat at 0.
+    var trend: [Double?]? = nil
 
     var body: some View {
         // Both sides take the wider text's width so the camera gap sits on the physical notch's
@@ -31,12 +38,7 @@ struct FleetClosedRowView: View {
             // Left block: "2 working", plus "· 1 down" / "· 3 critical" only when something is wrong.
             // All linked is the normal case and is not shown: the notch stays narrow (owner request).
             HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text("\(working)")
-                    .font(FleetType.mono(size: 12, weight: .medium))
-                    .foregroundColor(theme.text)
-                    + Text(" working")
-                    .font(.system(size: 12))
-                    .foregroundColor(theme.text)
+                workingLabel
                 if let alert {
                     Text("·")
                         .font(.system(size: 12))
@@ -58,14 +60,22 @@ struct FleetClosedRowView: View {
             // "tok/s total"); while only cloud jobs run (the case's model reports no tok/s) the row
             // shows how many jobs run. No reading at all leaves the side empty.
             if let reading {
-                HStack(alignment: .firstTextBaseline, spacing: FleetPanelMetrics.closedSpeedSpacing) {
-                    Text(reading.number)
-                        .font(FleetType.mono(size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium))
-                        .foregroundColor(reading.dim ? theme.dim : theme.accent)
-                        .lineLimit(1)
-                    Text(reading.unit)
-                        .font(FleetType.mono(size: FleetPanelMetrics.minTextSize))
-                        .foregroundColor(theme.dim)
+                // The sparkline sits left of the number, so the reading reads as the trend, then the value.
+                HStack(alignment: .center, spacing: FleetPanelMetrics.closedSpeedSpacing) {
+                    if let trend {
+                        FleetClosedSparkline(values: FleetFormat.sparklineSeries(trend), theme: theme)
+                            .frame(width: FleetPanelMetrics.closedSparklineWidth,
+                                   height: FleetPanelMetrics.closedSparklineHeight)
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: FleetPanelMetrics.closedSpeedSpacing) {
+                        Text(reading.number)
+                            .font(FleetType.mono(size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium))
+                            .foregroundColor(reading.dim ? theme.dim : theme.accent)
+                            .lineLimit(1)
+                        Text(reading.unit)
+                            .font(FleetType.mono(size: FleetPanelMetrics.minTextSize))
+                            .foregroundColor(theme.dim)
+                    }
                 }
                 .fixedSize()
             } else {
@@ -74,6 +84,78 @@ struct FleetClosedRowView: View {
             }
         }
         .frame(height: height)
+    }
+
+    /// The left block's lead: "2 working" while anything works, otherwise the case's running test or
+    /// build ("testing · 10m", "2 running"). A run only ever replaces the count while `working` is 0,
+    /// so a busy case keeps its count and the run never hides it.
+    @ViewBuilder
+    private var workingLabel: some View {
+        if working == 0, let run = FleetFormat.closedToolRun(toolRuns) {
+            if let number = run.number {
+                Text(number)
+                    .font(FleetType.mono(size: 12, weight: .medium))
+                    .foregroundColor(theme.text)
+                    + Text(" \(run.word)")
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.text)
+            } else {
+                Text(run.word)
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.text)
+                if let age = run.age {
+                    Text("·")
+                        .font(.system(size: 12))
+                        .foregroundColor(theme.dim)
+                    Text(age)
+                        .font(FleetType.mono(size: 11))
+                        .foregroundColor(theme.dim)
+                }
+            }
+        } else {
+            Text("\(working)")
+                .font(FleetType.mono(size: 12, weight: .medium))
+                .foregroundColor(theme.text)
+                + Text(" working")
+                .font(.system(size: 12))
+                .foregroundColor(theme.text)
+        }
+    }
+}
+
+// MARK: - Closed Sparkline
+
+/// The collapsed row's speed sparkline: the recent fleet decode speed as a plain accent line, with
+/// no axes and no labels - the number beside it carries the value. Flat at the bottom while nothing
+/// writes, so the row never shows a gap where a reading used to be.
+struct FleetClosedSparkline: View {
+    let values: [Double]      // already normalised by FleetFormat.sparklineSeries
+    let theme: FleetTheme
+
+    var body: some View {
+        Canvas { context, size in
+            guard values.count > 1, let low = values.min(), let high = values.max() else { return }
+            let lineWidth: CGFloat = 1.5
+            // Half the stroke's width stays clear of the top and bottom edges, so a peak or the flat
+            // floor is drawn whole rather than cut off by the box.
+            let inset = lineWidth / 2
+            let top = inset
+            let bottom = size.height - inset
+            let span = high - low
+            let step = size.width / CGFloat(values.count - 1)
+            var path = Path()
+            for (index, value) in values.enumerated() {
+                let fraction = span > 0 ? CGFloat((value - low) / span) : 0
+                let point = CGPoint(x: step * CGFloat(index), y: bottom - fraction * (bottom - top))
+                if index == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+            context.stroke(path, with: .color(theme.accent),
+                           style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+        }
     }
 }
 
