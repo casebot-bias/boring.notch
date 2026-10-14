@@ -150,9 +150,13 @@ final class FleetBlackHoleTests: XCTestCase {
             blackHole: .hidden).background(Color.black)))
 
         let reserved = shownRow.pixelsWide - hiddenRow.pixelsWide
-        XCTAssertGreaterThan(reserved, Int(FleetBlackHoleMetrics.size) * 2,
-                             "the shown row is wider than the idle row by the hole")
-        XCTAssertLessThanOrEqual(reserved, Int(FleetBlackHoleMetrics.size + FleetBlackHoleMetrics.gap + 1) * 2,
+        // Both sides of the row are as wide as the wider one (see `FleetEqualSidesLayout`), so the
+        // hole and its gap widen the row on both sides: 2 * (18 + 6) pt, in bitmap pixels (scale 2),
+        // with one pixel of rounding allowed.
+        let expected = Int(2 * (FleetBlackHoleMetrics.size + FleetBlackHoleMetrics.gap)) * 2
+        XCTAssertGreaterThanOrEqual(reserved, expected,
+                                    "the shown row is wider than the idle row by the hole and its gap")
+        XCTAssertLessThanOrEqual(reserved, expected + 2,
                                 "and reserves exactly the disc plus its gap, nothing more")
 
         XCTAssertGreaterThan(warmPixels(shownRow), 0,
