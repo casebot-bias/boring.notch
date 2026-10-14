@@ -41,16 +41,47 @@ final class FleetBlackHoleTests: XCTestCase {
                 XCTAssertEqual(FleetBlackHoleModel.radius(phase: next.phase, size: size), edge,
                                accuracy: 1e-9, "the respawned particle is back at the edge")
                 XCTAssertEqual(next.angle,
-                               FleetBlackHoleModel.fract(0 + FleetBlackHoleModel.respawnAngle),
-                               accuracy: 1e-9, "the respawn lands on the next golden angle")
+                               FleetBlackHoleModel.fract(particle.angle + (1 - particle.phase) * FleetBlackHoleModel.spiralTurns + FleetBlackHoleModel.respawnAngle),
+                               accuracy: 1e-9, "the respawn finishes the dot's winding onto the next golden angle")
             } else {
                 XCTAssertGreaterThan(next.phase, particle.phase, "the fall keeps advancing")
-                XCTAssertEqual(next.angle, particle.angle, accuracy: 1e-12,
-                               "only the spin moves the angle, never the fall")
+                let advance = 0.1 * 1 * particle.fallRate / FleetBlackHoleModel.fallSeconds
+                XCTAssertEqual(FleetBlackHoleModel.fract(next.angle - particle.angle),
+                               FleetBlackHoleModel.fract(advance * FleetBlackHoleModel.spiralTurns),
+                               accuracy: 1e-9, "the fall winds the dot inward instead of running it down a fixed spoke")
             }
             particle = next
         }
         XCTAssertTrue(wrapped, "a 2.6 s fall completes inside 200 steps of 0.1 s")
+    }
+
+    /// Pins Odin's follow-up: the drawn dots wind around the core while they fall, and the frame
+    /// the renderer draws from is the same model `step` produces.
+    func testParticlesSpiralAroundTheCoreWhileTheyFall() {
+        let start = FleetBlackHoleParticle(phase: 0, angle: 0, fallRate: 1)
+        let half = FleetBlackHoleModel.step(start, dt: FleetBlackHoleModel.fallSeconds / 2, spin: 1)
+        XCTAssertEqual(half.phase, 0.5, accuracy: 1e-9, "half a fall covers half the radius")
+        XCTAssertEqual(half.angle, FleetBlackHoleModel.fract(FleetBlackHoleModel.spiralTurns / 2),
+                       accuracy: 1e-9, "and winds half the spiral")
+        XCTAssertGreaterThanOrEqual(FleetBlackHoleModel.spiralTurns, 1,
+                                    "a fall winds at least a whole turn, so it reads as a spiral, not a straight drop")
+
+        let early = FleetBlackHoleModel.field(count: 8, time: 0.4, spin: 1)
+        let late = FleetBlackHoleModel.field(count: 8, time: 0.8, spin: 1)
+        for (a, b) in zip(early, late) {
+            XCTAssertNotEqual(a.angle, b.angle, "the spoke moves with the clock, not only at a respawn")
+            XCTAssertEqual(FleetBlackHoleModel.fract(b.angle - a.angle),
+                           FleetBlackHoleModel.fract(0.4 * a.fallRate * FleetBlackHoleModel.spiralTurns / FleetBlackHoleModel.fallSeconds),
+                           accuracy: 1e-9, "the swept arc is exactly what the clock asks for")
+        }
+
+        let fromField = FleetBlackHoleModel.field(count: 1, time: 0.3, spin: 1)
+        let stepped = FleetBlackHoleModel.step(FleetBlackHoleModel.field(count: 1, time: 0, spin: 1)[0], dt: 0.3, spin: 1)
+        XCTAssertEqual(fromField[0].phase, stepped.phase, accuracy: 1e-9, "the renderer's phase is the one step produces")
+        XCTAssertEqual(fromField[0].angle, stepped.angle, accuracy: 1e-9, "the renderer's angle is the one step produces")
+        XCTAssertEqual(fromField[0].angle,
+                       FleetBlackHoleModel.fract(0.3 * FleetBlackHoleModel.spiralTurns / FleetBlackHoleModel.fallSeconds),
+                       accuracy: 1e-9, "the frame is drawn from the same winding the step test walks")
     }
 
     /// More workers spin the hole faster, thicker and brighter, each on its own plateau.

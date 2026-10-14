@@ -88,6 +88,10 @@ enum FleetBlackHoleModel {
     static let edgeFraction: Double = 0.45
     static let coreFraction: Double = 0.17
     static let fallSeconds: Double = 2.6
+    /// How far a dot winds around the core while it falls from the edge to the core (the
+    /// brief's spiral), in turns. Without it the dots fall straight down a fixed spoke.
+    static let spiralTurns: Double = 1.25
+
     /// The golden-angle conjugate: each respawn lands the dot on the next irrational slice of
     /// the disc, so the field never clumps.
     static let respawnAngle: Double = 0.6180339887498949
@@ -103,29 +107,37 @@ enum FleetBlackHoleModel {
         return edge + (core - edge) * eased
     }
 
-    /// Advance one particle. A completed fall respawns the dot whole at the edge on the next
-    /// golden angle - never a partial wrap - keeping its fall rate.
+    /// Advance one particle. The fall advances the phase and winds the angle by `spiralTurns`
+    /// over the fall, so the dot spirals in. A completed fall respawns the dot whole at the edge
+    /// on the next golden angle, after it finishes its winding - never a partial wrap - keeping
+    /// its fall rate.
     static func step(_ particle: FleetBlackHoleParticle, dt: Double, spin: Double) -> FleetBlackHoleParticle {
-        let next = particle.phase + dt * spin * particle.fallRate / fallSeconds
+        let advance = dt * spin * particle.fallRate / fallSeconds
+        let next = particle.phase + advance
         if next >= 1 {
-            return FleetBlackHoleParticle(phase: 0,
-                                          angle: fract(particle.angle + respawnAngle),
-                                          fallRate: particle.fallRate)
+            return FleetBlackHoleParticle(
+                phase: 0,
+                angle: fract(particle.angle + (1 - particle.phase) * spiralTurns + respawnAngle),
+                fallRate: particle.fallRate)
         }
         return FleetBlackHoleParticle(phase: next,
-                                      angle: particle.angle,
+                                      angle: fract(particle.angle + advance * spiralTurns),
                                       fallRate: particle.fallRate)
     }
 
-    /// The field at `time`, straight from the clock: each dot's phase, angle and fall rate are
-    /// closed forms of its index, so no state has to be carried between frames.
+    /// The field at `time`, straight from the clock: the closed form of `step`, so the view and
+    /// the tests read the same dot. Progress is unwrapped - the falls already completed count
+    /// towards the angle - so a dot's winding stays continuous across respawns, exactly as
+    /// stepping it frame by frame would.
     static func field(count: Int, time: Double, spin: Double) -> [FleetBlackHoleParticle] {
         guard count > 0 else { return [] }
         return (0..<count).map { index in
             let i = Double(index)
             let fallRate = 1 + 0.45 * fract(i * 0.3183098861837907)
-            let angle = fract(i / Double(count) + 0.11 * fract(i * respawnAngle))
-            let phase = fract(time * spin * fallRate / fallSeconds + fract(i * respawnAngle))
+            let base = fract(i / Double(count) + 0.11 * fract(i * respawnAngle))
+            let progress = time * spin * fallRate / fallSeconds
+            let phase = fract(progress)
+            let angle = fract(base + progress * spiralTurns + floor(progress) * respawnAngle)
             return FleetBlackHoleParticle(phase: phase, angle: angle, fallRate: fallRate)
         }
     }
