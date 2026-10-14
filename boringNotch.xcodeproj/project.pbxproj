@@ -118,6 +118,9 @@
 		A1D0C0DE0000000000000032 /* FleetClosedRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000030 /* FleetClosedRowView.swift */; };
 		A1D0C0DE0000000000000041 /* FleetToolRunLines.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000040 /* FleetToolRunLines.swift */; };
 		A1D0C0DE0000000000000042 /* FleetToolRunLines.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000040 /* FleetToolRunLines.swift */; };
+		A1D0C0DE0000000000000051 /* FleetBlackHoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000050 /* FleetBlackHoleView.swift */; };
+		A1D0C0DE0000000000000052 /* FleetBlackHoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000050 /* FleetBlackHoleView.swift */; };
+		A1D0C0DE0000000000000061 /* FleetBlackHoleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000060 /* FleetBlackHoleTests.swift */; };
 		32255A267D8C447B0440C85E /* FleetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5104882A2AF59662ADF23254 /* FleetModels.swift */; };
 		347F1CBC62380DB1BEF363D4 /* FleetClosedIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */; };
 		37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3E45FB207CA856A28D20FF /* FleetFormat.swift */; };
@@ -370,6 +373,8 @@
 		A1D0C0DE0000000000000020 /* FleetCaseBoxView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetCaseBoxView.swift; path = Fleet/FleetCaseBoxView.swift; sourceTree = "<group>"; };
 		A1D0C0DE0000000000000030 /* FleetClosedRowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetClosedRowView.swift; path = Fleet/FleetClosedRowView.swift; sourceTree = "<group>"; };
 		A1D0C0DE0000000000000040 /* FleetToolRunLines.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetToolRunLines.swift; path = Fleet/FleetToolRunLines.swift; sourceTree = "<group>"; };
+		A1D0C0DE0000000000000050 /* FleetBlackHoleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetBlackHoleView.swift; path = Fleet/FleetBlackHoleView.swift; sourceTree = "<group>"; };
+		A1D0C0DE0000000000000060 /* FleetBlackHoleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetBlackHoleTests.swift; path = boringNotchTests/FleetBlackHoleTests.swift; sourceTree = "<group>"; };
 		CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetClosedIndicator.swift; path = Fleet/FleetClosedIndicator.swift; sourceTree = "<group>"; };
 		CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetSectionView.swift; path = Fleet/FleetSectionView.swift; sourceTree = "<group>"; };
 		D1E3C7F860A060EDE8E06363 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
@@ -756,6 +761,7 @@
 			children = (
 				8273CC303EF7BBAF5F641041 /* FleetDecodingTests.swift */,
 				A4F34CD9024D21FD870F3AD0 /* FleetFormatTests.swift */,
+				A1D0C0DE0000000000000060 /* FleetBlackHoleTests.swift */,
 				DD4809E4B9876FEE672F1C96 /* FleetPanelModelTests.swift */,
 				F7E0A1000000000000000004 /* FleetThemeTests.swift */,
 				F7E0A1000000000000000204 /* NotchWindowPlannerTests.swift */,
@@ -805,6 +811,7 @@
 				CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */,
 				A1D0C0DE0000000000000030 /* FleetClosedRowView.swift */,
 				A1D0C0DE0000000000000040 /* FleetToolRunLines.swift */,
+				A1D0C0DE0000000000000050 /* FleetBlackHoleView.swift */,
 			);
 			name = Fleet;
 			sourceTree = "<group>";
@@ -1104,6 +1111,8 @@
 				A1D0C0DE0000000000000022 /* FleetCaseBoxView.swift in Sources */,
 				A1D0C0DE0000000000000032 /* FleetClosedRowView.swift in Sources */,
 				A1D0C0DE0000000000000042 /* FleetToolRunLines.swift in Sources */,
+				A1D0C0DE0000000000000052 /* FleetBlackHoleView.swift in Sources */,
+				A1D0C0DE0000000000000061 /* FleetBlackHoleTests.swift in Sources */,
 				37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */,
 				F7E0A1000000000000000003 /* FleetTheme.swift in Sources */,
 				F7E0A1000000000000000005 /* FleetThemeTests.swift in Sources */,
@@ -1252,6 +1261,7 @@
 				A1D0C0DE0000000000000021 /* FleetCaseBoxView.swift in Sources */,
 				A1D0C0DE0000000000000031 /* FleetClosedRowView.swift in Sources */,
 				A1D0C0DE0000000000000041 /* FleetToolRunLines.swift in Sources */,
+				A1D0C0DE0000000000000051 /* FleetBlackHoleView.swift in Sources */,
 				A1D0C0DE0000000000000002 /* OdinDecisionView.swift in Sources */,
 				A1D0C0DE0000000000000007 /* FleetType.swift in Sources */,
 				0A026C5285A22320E55161C8 /* FleetWorkView.swift in Sources */,
