@@ -22,6 +22,9 @@ struct FleetClosedIndicator: View {
 
     var body: some View {
         if visible {
+            // The closed row's fit rule measures the speed reading with the bundled mono face.
+            // Register here so the width helper doesn't pin the fallback path (memoised, free after first call).
+            let _ = FleetType.registerBundledFonts()
             let model = store.panelModel
             // Both sides take the wider text's width so the camera gap sits on the physical notch's
             // centre; unequal sides would push the gap off-centre and the notch would cover text.

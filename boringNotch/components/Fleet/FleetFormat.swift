@@ -256,13 +256,11 @@ enum FleetFormat {
         critical > 0 || down > 0 ? status(critical, down: down) : nil
     }
 
-    /// The collapsed notch row's right side: the fleet's decode speed while it reports one (the current
-    /// reading, else the last measured value dimmed and followed by " idle"); otherwise, while jobs run,
-    /// their count ("2 jobs" - the case's cloud jobs report no tok/s at all); otherwise nil, so the row
-    /// shows its working count alone and never invents a number.
+    /// The collapsed notch row's right side: a speed reading (number and unit) or a job count (number and
+    /// noun). A speed reading is the last measured value dimmed while nothing writes, followed by
+    /// "tok/s total · idle" / "tok/s · idle" / "t/s · idle", never a bare " idle" (see `closedRightReading`).
     /// The unit reads as a total only for a number the API reported as one (see `tokenRateUnit(total:)`)
-    /// and only while it fits the row (see `closedSpeedUnit(number:total:)`); the job-count case and the
-    /// " idle" case are unchanged.
+    /// and only while it fits the row (see `closedSpeedUnit(number:total:idle:)`).
     struct FleetClosedRightReading: Equatable {
         var number: String
         var unit: String
@@ -273,7 +271,7 @@ enum FleetFormat {
         if let speed, speed.current != nil || speedLastValue(speed) != nil {
             let number = speedNumberText(speed)
             return FleetClosedRightReading(number: number,
-                                           unit: speedIsIdle(speed) ? " idle" : closedSpeedUnit(number: number, total: total),
+                                           unit: closedSpeedUnit(number: number, total: total, idle: speedIsIdle(speed)),
                                            dim: speedIsIdle(speed))
         }
         if jobs > 0 {
@@ -396,10 +394,14 @@ enum FleetFormat {
     }
 
     /// The closed row's speed unit: the first candidate that fits the reading by `closedSpeedFits`,
-    /// else the shortest one. The reading must stay inside the closed row's text budget so it neither
-    /// truncates nor widens the notch.
-    static func closedSpeedUnit(number: String, total: Bool) -> String {
-        let candidates = total ? [" tok/s total", " tok/s", " t/s"] : [" tok/s", " t/s"]
+    /// else the shortest one. While nothing writes (`idle`) the reading keeps its rate unit: the
+    /// candidates are the same rate units with " · idle" appended ("tok/s · idle", the web page's form).
+    /// When the row runs out of room the ladder drops "total" first, then shortens "tok/s" to "t/s";
+    /// the idle marker stays on every candidate. The reading must stay inside the closed row's text
+    /// budget so it neither truncates nor widens the notch.
+    static func closedSpeedUnit(number: String, total: Bool, idle: Bool = false) -> String {
+        let units = total ? [" tok/s total", " tok/s", " t/s"] : [" tok/s", " t/s"]
+        let candidates = idle ? units.map { $0 + " · idle" } : units
         return candidates.first { closedSpeedFits(number: number, unit: $0) } ?? candidates[candidates.count - 1]
     }
 

@@ -624,10 +624,10 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(reported.unit, " tok/s total")
         XCTAssertFalse(reported.dim)
 
-        // Busy with no current speed but a last value the API measured: the number dims and reads
-        // " idle" - the running job count stays hidden. The numbers are the live activity feed's
-        // speed block of 2026-10-14T07:24Z, where lastValue 16.273848069517346 is the speed the API
-        // itself last measured (the trend still holds only nulls from the idle window).
+        // Busy with no current speed but a last value the API measured: the number dims, keeps its
+        // rate unit and marks itself idle - the running job count stays hidden. The numbers are the
+        // live activity feed's speed block of 2026-10-14T07:24Z, where lastValue 16.273848069517346 is
+        // the speed the API itself last measured (the trend still holds only nulls from the idle window).
         let lastValueIdle = try XCTUnwrap(
             FleetFormat.closedRightReading(
                 speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
@@ -636,7 +636,7 @@ final class FleetFormatTests: XCTestCase {
                 jobs: 1, total: true),
             "a last value the API measured is a reading")
         XCTAssertEqual(lastValueIdle.number, "16")
-        XCTAssertEqual(lastValueIdle.unit, " idle")
+        XCTAssertEqual(lastValueIdle.unit, " tok/s total · idle")
         XCTAssertTrue(lastValueIdle.dim)
 
         // The API's lastValue outranks an older point still sitting in the trend.
@@ -647,7 +647,7 @@ final class FleetFormatTests: XCTestCase {
                 jobs: 0, total: false),
             "lastValue is a reading")
         XCTAssertEqual(withLastValue.number, "16")
-        XCTAssertEqual(withLastValue.unit, " idle")
+        XCTAssertEqual(withLastValue.unit, " tok/s · idle")
         XCTAssertTrue(withLastValue.dim)
         let trendOnly = try XCTUnwrap(
             FleetFormat.closedRightReading(
@@ -696,6 +696,16 @@ final class FleetFormatTests: XCTestCase {
         // Long enough that even " tok/s" does not fit beside the number: the short form wins.
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true), " t/s")
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: false), " t/s")
+        // The idle reading keeps the ladder and appends " · idle" to whichever rate unit fits.
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: true, idle: true),
+                       " tok/s total · idle")
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true, idle: true),
+                       " t/s · idle")
+        // Whatever the font, the idle unit for "16" keeps its rate unit and marks itself idle.
+        let idleUnit = FleetFormat.closedSpeedUnit(number: "16", total: true, idle: true)
+        XCTAssertTrue(idleUnit.contains("/s"), "the idle unit keeps its rate unit, got \(idleUnit)")
+        XCTAssertTrue(idleUnit.hasSuffix(" · idle"),
+                      "the idle unit marks itself idle, got \(idleUnit)")
 
         // The fit helper measures the same pair the row renders.
         XCTAssertTrue(FleetFormat.closedSpeedFits(number: "47", unit: " tok/s total"))

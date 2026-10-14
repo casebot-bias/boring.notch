@@ -434,7 +434,7 @@ final class FleetDecodingTests: XCTestCase {
             FleetFormat.closedRightReading(speed: speed, jobs: 1, total: true),
             "a last value the API measured is a reading")
         XCTAssertEqual(reading.number, "16")
-        XCTAssertEqual(reading.unit, " idle")
+        XCTAssertEqual(reading.unit, " tok/s total · idle")
         XCTAssertTrue(reading.dim)
     }
 
