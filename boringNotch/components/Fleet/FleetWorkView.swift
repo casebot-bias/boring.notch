@@ -42,7 +42,7 @@ struct FleetWorkView: View {
             }
 
             if !toolRuns.isEmpty {
-                toolRunLines
+                FleetToolRunLines(runs: toolRuns, theme: theme)
                     .padding(.bottom, jobs.isEmpty ? 0 : 8)
             }
 
@@ -130,22 +130,6 @@ struct FleetWorkView: View {
             }
         }
         .frame(height: FleetPanelMetrics.caseJobLineHeight)
-    }
-
-    // MARK: - Tool runs
-
-    /// One line per test or build command, in the order the feed reports them. Each line is the whole
-    /// `job · label · age` string, so a run stays readable even when its job has no preview row.
-    private var toolRunLines: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(toolRuns) { run in
-                Text(FleetFormat.toolRunLine(run))
-                    .font(FleetType.mono(size: 11))
-                    .foregroundColor(theme.dim)
-                    .lineLimit(1)
-                    .frame(height: FleetPanelMetrics.caseJobLineHeight)
-            }
-        }
     }
 
     // MARK: - Previews

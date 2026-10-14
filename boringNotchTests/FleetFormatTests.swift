@@ -1062,6 +1062,83 @@ final class FleetFormatTests: XCTestCase {
         }
     }
 
+    /// The CURRENT WORK column is the only place a waiting run's full command appears, so a leaf
+    /// view that painted nothing while runs existed would be indistinguishable from an empty fleet -
+    /// every formatter could stay right and the panel would still show Case doing nothing. Rendering
+    /// the view with two runs and with none, and counting the lit pixels both times, tells those
+    /// apart: the lines are there when the fleet has work, and the empty state really is blank.
+    /// Judged on luminance, not colour: the lines draw in `theme.dim`, so no accent is involved.
+    @MainActor
+    func testToolRunLinesDrawTheRunsAndNothingWithoutThem() throws {
+        // The run lines ask FleetType for the mono face, whose registration is memoised once per
+        // process. Register the test bundle's own faces first: without this the render would pin
+        // the system fallback for every later test, and FleetTypeTests would fail on our account.
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
+        let theme = FleetTheme(skin: .black)
+        // Two runs the activity feed reports: a 10 m smoke test and a 3 m build, each with the job
+        // and label the formatter puts on its line.
+        let runs = [
+            run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 600),
+            run(kind: "build", job: "boring-notch", label: "boringNotch", elapsed: 180),
+        ]
+
+        // The column's own width and the two 16 pt rows two runs take, on the black background:
+        // anything lit inside this box is the view's own doing, so a view that stopped drawing its
+        // lines would leave the box as empty as the no-runs render.
+        func linesBitmap(_ runList: [ToolRun]) throws -> NSBitmapImageRep {
+            let renderer = ImageRenderer(content: FleetToolRunLines(runs: runList, theme: theme)
+                .frame(width: FleetPanelMetrics.workColumnWidth,
+                       height: 2 * FleetPanelMetrics.caseJobLineHeight)
+                .background(Color.black))
+            renderer.scale = 3
+            let image = try XCTUnwrap(renderer.nsImage, "the tool-run lines rendered")
+            return try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)),
+                                 "tool-run lines bitmap")
+        }
+
+        XCTAssertGreaterThan(litPixelCount(try linesBitmap(runs)), 0,
+                             "two runs draw their lines")
+        XCTAssertEqual(litPixelCount(try linesBitmap([])), 0,
+                       "no runs draw no lines at all")
+
+        // A preview strip, only on request:
+        // `TEST_RUNNER_FLEET_TOOL_RUNS_LINES_PREVIEW=/tmp/runlines.png xcodebuild test`. The two
+        // runs above the empty column, so the blank state can be seen next to the painted one.
+        // `if let` rather than `guard … else { return }`, as in this file's other previews.
+        if let previewPath = ProcessInfo.processInfo.environment["FLEET_TOOL_RUNS_LINES_PREVIEW"] {
+            let strip = ImageRenderer(content: VStack(spacing: 12) {
+                FleetToolRunLines(runs: runs, theme: theme)
+                    .frame(width: FleetPanelMetrics.workColumnWidth,
+                           height: 2 * FleetPanelMetrics.caseJobLineHeight)
+                FleetToolRunLines(runs: [], theme: theme)
+                    .frame(width: FleetPanelMetrics.workColumnWidth,
+                           height: 2 * FleetPanelMetrics.caseJobLineHeight)
+            }.padding(16).background(Color.black))
+            strip.scale = 3
+            let stripImage = try XCTUnwrap(strip.nsImage, "the preview strip rendered")
+            let stripBitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(stripImage.tiffRepresentation)),
+                                            "preview strip bitmap")
+            let png = try XCTUnwrap(stripBitmap.representation(using: .png, properties: [:]), "preview PNG")
+            XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)), "the preview wrote")
+        }
+    }
+
+    /// Pixels lit above the black background: Rec.709 luminance over 0.15. The black skin's run
+    /// line (`dim`, 0x939A87) measures 0.59, and the background it sits on - `Color.black` under the
+    /// box - 0.00, so this counts the glyphs and their antialiasing and nothing else.
+    private func litPixelCount(_ bitmap: NSBitmapImageRep) -> Int {
+        var count = 0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                let luminance = 0.2126 * pixel.redComponent + 0.7152 * pixel.greenComponent
+                    + 0.0722 * pixel.blueComponent
+                if luminance > 0.15 { count += 1 }
+            }
+        }
+        return count
+    }
+
     /// Pixels that are the skin's accent and nothing else: within 0.06 of the accent in every sRGB
     /// component, and saturated towards green. The box's greys (dim, muted, text and the stroke) all
     /// sit within 0.07 of grey on the green-minus-blue axis, the accent at 0.16, so the extra test
