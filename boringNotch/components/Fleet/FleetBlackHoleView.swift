@@ -217,10 +217,16 @@ private struct FleetBlackHoleFrame: View {
 
             let major = CGFloat(FleetBlackHoleMetrics.discMajorFraction) * size.width
             let minor = CGFloat(FleetBlackHoleMetrics.discMinorFraction) * size.width
+            // Rotate geometry around the shared centre, independent of layer transforms.
+            let tilt = CGFloat(FleetBlackHoleMetrics.tiltDegrees * .pi / 180)
+            let rotation = CGAffineTransform(a: cos(tilt), b: sin(tilt),
+                                             c: -sin(tilt), d: cos(tilt),
+                                             tx: center.x - center.x * cos(tilt) + center.y * sin(tilt),
+                                             ty: center.y - center.x * sin(tilt) - center.y * cos(tilt))
             let disc = Path(ellipseIn: CGRect(x: center.x - major,
                                               y: center.y - minor,
                                               width: major * 2,
-                                              height: minor * 2))
+                                              height: minor * 2)).applying(rotation)
             let sweep = GraphicsContext.Shading.conicGradient(
                 Gradient(colors: [FleetBlackHolePalette.orange,
                                   FleetBlackHolePalette.pink,
@@ -229,16 +235,13 @@ private struct FleetBlackHoleFrame: View {
                 center: center,
                 angle: .radians(turn * 2 * .pi))
             let halfLine = size.height / 2
-            let tilt = Angle.degrees(FleetBlackHoleMetrics.tiltDegrees)
-            let discStroke = StrokeStyle(lineWidth: 1)
+            // A narrow hot band leaves room for the separate infalling dots.
+            let discStroke = StrokeStyle(lineWidth: 0.85, lineCap: .round)
 
-            // The disc's far half, dimmed and clipped above the middle: it passes behind the core.
-            // Clip before the tilt so the clip line stays the horizon, not a tilted chord.
+            // The dim far half passes behind the core. Rotate its clip with the ellipse
+            // so the seam stays on the disc's own axis.
             context.drawLayer { layer in
-                layer.clip(to: Path(CGRect(x: 0, y: 0, width: size.width, height: halfLine)))
-                layer.translateBy(x: center.x, y: center.y)
-                layer.rotate(by: tilt)
-                layer.translateBy(x: -center.x, y: -center.y)
+                layer.clip(to: Path(CGRect(x: 0, y: 0, width: size.width, height: halfLine)).applying(rotation))
                 layer.opacity = 0.45 * light
                 layer.stroke(disc, with: sweep, style: discStroke)
             }
@@ -253,26 +256,23 @@ private struct FleetBlackHoleFrame: View {
 
             // The photon ring: the hairline of light bent around the core's edge.
             context.stroke(core,
-                           with: .color(FleetBlackHolePalette.ring.opacity(0.9 * light)),
-                           style: StrokeStyle(lineWidth: 0.6))
+                           with: .color(FleetBlackHolePalette.ring.opacity(0.68 * light)),
+                           style: StrokeStyle(lineWidth: 0.35))
 
             // The disc's near half, at full colour in front of the core...
             context.drawLayer { layer in
-                layer.clip(to: Path(CGRect(x: 0, y: center.y, width: size.width, height: halfLine)))
-                layer.translateBy(x: center.x, y: center.y)
-                layer.rotate(by: tilt)
-                layer.translateBy(x: -center.x, y: -center.y)
+                layer.clip(to: Path(CGRect(x: 0, y: center.y, width: size.width, height: halfLine)).applying(rotation))
+                layer.opacity = light
                 layer.stroke(disc, with: sweep, style: discStroke)
 
-                // ... and the Doppler pass: the approaching (left) side burns whiter.
-                var doppler = layer
-                doppler.opacity = 0.5 * light
-                doppler.stroke(disc,
-                               with: .linearGradient(Gradient(colors: [Color.white.opacity(0.5 * light),
-                                                                      Color.white.opacity(0)]),
-                                                     startPoint: CGPoint(x: 0, y: center.y),
-                                                     endPoint: center),
-                               style: discStroke)
+                // A second warm highlight fades from the approaching (left) edge:
+                // Doppler asymmetry without a white band overwhelming the core.
+                layer.stroke(disc,
+                             with: .linearGradient(Gradient(colors: [FleetBlackHolePalette.ring.opacity(0.42),
+                                                                    Color.white.opacity(0)]),
+                                                   startPoint: CGPoint(x: 0, y: center.y),
+                                                   endPoint: center),
+                             style: discStroke)
             }
 
             // The infalling dots, in the disc's own plane, faded by how far they have fallen.
@@ -282,20 +282,21 @@ private struct FleetBlackHoleFrame: View {
                                                       time: time,
                                                       spin: spin)
             context.drawLayer { layer in
-                layer.translateBy(x: center.x, y: center.y)
-                layer.rotate(by: tilt)
-                layer.translateBy(x: -center.x, y: -center.y)
+                layer.clip(to: Path(CGRect(origin: .zero, size: size)))
                 for particle in particles {
                     let r = FleetBlackHoleModel.radius(phase: particle.phase, size: size.width)
                     let theta = particle.angle * 2 * .pi
-                    let x = center.x + r * CGFloat(cos(theta))
-                    let y = center.y + r * CGFloat(sin(theta)) * flat
-                    let dotRadius = CGFloat(0.28 + 0.22 * FleetBlackHoleModel.brightness(phase: particle.phase))
+                    let point = CGPoint(x: center.x + r * CGFloat(cos(theta)),
+                                        y: center.y + r * CGFloat(sin(theta)) * flat).applying(rotation)
+                    let x = point.x
+                    let y = point.y
+                    let fade = FleetBlackHoleModel.brightness(phase: particle.phase)
+                    let dotRadius = CGFloat(0.42 + 0.25 * fade)
                     layer.fill(Path(ellipseIn: CGRect(x: x - dotRadius,
                                                       y: y - dotRadius,
                                                       width: dotRadius * 2,
                                                       height: dotRadius * 2)),
-                               with: .color(FleetBlackHolePalette.pink.opacity(0.85 * FleetBlackHoleModel.brightness(phase: particle.phase))))
+                               with: .color(FleetBlackHolePalette.ring.opacity(min(1, 1.6 * fade * light))))
                 }
             }
         }
