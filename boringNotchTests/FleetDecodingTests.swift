@@ -415,4 +415,38 @@ final class FleetDecodingTests: XCTestCase {
         XCTAssertNil(snapshot.speed)
         XCTAssertNil(snapshot.devices.first?.speed)
     }
+
+    /// The live activity feed's speed block as captured on 2026-10-14T07:24Z: the fleet was idle, so
+    /// `current` and every trend point were null and only `lastValue` was left. This is the live shape
+    /// that made the closed notch show no speed before the field was decoded.
+    func testActivitySpeedDecodesTheApisLastValueWhileNothingWrites() throws {
+        let trendJSON = Array(repeating: "null", count: 60).joined(separator: ",")
+        let json = """
+        {"generatedAt":"2026-10-14T07:24:00.000Z","devices":[],"speed":{"current":null,"lastAt":"2026-10-13T23:41:59.737Z","trend":[\(trendJSON)],"lastValue":16.273848069517346,"stepSec":10}}
+        """
+        let snapshot = try ActivitySnapshot.decode(Data(json.utf8))
+        let speed = try XCTUnwrap(snapshot.speed, "the speed block decodes")
+        XCTAssertNil(speed.current)
+        XCTAssertEqual(speed.lastValue, 16.273848069517346)
+        XCTAssertEqual(speed.trend.count, 60)
+        XCTAssertTrue(speed.trend.allSatisfy { $0 == nil })
+        let reading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: speed, jobs: 1, total: true),
+            "a last value the API measured is a reading")
+        XCTAssertEqual(reading.number, "16")
+        XCTAssertEqual(reading.unit, " tok/s total · idle")
+        XCTAssertTrue(reading.dim)
+    }
+
+    /// A speed block whose `lastValue` is null (the shape before anything was ever measured) decodes
+    /// to a nil `lastValue` rather than zero.
+    func testSpeedWithNullLastValueDecodesToNil() throws {
+        let json = """
+        {"generatedAt":"2026-10-14T07:24:00.000Z","devices":[],"speed":{"current":null,"lastAt":null,"trend":[null,null],"lastValue":null,"stepSec":10}}
+        """
+        let snapshot = try ActivitySnapshot.decode(Data(json.utf8))
+        let speed = try XCTUnwrap(snapshot.speed, "the speed block decodes")
+        XCTAssertNil(speed.lastValue)
+        XCTAssertNil(speed.current)
+    }
 }

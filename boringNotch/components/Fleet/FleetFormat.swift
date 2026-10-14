@@ -256,22 +256,22 @@ enum FleetFormat {
         critical > 0 || down > 0 ? status(critical, down: down) : nil
     }
 
-    /// The collapsed notch row's right side: the fleet's decode speed while it reports one (the current
-    /// reading, else the last trend value dimmed and followed by "idle"), otherwise, while jobs run,
-    /// their count instead of a bare dash ("2 jobs" - the case's cloud jobs report no tok/s at all).
-    /// The dash stays when neither is known, so the row never invents a number.
-    /// The unit reads as a total only for a number the API reported as one (see `tokenRateUnit(total:)`);
-    /// the job-count case and the " idle" case are unchanged.
+    /// The collapsed notch row's right side: a speed reading (number and unit) or a job count (number and
+    /// noun). A speed reading is the last measured value dimmed while nothing writes, followed by
+    /// "tok/s total · idle" / "tok/s · idle" / "t/s · idle", never a bare " idle" (see `closedRightReading`).
+    /// The unit reads as a total only for a number the API reported as one (see `tokenRateUnit(total:)`)
+    /// and only while it fits the row (see `closedSpeedUnit(number:total:idle:)`).
     struct FleetClosedRightReading: Equatable {
         var number: String
         var unit: String
         var dim: Bool
     }
 
-    static func closedRightReading(speed: FleetSpeed?, jobs: Int, total: Bool) -> FleetClosedRightReading {
-        if speed?.current != nil || speedLastValue(speed) != nil {
-            return FleetClosedRightReading(number: speedNumberText(speed),
-                                           unit: speedIsIdle(speed) ? " idle" : tokenRateUnit(total: total),
+    static func closedRightReading(speed: FleetSpeed?, jobs: Int, total: Bool) -> FleetClosedRightReading? {
+        if let speed, speed.current != nil || speedLastValue(speed) != nil {
+            let number = speedNumberText(speed)
+            return FleetClosedRightReading(number: number,
+                                           unit: closedSpeedUnit(number: number, total: total, idle: speedIsIdle(speed)),
                                            dim: speedIsIdle(speed))
         }
         if jobs > 0 {
@@ -279,7 +279,7 @@ enum FleetFormat {
                                            unit: jobs == 1 ? " job" : " jobs",
                                            dim: false)
         }
-        return FleetClosedRightReading(number: unknown, unit: tokenRateUnit(total: false), dim: true)
+        return nil
     }
 
     // MARK: - linked
@@ -368,9 +368,12 @@ enum FleetFormat {
 
     // MARK: - speed
 
-    /// The last non-nil trend reading: what an idle header shows dimmed. nil when the trend has none.
+    /// The last speed anyone measured: the speed block's own `lastValue` when the API kept one (the
+    /// activity feed keeps it while nothing writes), else the newest non-nil trend reading. What an
+    /// idle header shows dimmed; nil when neither exists.
     static func speedLastValue(_ speed: FleetSpeed?) -> Double? {
-        speed?.trend.compactMap { $0 }.last
+        if let lastValue = speed?.lastValue { return lastValue }
+        return speed?.trend.compactMap { $0 }.last
     }
 
     /// The header's number: the current decode speed, else the last trend value, else `unknown` ("—").
@@ -378,6 +381,28 @@ enum FleetFormat {
     static func speedNumberText(_ speed: FleetSpeed?) -> String {
         guard let value = speed?.current ?? speedLastValue(speed) else { return unknown }
         return "\(Int(value.rounded()))"
+    }
+
+    /// True when `number` and `unit` together stay inside the closed row's text budget: the number at
+    /// `FleetPanelMetrics.closedSpeedNumberSize` (medium), the unit at its `minTextSize`, joined by its
+    /// `closedSpeedSpacing`.
+    static func closedSpeedFits(number: String, unit: String) -> Bool {
+        FleetType.monoWidth(text: number, size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium)
+            + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: unit, size: FleetPanelMetrics.minTextSize)
+            <= FleetPanelMetrics.closedRowTextWidth
+    }
+
+    /// The closed row's speed unit: the first candidate that fits the reading by `closedSpeedFits`,
+    /// else the shortest one. While nothing writes (`idle`) the reading keeps its rate unit: the
+    /// candidates are the same rate units with " · idle" appended ("tok/s · idle", the web page's form).
+    /// When the row runs out of room the ladder drops "total" first, then shortens "tok/s" to "t/s";
+    /// the idle marker stays on every candidate. The reading must stay inside the closed row's text
+    /// budget so it neither truncates nor widens the notch.
+    static func closedSpeedUnit(number: String, total: Bool, idle: Bool = false) -> String {
+        let units = total ? [" tok/s total", " tok/s", " t/s"] : [" tok/s", " t/s"]
+        let candidates = idle ? units.map { $0 + " · idle" } : units
+        return candidates.first { closedSpeedFits(number: number, unit: $0) } ?? candidates[candidates.count - 1]
     }
 
     /// True while the feed reports no current speed (the header then dims the number and adds "idle").
@@ -455,6 +480,11 @@ enum FleetPanelMetrics {
     static func closedRowSide(left: CGFloat, right: CGFloat) -> CGFloat {
         min(closedRowSideWidth, max(left, right))
     }
+    /// The closed row's speed reading: the number at this size (medium weight), its unit at
+    /// `minTextSize` after this spacing. The closed row draws its speed reading with these and the
+    /// fit rule (`closedSpeedFits`) measures with the same numbers.
+    static let closedSpeedNumberSize: CGFloat = 20
+    static let closedSpeedSpacing: CGFloat = 3
     /// The current-work column: 604 pt section, less the 18 pt lead and 1 pt rule, the 292 pt map and
     /// the 20 + 1 + 20 pt around the hairline.
     static let workColumnWidth: CGFloat = 252

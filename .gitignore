@@ -52,4 +52,6 @@ build/
 *.ipa
 *.xcarchive
 *.dSYM
+*.profraw
+*.profdata
 

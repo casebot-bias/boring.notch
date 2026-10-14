@@ -2,7 +2,8 @@
 //  FleetClosedIndicator.swift
 //  boringNotch
 //
-//  Closed-notch fleet indicator row and header freshness label.
+//  Closed-notch fleet indicator row and header freshness label; the collapsed row itself is
+//  drawn by `FleetClosedRowView`.
 //
 
 import Defaults
@@ -21,58 +22,22 @@ struct FleetClosedIndicator: View {
 
     var body: some View {
         if visible {
+            // The closed row's fit rule measures the speed reading with the bundled mono face.
+            // Register here so the width helper doesn't pin the fallback path (memoised, free after first call).
+            let _ = FleetType.registerBundledFonts()
             let model = store.panelModel
             // Both sides take the wider text's width so the camera gap sits on the physical notch's
             // centre; unequal sides would push the gap off-centre and the notch would cover text.
-            FleetEqualSidesLayout {
-                // Left block: "2 working", plus "· 1 down" / "· 3 critical" only when something is wrong.
-                // All linked is the normal case and is not shown: the notch stays narrow (owner request).
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    Text("\(model.workingCount)")
-                        .font(FleetType.mono(size: 12, weight: .medium))
-                        .foregroundColor(theme.text)
-                        + Text(" working")
-                        .font(.system(size: 12))
-                        .foregroundColor(theme.text)
-                    if let alert = FleetFormat.closedAlert(critical: model.criticalCount, down: model.downCount) {
-                        Text("·")
-                            .font(.system(size: 12))
-                            .foregroundColor(theme.dim)
-                        Text(alert)
-                            .font(FleetType.mono(size: 11))
-                            .foregroundColor(theme.hotText)
-                    }
-                }
-                .lineLimit(1)
-                .fixedSize()
-
-                // Hardware-notch gap spacer: notch width plus 5 pt clearance per side
-                Rectangle()
-                    .fill(.clear)
-                    .frame(
-                        width: vm.closedNotchSize.width + 10,
-                        height: vm.effectiveClosedNotchHeight
-                    )
-
-                // Right block: the fleet's total decode speed while the API reported one
-                // (the unit reads "tok/s total"); while only cloud jobs run (the case's
-                // model reports no tok/s) the row shows how many jobs run instead of a
-                // bare dash.
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    let reading = FleetFormat.closedRightReading(speed: model.speed,
-                                                                 jobs: model.runningTaskCount,
-                                                                 total: model.speedIsTotal)
-                    Text(reading.number)
-                        .font(FleetType.mono(size: 20, weight: .medium))
-                        .foregroundColor(reading.dim ? theme.dim : theme.accent)
-                        .lineLimit(1)
-                    Text(reading.unit)
-                        .font(FleetType.mono(size: 11))
-                        .foregroundColor(theme.dim)
-                }
-                .fixedSize()
-            }
-            .frame(height: vm.effectiveClosedNotchHeight)
+            FleetClosedRowView(
+                working: model.workingCount,
+                alert: FleetFormat.closedAlert(critical: model.criticalCount, down: model.downCount),
+                reading: FleetFormat.closedRightReading(speed: model.speed,
+                                                       jobs: model.runningTaskCount,
+                                                       total: model.speedIsTotal),
+                theme: theme,
+                gapWidth: vm.closedNotchSize.width + 10,
+                height: vm.effectiveClosedNotchHeight
+            )
         } else {
             // Original spacer — keeps layout identical when fleet is unreachable
             Rectangle()
@@ -85,33 +50,6 @@ struct FleetClosedIndicator: View {
     }
 }
 
-// MARK: - Equal Sides Layout
-
-/// Lays out [left, gap, right] with both sides as wide as the wider of the two (see
-/// `FleetPanelMetrics.closedRowSide`): the left text hugs the gap from the left, the right text from
-/// the right, and the gap stays on the row's centre, over the camera.
-struct FleetEqualSidesLayout: Layout {
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard subviews.count == 3 else { return .zero }
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let side = FleetPanelMetrics.closedRowSide(left: sizes[0].width, right: sizes[2].width)
-        return CGSize(width: side * 2 + sizes[1].width, height: sizes.map(\.height).max() ?? 0)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard subviews.count == 3 else { return }
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let side = FleetPanelMetrics.closedRowSide(left: sizes[0].width, right: sizes[2].width)
-        let leftWidth = min(sizes[0].width, side)
-        let rightWidth = min(sizes[2].width, side)
-        subviews[0].place(at: CGPoint(x: bounds.minX + side - leftWidth, y: bounds.midY), anchor: .leading,
-                          proposal: ProposedViewSize(width: leftWidth, height: sizes[0].height))
-        subviews[1].place(at: CGPoint(x: bounds.minX + side, y: bounds.midY), anchor: .leading,
-                          proposal: ProposedViewSize(width: sizes[1].width, height: sizes[1].height))
-        subviews[2].place(at: CGPoint(x: bounds.minX + side + sizes[1].width, y: bounds.midY), anchor: .leading,
-                          proposal: ProposedViewSize(width: rightWidth, height: sizes[2].height))
-    }
-}
 
 // MARK: - Updated Label
 
