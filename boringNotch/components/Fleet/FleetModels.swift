@@ -104,14 +104,18 @@ struct FleetSpeed: Codable, Equatable {
     var lastAt: String?
     var trend: [Double?]
     var stepSec: Int?
+    /// The last speed anyone measured, kept by the API while nothing writes (the activity feed's
+    /// `speed.lastValue`): what the web page shows while `current` is null.
+    var lastValue: Double?
 
-    private enum CodingKeys: String, CodingKey { case current, lastAt, trend, stepSec }
+    private enum CodingKeys: String, CodingKey { case current, lastAt, trend, stepSec, lastValue }
 
-    init(current: Double?, lastAt: String?, trend: [Double?] = [], stepSec: Int? = nil) {
+    init(current: Double?, lastAt: String?, trend: [Double?] = [], stepSec: Int? = nil, lastValue: Double? = nil) {
         self.current = current
         self.lastAt = lastAt
         self.trend = trend
         self.stepSec = stepSec
+        self.lastValue = lastValue
     }
 
     init(from decoder: Decoder) throws {
@@ -120,6 +124,7 @@ struct FleetSpeed: Codable, Equatable {
         self.lastAt = try container.decodeIfPresent(String.self, forKey: .lastAt)
         self.trend = try container.decodeIfPresent([Double?].self, forKey: .trend) ?? []
         self.stepSec = try container.decodeIfPresent(Int.self, forKey: .stepSec)
+        self.lastValue = try container.decodeIfPresent(Double.self, forKey: .lastValue)
     }
 }
 

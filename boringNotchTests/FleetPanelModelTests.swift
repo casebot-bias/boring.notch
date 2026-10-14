@@ -343,8 +343,12 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(FleetFormat.caseBoxState(model.origin), "Working")
         XCTAssertEqual(FleetFormat.caseBoxJobs(model.origin), "1 job")
         XCTAssertNil(FleetFormat.speedDetail(model.origin), "a cloud model reports no tok/s, so the box shows no speed line")
-        let closed = FleetFormat.closedRightReading(speed: model.speed, jobs: model.runningTaskCount,
-                                                    total: model.speedIsTotal)
+        // No speed anywhere in this payload and one running job: the job count stands in as the
+        // closed row's reading (the helper returns an optional, and a job count is one).
+        let closed = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: model.speed, jobs: model.runningTaskCount,
+                                           total: model.speedIsTotal),
+            "the running job is a reading")
         XCTAssertEqual(closed.number, "1")
         XCTAssertEqual(closed.unit, " job")
         // The same box on a quiet fleet keeps its old wording.

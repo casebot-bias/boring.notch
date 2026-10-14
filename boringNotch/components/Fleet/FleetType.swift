@@ -57,6 +57,19 @@ enum FleetType {
         !registerBundledFonts()
     }
 
+    /// The rendered width of `text` at `size`: the closed row measures its speed reading against
+    /// this, so the fit rule matches what the view renders. Same face as `mono(size:weight:)`.
+    static func monoWidth(text: String, size: CGFloat, weight: Weight = .regular) -> CGFloat {
+        let font: NSFont
+        if registerBundledFonts(), let face = NSFont(name: postScriptName(for: weight), size: size) {
+            font = face
+        } else {
+            logFallbackOnce()
+            font = NSFont.monospacedSystemFont(ofSize: size, weight: nsFontWeight(weight))
+        }
+        return (text as NSString).size(withAttributes: [.font: font]).width
+    }
+
     private static func postScriptName(for weight: Weight) -> String {
         switch weight {
         case .regular: return "JetBrainsMono-Regular"
@@ -66,6 +79,14 @@ enum FleetType {
     }
 
     private static func fontWeight(_ weight: Weight) -> Font.Weight {
+        switch weight {
+        case .regular: return .regular
+        case .medium: return .medium
+        case .bold: return .bold
+        }
+    }
+
+    private static func nsFontWeight(_ weight: Weight) -> NSFont.Weight {
         switch weight {
         case .regular: return .regular
         case .medium: return .medium
