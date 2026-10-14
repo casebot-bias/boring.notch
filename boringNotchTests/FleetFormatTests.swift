@@ -9,6 +9,7 @@
 
 import XCTest
 import AppKit
+import SwiftUI
 
 final class FleetFormatTests: XCTestCase {
 
@@ -20,6 +21,12 @@ final class FleetFormatTests: XCTestCase {
 
     private func lane(_ state: FleetNodeState, jobs: [FleetJob] = [], decisions: [FleetDecision] = []) -> FleetLane {
         FleetLane(id: "frank", label: "frank", state: state, jobs: jobs, decisions: decisions)
+    }
+
+    /// The response map's origin lane ("case"), with `jobs` jobs and an optional reported speed.
+    private func origin(_ state: FleetNodeState, jobs: Int = 0, speed: Double? = nil) -> FleetLane {
+        FleetLane(id: "case", label: "case", state: state,
+                  jobs: (0..<jobs).map { job("j\($0)") }, speed: speed)
     }
 
     // MARK: - unknown
@@ -586,5 +593,134 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.ringDetail(host), "frank: CPU 13% · GPU 94% · RAM 86%")
         let gapped = FleetHostReading(id: "mac", label: "mac", cpu: nil, gpu: 12, ram: nil, live: true)
         XCTAssertEqual(FleetFormat.ringDetail(gapped), "mac: CPU — · GPU 12% · RAM —")
+    }
+
+    // MARK: - Case box: the origin's work
+
+    func testCaseBoxStateReadsTheOriginsWork() {
+        XCTAssertEqual(FleetFormat.caseBoxState(origin(.busy)), "Working")
+        XCTAssertEqual(FleetFormat.caseBoxState(origin(.idle)), "Online")
+        XCTAssertEqual(FleetFormat.caseBoxState(origin(.offline)), "Offline")
+    }
+
+    func testCaseBoxJobCountOnlyWhileBusyWithJobs() {
+        XCTAssertEqual(FleetFormat.caseBoxJobs(origin(.busy, jobs: 1)), "1 job")
+        XCTAssertEqual(FleetFormat.caseBoxJobs(origin(.busy, jobs: 2)), "2 jobs")
+        XCTAssertNil(FleetFormat.caseBoxJobs(origin(.busy, jobs: 0)))
+        XCTAssertNil(FleetFormat.caseBoxJobs(origin(.idle, jobs: 3)))
+        XCTAssertNil(FleetFormat.caseBoxJobs(origin(.offline, jobs: 1)))
+    }
+
+    /// The closed row's right side: a reported speed wins; with none, running jobs replace the dash.
+    func testClosedRightReadingFallsBackToTheJobCountWithoutASpeed() {
+        let idleTotal = FleetFormat.closedRightReading(speed: nil, jobs: 0, total: false)
+        XCTAssertEqual(idleTotal.number, "—")
+        XCTAssertEqual(idleTotal.unit, " tok/s")
+        XCTAssertTrue(idleTotal.dim)
+
+        let twoJobs = FleetFormat.closedRightReading(speed: nil, jobs: 2, total: false)
+        XCTAssertEqual(twoJobs.number, "2")
+        XCTAssertEqual(twoJobs.unit, " jobs")
+        XCTAssertFalse(twoJobs.dim)
+
+        let oneJob = FleetFormat.closedRightReading(speed: nil, jobs: 1, total: false)
+        XCTAssertEqual(oneJob.number, "1")
+        XCTAssertEqual(oneJob.unit, " job")
+        XCTAssertFalse(oneJob.dim)
+
+        let current = FleetFormat.closedRightReading(
+            speed: FleetSpeed(current: 154.4, lastAt: nil, trend: [], stepSec: 10), jobs: 3, total: true)
+        XCTAssertEqual(current.number, "154")
+        XCTAssertEqual(current.unit, " tok/s total")
+        XCTAssertFalse(current.dim)
+
+        let last = FleetFormat.closedRightReading(
+            speed: FleetSpeed(current: nil, lastAt: nil, trend: [120.0], stepSec: 10), jobs: 5, total: true)
+        XCTAssertEqual(last.number, "120")
+        XCTAssertEqual(last.unit, " idle")
+        XCTAssertTrue(last.dim)
+    }
+
+    /// Only a number the API reported as the fleet's sum is labelled a total; the notch's median
+    /// stand-in is one writer's rate, and a dash is not a total either.
+    func testTokenRateUnitFollowsTheSourceOfTheNumber() {
+        XCTAssertEqual(FleetFormat.tokenRateUnit(total: true), " tok/s total")
+        XCTAssertEqual(FleetFormat.tokenRateUnit(total: false), " tok/s")
+
+        let reported = FleetSpeed(current: 154.4, lastAt: nil, trend: [], stepSec: 10)
+        XCTAssertEqual(FleetFormat.closedRightReading(speed: reported, jobs: 0, total: true).unit, " tok/s total")
+        XCTAssertEqual(FleetFormat.closedRightReading(speed: reported, jobs: 0, total: false).unit, " tok/s")
+
+        // A dash is never a total, whatever the model believes about its source.
+        let dash = FleetFormat.closedRightReading(speed: nil, jobs: 0, total: true)
+        XCTAssertEqual(dash.number, "—")
+        XCTAssertEqual(dash.unit, " tok/s")
+        XCTAssertTrue(dash.dim)
+
+        // An idle reading says so, whatever the source; the flag does not change that.
+        let idle = FleetSpeed(current: nil, lastAt: nil, trend: [120.0], stepSec: 10)
+        XCTAssertEqual(FleetFormat.closedRightReading(speed: idle, jobs: 0, total: true).unit, " idle")
+        XCTAssertEqual(FleetFormat.closedRightReading(speed: idle, jobs: 0, total: false).unit, " idle")
+    }
+
+    /// The origin box says "Working" in the skin's accent - the black skin's only green - so
+    /// an idle box that paints no accent at all proves the busy box's green pixels come from
+    /// that one line.
+    @MainActor
+    func testBusyCaseBoxDrawsItsWorkInTheAccentColour() throws {
+        // The box's data lines ask FleetType for the mono face, whose registration is memoised once
+        // per process. Register the test bundle's own faces first: without this the render would pin
+        // the system fallback for every later test, and FleetTypeTests would fail on our account.
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
+        let theme = FleetTheme(skin: .black)
+        let idle = origin(.idle)
+        let busy = origin(.busy, jobs: 2)
+
+        func bitmap(for lane: FleetLane) throws -> NSBitmapImageRep {
+            let renderer = ImageRenderer(content: FleetCaseBoxView(lane: lane, theme: theme).background(Color.black))
+            renderer.scale = 2
+            let image = try XCTUnwrap(renderer.nsImage, "the case box rendered")
+            return try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)), "case box bitmap")
+        }
+
+        let busyPixels = accentPixelCount(try bitmap(for: busy), theme: theme)
+        XCTAssertGreaterThan(busyPixels, 0, "the Working line draws in the accent")
+        XCTAssertEqual(accentPixelCount(try bitmap(for: idle), theme: theme), 0,
+                       "an idle box shows no accent at all")
+
+        // A preview strip, only on request: `FLEET_CASE_BOX_PREVIEW=/tmp/box.png xcodebuild test`.
+        guard let previewPath = ProcessInfo.processInfo.environment["FLEET_CASE_BOX_PREVIEW"] else { return }
+        let strip = ImageRenderer(content: HStack(spacing: 20) {
+            FleetCaseBoxView(lane: idle, theme: theme)
+            FleetCaseBoxView(lane: busy, theme: theme)
+        }.padding(16).background(Color.black))
+        strip.scale = 3
+        let stripImage = try XCTUnwrap(strip.nsImage, "the preview strip rendered")
+        let stripBitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(stripImage.tiffRepresentation)),
+                                       "preview strip bitmap")
+        let png = try XCTUnwrap(stripBitmap.representation(using: .png, properties: [:]), "preview PNG")
+        XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)), "the preview wrote")
+    }
+
+    /// Pixels that are the skin's accent and nothing else: within 0.06 of the accent in every sRGB
+    /// component, and saturated towards green. The box's greys (dim, muted, text and the stroke) all
+    /// sit within 0.07 of grey on the green-minus-blue axis, the accent at 0.16, so the extra test
+    /// keeps brightened grey antialiasing out of the count.
+    private func accentPixelCount(_ bitmap: NSBitmapImageRep, theme: FleetTheme) -> Int {
+        guard let accent = NSColor(theme.accent).usingColorSpace(.sRGB) else { return 0 }
+        let target = (accent.redComponent, accent.greenComponent, accent.blueComponent)
+        var count = 0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                if abs(pixel.redComponent - target.0) <= 0.06,
+                   abs(pixel.greenComponent - target.1) <= 0.06,
+                   abs(pixel.blueComponent - target.2) <= 0.06,
+                   pixel.greenComponent - pixel.blueComponent > 0.12 {
+                    count += 1
+                }
+            }
+        }
+        return count
     }
 }

@@ -54,16 +54,19 @@ struct FleetClosedIndicator: View {
                         height: vm.effectiveClosedNotchHeight
                     )
 
-                // Right block: decode speed (live, idle or no reading), left-aligned away from the gap
+                // Right block: the fleet's total decode speed while the API reported one
+                // (the unit reads "tok/s total"); while only cloud jobs run (the case's
+                // model reports no tok/s) the row shows how many jobs run instead of a
+                // bare dash.
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    let speed = model.speed
-                    let idle = FleetFormat.speedIsIdle(speed)
-                    let last = FleetFormat.speedLastValue(speed)
-                    Text(FleetFormat.speedNumberText(speed))
+                    let reading = FleetFormat.closedRightReading(speed: model.speed,
+                                                                 jobs: model.runningTaskCount,
+                                                                 total: model.speedIsTotal)
+                    Text(reading.number)
                         .font(FleetType.mono(size: 20, weight: .medium))
-                        .foregroundColor(idle ? theme.dim : theme.accent)
+                        .foregroundColor(reading.dim ? theme.dim : theme.accent)
                         .lineLimit(1)
-                    Text(idle && last != nil ? " idle" : " tok/s")
+                    Text(reading.unit)
                         .font(FleetType.mono(size: 11))
                         .foregroundColor(theme.dim)
                 }

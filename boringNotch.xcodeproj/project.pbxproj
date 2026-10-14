@@ -112,6 +112,8 @@
 		14E9FEAE2C7325770062E83F /* Button+Bouncing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E9FEAD2C7325770062E83F /* Button+Bouncing.swift */; };
 		14FC6E502C7DED5600C7BEA5 /* DataTypes+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FC6E4F2C7DED5600C7BEA5 /* DataTypes+Extensions.swift */; };
 		1FFC639F3F9E275F506106F0 /* FleetResponseMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10D4356B8C14E68D8309B2A /* FleetResponseMapView.swift */; };
+		A1D0C0DE0000000000000021 /* FleetCaseBoxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000020 /* FleetCaseBoxView.swift */; };
+		A1D0C0DE0000000000000022 /* FleetCaseBoxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0DE0000000000000020 /* FleetCaseBoxView.swift */; };
 		32255A267D8C447B0440C85E /* FleetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5104882A2AF59662ADF23254 /* FleetModels.swift */; };
 		347F1CBC62380DB1BEF363D4 /* FleetClosedIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */; };
 		37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD3E45FB207CA856A28D20FF /* FleetFormat.swift */; };
@@ -361,6 +363,7 @@
 		B1F747F82EC7E94000F841DB /* LottieView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LottieView.swift; sourceTree = "<group>"; };
 		B1FEB4982C7686630066EBBC /* PanGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanGesture.swift; sourceTree = "<group>"; };
 		C10D4356B8C14E68D8309B2A /* FleetResponseMapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetResponseMapView.swift; path = Fleet/FleetResponseMapView.swift; sourceTree = "<group>"; };
+		A1D0C0DE0000000000000020 /* FleetCaseBoxView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetCaseBoxView.swift; path = Fleet/FleetCaseBoxView.swift; sourceTree = "<group>"; };
 		CC50A76A9258E10B9A8EBF86 /* FleetClosedIndicator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetClosedIndicator.swift; path = Fleet/FleetClosedIndicator.swift; sourceTree = "<group>"; };
 		CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetSectionView.swift; path = Fleet/FleetSectionView.swift; sourceTree = "<group>"; };
 		D1E3C7F860A060EDE8E06363 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
@@ -787,6 +790,7 @@
 				19AB008892470D0C770D6C4A /* FleetClient.swift */,
 				51B263B9B9718A79CB57973D /* FleetStore.swift */,
 				C10D4356B8C14E68D8309B2A /* FleetResponseMapView.swift */,
+				A1D0C0DE0000000000000020 /* FleetCaseBoxView.swift */,
 				A1D0C0DE0000000000000001 /* OdinDecisionView.swift */,
 				A1D0C0DE0000000000000006 /* FleetType.swift */,
 				89CA111D99EBAD7362EB7B5B /* FleetWorkView.swift */,
@@ -1089,6 +1093,7 @@
 				A1D0C0DE0000000000000008 /* FleetType.swift in Sources */,
 				A1D0C0DE0000000000000004 /* FleetClientTests.swift in Sources */,
 				A1D0C0DE0000000000000013 /* FleetTypeTests.swift in Sources */,
+				A1D0C0DE0000000000000022 /* FleetCaseBoxView.swift in Sources */,
 				37175093BAFF9410E548A434 /* FleetFormat.swift in Sources */,
 				F7E0A1000000000000000003 /* FleetTheme.swift in Sources */,
 				F7E0A1000000000000000005 /* FleetThemeTests.swift in Sources */,
@@ -1234,6 +1239,7 @@
 				446035086F943DA68902F0D4 /* FleetClient.swift in Sources */,
 				FBD3015DA3435EF4D90C5BF7 /* FleetStore.swift in Sources */,
 				1FFC639F3F9E275F506106F0 /* FleetResponseMapView.swift in Sources */,
+				A1D0C0DE0000000000000021 /* FleetCaseBoxView.swift in Sources */,
 				A1D0C0DE0000000000000002 /* OdinDecisionView.swift in Sources */,
 				A1D0C0DE0000000000000007 /* FleetType.swift in Sources */,
 				0A026C5285A22320E55161C8 /* FleetWorkView.swift in Sources */,

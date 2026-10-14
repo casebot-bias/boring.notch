@@ -69,7 +69,8 @@ struct FleetSectionView: View {
     // MARK: - Header
 
     /// "FLEET" wordmark on the left; on the right, the speed trend sparkline then
-    /// the speed on one line: the number is L1 data, the unit and "idle" are L3.
+    /// the speed on one line: the number is the fleet's total decode rate while the
+    /// API reported it (the unit says "total"), otherwise the notch's stand-in rate.
     private var header: some View {
         let model = store.panelModel
         let idle = FleetFormat.speedIsIdle(model.speed)
@@ -84,7 +85,7 @@ struct FleetSectionView: View {
                 Text(FleetFormat.speedNumberText(model.speed))
                     .font(FleetType.mono(size: 13, weight: .medium))
                     .foregroundColor(idle ? theme.dim : theme.text)
-                Text(" tok/s")
+                Text(FleetFormat.tokenRateUnit(total: model.speedIsTotal))
                     .font(FleetType.mono(size: 11))
                     .foregroundColor(theme.dim)
                 if idle {
@@ -160,7 +161,8 @@ struct FleetSectionView: View {
     /// remainder. This row absorbs whatever height the fixed rows leave.
     private var main: some View {
         HStack(alignment: .top, spacing: 20) {
-            FleetResponseMapView(lanes: store.panelModel.agents, origin: store.panelModel.origin)
+            FleetResponseMapView(lanes: store.panelModel.agents, origin: store.panelModel.origin,
+                                 workingCount: store.panelModel.workingCount)
                 .frame(minWidth: FleetPanelMetrics.responseMapWidth, maxWidth: .infinity)
             theme.line
                 .frame(width: 1)
