@@ -802,11 +802,15 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertFalse(reported.dim)
 
         // No current speed but a last value the API measured, the clock 10 s past the payload's
-        // lastAt and so inside the keep-the-last-value grace: the number dims, keeps its value and
-        // its unit, and never says idle - the running job count stays hidden. The numbers are the
-        // live activity feed's speed block of 2026-10-14T07:24Z, where lastValue
-        // 16.273848069517346 is the speed the API itself last measured (the trend still holds only
-        // nulls from the idle window); the clock is fixed, so the wall clock cannot judge the grace.
+        // lastAt and so inside the keep-the-last-value grace: the number dims, keeps its value, and
+        // its unit says idle in words - the sparkline shows when the fleet last wrote, the unit has
+        // to say this number is a remembered one, not a live one. The running job count stays
+        // hidden. The numbers are the live activity feed's speed block of 2026-10-14T07:24Z, where
+        // lastValue 16.273848069517346 is the speed the API itself last measured (the trend still
+        // holds only nulls from the idle window); the clock is fixed, so the wall clock cannot judge
+        // the grace.
+        // The unit itself comes from the ladder, so the assertion is the suffix, not one rung's
+        // spelling (see the ladder test for what the row's budget trims).
         let lastValueIdle = try XCTUnwrap(
             FleetFormat.closedRightReading(
                 speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
@@ -816,13 +820,12 @@ final class FleetFormatTests: XCTestCase {
                 now: date("2026-10-13T23:41:59.737Z") + 10),
             "a last value the API measured is a reading")
         XCTAssertEqual(lastValueIdle.number, "16")
-        XCTAssertEqual(lastValueIdle.unit, " tok/s total")
-        XCTAssertFalse(lastValueIdle.unit.lowercased().contains("idle"),
-                       "the dimmed reading says idle with its dim alone, got \(lastValueIdle.unit)")
         XCTAssertTrue(lastValueIdle.dim)
-
+        XCTAssertTrue(lastValueIdle.unit.hasSuffix(" · idle"),
+                      "a kept value announces itself as remembered, got \(lastValueIdle.unit)")
         // The API's lastValue outranks an older point still sitting in the trend. With no lastAt
         // the row has no clock to judge by, so the value is kept.
+
         let withLastValue = try XCTUnwrap(
             FleetFormat.closedRightReading(
                 speed: FleetSpeed(current: nil, lastAt: nil, trend: [120, 90], stepSec: 10,
@@ -830,7 +833,9 @@ final class FleetFormatTests: XCTestCase {
                 jobs: 0, total: false),
             "lastValue is a reading")
         XCTAssertEqual(withLastValue.number, "16")
-        XCTAssertEqual(withLastValue.unit, " tok/s")
+        // The idle tail costs more than the row has beside a two-digit number, so "total" drops:
+        // the 40 pt sparkline is what trims the rate words (see the ladder test).
+        XCTAssertEqual(withLastValue.unit, " tok/s · idle")
         XCTAssertTrue(withLastValue.dim)
         let trendOnly = try XCTUnwrap(
             FleetFormat.closedRightReading(
@@ -871,53 +876,58 @@ final class FleetFormatTests: XCTestCase {
     }
 
     /// The dimmed reading keeps its last value for `speedIdleGraceSec` after the last measurement,
-    /// then prints 0 - dim either way, the unit never saying idle. The clock comes from the caller,
-    /// so both sides of the boundary sit on fixed instants, never the wall clock.
+    /// then prints 0 - dim either way. Inside the kept window the unit says idle in words; the zero
+    /// after it needs no marker, its being zero is the marker. The clock comes from the caller, so
+    /// both sides of the boundary sit on fixed instants, never the wall clock.
     func testClosedRightReadingKeepsTheLastValueOnlyInsideTheGrace() throws {
         let lastAt = "2026-10-13T23:41:59.737Z"
         let speed = FleetSpeed(current: nil, lastAt: lastAt,
                                trend: Array(repeating: nil, count: 60), stepSec: 10,
                                lastValue: 16.273848069517346)
 
-        // 10 s after the measurement: inside the grace, so the last value stands.
+        // 10 s after the measurement: inside the grace, so the last value stands, said as a kept one.
         let kept = try XCTUnwrap(
             FleetFormat.closedRightReading(speed: speed, jobs: 0, total: true,
                                            now: date(lastAt) + 10),
             "a kept last value is a reading")
         XCTAssertEqual(kept.number, "16")
         XCTAssertTrue(kept.dim)
-        XCTAssertEqual(kept.unit, " tok/s total")
-        XCTAssertFalse(kept.unit.lowercased().contains("idle"),
-                       "the kept reading never says idle, got \(kept.unit)")
+        XCTAssertTrue(kept.unit.hasSuffix(" · idle"),
+                      "inside the grace the kept value says idle, got \(kept.unit)")
 
-        // 31 s after: past the 30 s grace, the row prints 0 - still dim, still the rate unit.
+        // 31 s after: past the 30 s grace, the row prints 0 - still dim, still a rate unit, and no
+        // idle word: a zero already reads as nothing flowing, so marking it idle would only repeat it.
         let zero = try XCTUnwrap(
             FleetFormat.closedRightReading(speed: speed, jobs: 0, total: true,
                                            now: date(lastAt) + 31),
             "the zero after the grace is a reading")
         XCTAssertEqual(zero.number, "0")
         XCTAssertTrue(zero.dim)
-        XCTAssertEqual(zero.unit, " tok/s total")
+        XCTAssertTrue(zero.unit.contains("/s"), "the zero keeps a rate unit, got \(zero.unit)")
         XCTAssertFalse(zero.unit.lowercased().contains("idle"),
                        "the zeroed reading never says idle, got \(zero.unit)")
     }
 
-    /// The closed row prints the number at `closedSpeedNumberSize`, so a long number trades its
-    /// unit down the ladder " tok/s total" -> " tok/s" -> " t/s" until the pair fits the row's
-    /// text budget again. A reading never says idle in words - its dim carries that - so no unit
-    /// on the ladder holds an idle word.
+    /// The closed row prints the number at `closedSpeedNumberSize` beside a 40 pt sparkline, so a
+    /// long number - or an idle reading with its " · idle" tail - trades its rate words down the
+    /// ladder " tok/s total" -> " tok/s" -> " t/s" until the pair fits the row's text budget again.
+    /// The idle suffix rides on every candidate, so the budget only ever trims the rate words in
+    /// front of it; when nothing fits, the shortest candidate wins.
     func testClosedSpeedUnitLadderNarrowsForALongNumber() {
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: true), " tok/s total")
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: false), " tok/s")
         // Long enough that even " tok/s" does not fit beside the number: the short form wins.
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true), " t/s")
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: false), " t/s")
-        // The number the dimmed last-value reading prints: whatever the font, its unit keeps a
-        // rate unit and never says idle.
-        let keptUnit = FleetFormat.closedSpeedUnit(number: "16", total: true)
-        XCTAssertTrue(keptUnit.contains("/s"), "the unit keeps its rate unit, got \(keptUnit)")
-        XCTAssertFalse(keptUnit.lowercased().contains("idle"),
-                       "the unit carries no idle word, got \(keptUnit)")
+        // The idle ladder keeps the same order: the " · idle" tail never drops, and it is the 40 pt
+        // sparkline sharing the row's budget that trims the rate words in front of it - measured at
+        // the bundled mono, " tok/s total · idle" is too wide beside a two-digit number, so "total"
+        // goes and the kept value reads " tok/s · idle".
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "16", total: true, idle: true),
+                       " tok/s · idle")
+        // Long number and idle tail together: nothing fits, so the shortest candidate wins.
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true, idle: true),
+                       " t/s · idle")
 
         // The fit helper measures the same pair the row renders.
         XCTAssertTrue(FleetFormat.closedSpeedFits(number: "47", unit: " tok/s total"))
@@ -1007,13 +1017,17 @@ final class FleetFormatTests: XCTestCase {
                        "an idle row with no reading shows no accent at all")
 
         // The tool-run strip, on its own request:
-        // `FLEET_TOOL_RUNS_PREVIEW=/tmp/toolruns.png xcodebuild test`. A closed row in the TESTING
-        // state (working 0, one 600 s test run, and the idle "0 tok/s total" reading - the clock
-        // past the keep-the-last-value grace - with the 60-point null trend the feed ships), the
-        // case box idle with that same run, and the box busy with it: the idle box shows the run
-        // ("Testing" + its age) while the busy box keeps its own "Working" line. Each preview is
-        // `if let` rather than `guard … else { return }` so asking for one never skips the other.
+        // `FLEET_TOOL_RUNS_PREVIEW=/tmp/toolruns.png xcodebuild test`. Two closed rows in the
+        // TESTING state (working 0, one 600 s test run, the 60-point null trend the feed ships):
+        // the kept reading 10 s after `lastAt` - 16, dim, its unit saying idle - above the idle
+        // "0 tok/s total" reading past the keep-the-last-value grace, so the committed image shows
+        // both states of the right side side by side. Then the case box idle with that same run,
+        // and the box busy with it: the idle box shows the run ("Testing" + its age) while the busy
+        // box keeps its own "Working" line. Each preview is `if let` rather than
+        // `guard … else { return }` so asking for one never skips the other.
         if let toolRunsPath = ProcessInfo.processInfo.environment["FLEET_TOOL_RUNS_PREVIEW"] {
+            // 31 s after the same `lastAt` the kept reading above is taken from: past the 30 s
+            // grace, so this row shows the zero the kept value falls to.
             let zeroReading = try XCTUnwrap(
                 FleetFormat.closedRightReading(
                     speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
@@ -1022,8 +1036,21 @@ final class FleetFormatTests: XCTestCase {
                     jobs: 0, total: true,
                     now: date("2026-10-13T23:41:59.737Z") + 31),
                 "the idle fleet past the grace still has its reading")
+            // 10 s after that same `lastAt`, inside the grace: the remembered 16 with its idle unit.
+            // The clock is pinned, so the strip never depends on when the test runs.
+            let keptReading = try XCTUnwrap(
+                FleetFormat.closedRightReading(
+                    speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
+                                      trend: Array(repeating: nil, count: 60), stepSec: 10,
+                                      lastValue: 16.273848069517346),
+                    jobs: 0, total: true,
+                    now: date("2026-10-13T23:41:59.737Z") + 10),
+                "the fleet inside the grace keeps its reading")
             let toolRunTrend: [Double?] = Array(repeating: nil, count: 60)
             let toolRunStrip = ImageRenderer(content: VStack(spacing: 6) {
+                FleetClosedRowView(working: 0, alert: nil, reading: keptReading, theme: theme,
+                                   gapWidth: 200, height: 28,
+                                   toolRuns: [testRun], trend: toolRunTrend)
                 FleetClosedRowView(working: 0, alert: nil, reading: zeroReading, theme: theme,
                                    gapWidth: 200, height: 28,
                                    toolRuns: [testRun], trend: toolRunTrend)

@@ -430,9 +430,9 @@ final class FleetDecodingTests: XCTestCase {
         XCTAssertEqual(speed.lastValue, 16.273848069517346)
         XCTAssertEqual(speed.trend.count, 60)
         XCTAssertTrue(speed.trend.allSatisfy { $0 == nil })
-        // The row keeps that value while the feed's clock is inside the grace window. `now` is pinned
-        // ten seconds after `lastAt` (the real clock would be hours past it, and the row then reads
-        // the honest zero - that rule has its own test in FleetFormatTests).
+        // The row keeps that value, dimmed and marked idle, while the feed's clock is inside the grace
+        // window. `now` is pinned ten seconds after `lastAt` (the real clock would be hours past it,
+        // and the row then reads the honest zero - that rule has its own test in FleetFormatTests).
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let lastAt = try XCTUnwrap(formatter.date(from: "2026-10-13T23:41:59.737Z"),
@@ -442,7 +442,8 @@ final class FleetDecodingTests: XCTestCase {
                                            now: lastAt.addingTimeInterval(10)),
             "a last value the API measured is a reading")
         XCTAssertEqual(reading.number, "16")
-        XCTAssertEqual(reading.unit, " tok/s total")
+        XCTAssertTrue(reading.unit.hasSuffix(" · idle"),
+                      "the remembered value says the fleet stopped writing, got \(reading.unit)")
         XCTAssertTrue(reading.dim)
     }
 

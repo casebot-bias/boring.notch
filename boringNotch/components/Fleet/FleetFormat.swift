@@ -257,35 +257,41 @@ enum FleetFormat {
     }
 
     /// The collapsed notch row's right side: a speed reading (number and unit) or a job count (number and
-    /// noun). The speed reading tracks the feed: the live sum bright while a model writes, then the last
-    /// measured value dimmed while the feed's clock still says the writing just stopped
-    /// (`speedIdleGraceSec`), then a dimmed zero. The unit never says "idle" - the sparkline the row draws
-    /// left of the number carries the "when did anything last write" story (see `closedRightReading`).
+    /// noun). The speed reading goes through three states, in this order: the live sum bright while a model
+    /// writes; the last measured value dimmed with " · idle" while the feed's clock says the writing just
+    /// stopped (`speedIdleGraceSec`); then a dimmed zero with no idle marker of its own. The sparkline the
+    /// row draws left of the number carries the "when did anything last write" story (see `closedRightReading`).
     /// The number reads as a total only when the API reported it as one (see `tokenRateUnit(total:)`)
-    /// and only while it fits the row (see `closedSpeedUnit(number:total:)`).
+    /// and only while it fits the row (see `closedSpeedUnit(number:total:idle:)`).
     struct FleetClosedRightReading: Equatable {
         var number: String
         var unit: String
         var dim: Bool
     }
 
-    /// The row's speed side: the live sum bright while the feed reports a current reading; after that the
-    /// last value it measured, dimmed while `speed.lastAt` is inside the grace window (`now` defaults to
-    /// the clock, so callers without one still get the honest reading) and a dimmed "0" once it is not -
-    /// a stale number is worse than an honest zero. Only when no speed was ever measured do running jobs
-    /// stand in, bright, and never as a total; no speed and no jobs leaves the side empty.
+    /// The row's speed side, in three states. While the feed reports a current reading the live sum shows
+    /// bright, with the rate unit that fits. Once it stops, the last value it measured stays dimmed WITH
+    /// " · idle" for `speedIdleGraceSec` after `speed.lastAt` (`now` defaults to the clock, so callers
+    /// without one still get the honest reading): the kept number is announced as a remembered one. Past
+    /// that window the side is a dimmed "0" with no idle marker - the zero needs none. A stale number is
+    /// worse than an honest zero. Only when no speed was ever measured do running jobs stand in, bright,
+    /// and never as a total; no speed and no jobs leaves the side empty.
     static func closedRightReading(speed: FleetSpeed?, jobs: Int, total: Bool, now: Date = Date()) -> FleetClosedRightReading? {
         if let speed, speed.current != nil || speedLastValue(speed) != nil {
             let number: String
+            let idle: Bool
             if let current = speed.current {
                 number = "\(Int(current.rounded()))"
+                idle = false
             } else if speedKeepsLastValue(speed, now: now), let last = speedLastValue(speed) {
                 number = "\(Int(last.rounded()))"
+                idle = true
             } else {
                 number = "0"
+                idle = false
             }
             return FleetClosedRightReading(number: number,
-                                           unit: closedSpeedUnit(number: number, total: total),
+                                           unit: closedSpeedUnit(number: number, total: total, idle: idle),
                                            dim: speedIsIdle(speed))
         }
         if jobs > 0 {
@@ -553,12 +559,15 @@ enum FleetFormat {
     }
 
     /// The closed row's speed unit: the first candidate that fits the reading by `closedSpeedFits`,
-    /// else the shortest one. When the row runs out of room the ladder drops "total" first, then
-    /// shortens "tok/s" to "t/s". The idle reading keeps its rate unit too: nothing writes "idle" into
-    /// the unit any more, the sparkline beside the number says it. The reading must stay inside the
+    /// else the shortest one. While `idle` every candidate carries " · idle", so the remembered value
+    /// announces that the fleet stopped writing: the sparkline shows when, but the unit has to say the
+    /// number is a kept one, not a live one. The idle suffix rides on every candidate, so the row's own
+    /// budget only ever trims the rate words in front of it - "total" drops first, then "tok/s" shortens
+    /// to "t/s" - and the sparkline's 40 pt is what forces that trim. The reading must stay inside the
     /// closed row's text budget so it neither truncates nor widens the notch.
-    static func closedSpeedUnit(number: String, total: Bool) -> String {
-        let units = total ? [" tok/s total", " tok/s", " t/s"] : [" tok/s", " t/s"]
+    static func closedSpeedUnit(number: String, total: Bool, idle: Bool = false) -> String {
+        let rates = total ? [" tok/s total", " tok/s", " t/s"] : [" tok/s", " t/s"]
+        let units = idle ? rates.map { $0 + " · idle" } : rates
         return units.first { closedSpeedFits(number: number, unit: $0) } ?? units[units.count - 1]
     }
 
