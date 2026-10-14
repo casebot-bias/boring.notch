@@ -430,11 +430,20 @@ final class FleetDecodingTests: XCTestCase {
         XCTAssertEqual(speed.lastValue, 16.273848069517346)
         XCTAssertEqual(speed.trend.count, 60)
         XCTAssertTrue(speed.trend.allSatisfy { $0 == nil })
+        // The row keeps that value, dimmed and marked idle, while the feed's clock is inside the grace
+        // window. `now` is pinned ten seconds after `lastAt` (the real clock would be hours past it,
+        // and the row then reads the honest zero - that rule has its own test in FleetFormatTests).
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let lastAt = try XCTUnwrap(formatter.date(from: "2026-10-13T23:41:59.737Z"),
+                                   "the payload's lastAt parses")
         let reading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: speed, jobs: 1, total: true),
+            FleetFormat.closedRightReading(speed: speed, jobs: 1, total: true,
+                                           now: lastAt.addingTimeInterval(10)),
             "a last value the API measured is a reading")
         XCTAssertEqual(reading.number, "16")
-        XCTAssertEqual(reading.unit, " tok/s total · idle")
+        XCTAssertTrue(reading.unit.hasSuffix(" · idle"),
+                      "the remembered value says the fleet stopped writing, got \(reading.unit)")
         XCTAssertTrue(reading.dim)
     }
 
@@ -448,5 +457,100 @@ final class FleetDecodingTests: XCTestCase {
         let speed = try XCTUnwrap(snapshot.speed, "the speed block decodes")
         XCTAssertNil(speed.lastValue)
         XCTAssertNil(speed.current)
+    }
+
+    // MARK: - 6. Tool runs (long test/build commands a Case job waits on)
+
+    /// The bundled activity fixture predates tool runs: no run list and no count. Both read as nothing.
+    func testActivityFixtureWithoutToolRunsReadsAsNoRuns() throws {
+        guard let data = fixtureData(named: "activity") else { return }
+        guard let snapshot = decodeActivity(data) else { return }
+        guard let caseDevice = element(snapshot.devices, at: 0, field: "ActivitySnapshot.devices[0] (case)") else { return }
+        XCTAssertEqual(caseDevice.device, "case", "devices[0].device")
+        XCTAssertEqual(caseDevice.toolRuns, [], "devices[0].toolRuns (case) must be [] when the fixture has no toolRuns key")
+        XCTAssertNil(snapshot.toolRunsCount, "ActivitySnapshot.toolRunsCount must be nil when the fixture has no count")
+
+        guard let bare = decodeActivity(Data("{\"devices\":[{\"device\":\"case\",\"state\":\"ok\"}]}".utf8)) else { return }
+        guard let bareCase = element(bare.devices, at: 0, field: "ActivitySnapshot.devices[0] (bare case)") else { return }
+        XCTAssertEqual(bareCase.toolRuns, [], "a case device with no toolRuns key must read as no runs")
+        XCTAssertNil(bare.toolRunsCount, "a snapshot with no toolRunsCount key must read as nil")
+    }
+
+    /// A single run lands every field, and its identity is the pid.
+    func testActivityDecodesOneToolRun() throws {
+        let json = """
+        {"generatedAt":"2026-10-14T08:20:00.000Z","devices":[{"device":"case","items":[],"state":"ok","toolRuns":[
+          {"job":"monitor-platform-split","kind":"test","label":"smoke.cjs","pid":48211,"since":"2026-10-14T08:10:00.000Z","elapsedSec":600}]}]}
+        """
+        guard let snapshot = decodeActivity(Data(json.utf8)) else { return }
+        guard let caseDevice = element(snapshot.devices, at: 0, field: "ActivitySnapshot.devices[0] (case)") else { return }
+        XCTAssertEqual(caseDevice.toolRuns.count, 1, "devices[0].toolRuns.count")
+        guard let run = element(caseDevice.toolRuns, at: 0, field: "devices[0].toolRuns") else { return }
+        XCTAssertEqual(run.job, "monitor-platform-split", "devices[0].toolRuns[0].job")
+        XCTAssertEqual(run.kind, "test", "devices[0].toolRuns[0].kind")
+        XCTAssertEqual(run.label, "smoke.cjs", "devices[0].toolRuns[0].label")
+        XCTAssertEqual(run.pid, 48211, "devices[0].toolRuns[0].pid")
+        XCTAssertEqual(run.since, "2026-10-14T08:10:00.000Z", "devices[0].toolRuns[0].since")
+        XCTAssertEqual(run.elapsedSec, 600, "devices[0].toolRuns[0].elapsedSec")
+        XCTAssertEqual(run.id, "48211", "devices[0].toolRuns[0].id must be the pid while the dashboard reports one")
+    }
+
+    /// A test run and a build run decode with their kinds and labels, in the payload's order.
+    func testActivityDecodesTestAndBuildRuns() throws {
+        let json = """
+        {"generatedAt":"2026-10-14T08:20:00.000Z","devices":[{"device":"case","items":[],"state":"ok","toolRuns":[
+          {"job":"monitor-platform-split","kind":"test","label":"smoke.cjs","pid":48211,"since":"2026-10-14T08:10:00.000Z","elapsedSec":600},
+          {"job":"notch-job-heartbeat","kind":"build","label":"xcodebuild build","pid":50102,"since":"2026-10-14T08:15:00.000Z","elapsedSec":300}]}]}
+        """
+        guard let snapshot = decodeActivity(Data(json.utf8)) else { return }
+        guard let caseDevice = element(snapshot.devices, at: 0, field: "ActivitySnapshot.devices[0] (case)") else { return }
+        XCTAssertEqual(caseDevice.toolRuns.map(\.kind), ["test", "build"], "devices[0].toolRuns kinds must keep payload order")
+        XCTAssertEqual(caseDevice.toolRuns.map(\.label), ["smoke.cjs", "xcodebuild build"], "devices[0].toolRuns labels must keep payload order")
+        XCTAssertEqual(caseDevice.toolRuns.map(\.id), ["48211", "50102"], "devices[0].toolRuns ids must keep payload order")
+    }
+
+    /// The fleet-wide `toolRunsCount` decodes when present and reads as nil when the feed omits it.
+    func testActivityDecodesTopLevelToolRunsCount() throws {
+        let withCount = """
+        {"generatedAt":"2026-10-14T08:20:00.000Z","toolRunsCount":3,"devices":[{"device":"case","items":[],"state":"ok"}]}
+        """
+        guard let counted = decodeActivity(Data(withCount.utf8)) else { return }
+        XCTAssertEqual(counted.toolRunsCount, 3, "ActivitySnapshot.toolRunsCount must decode the top-level count")
+
+        let withoutCount = """
+        {"generatedAt":"2026-10-14T08:20:00.000Z","devices":[{"device":"case","items":[],"state":"ok"}]}
+        """
+        guard let uncounted = decodeActivity(Data(withoutCount.utf8)) else { return }
+        XCTAssertNil(uncounted.toolRunsCount, "ActivitySnapshot.toolRunsCount must be nil when the key is absent")
+    }
+
+    /// Odd shapes decode to something usable: a pid sent as `123.0` reads as 123, an empty run keeps
+    /// `kind` empty with every other field nil, and an unknown kind is kept as it came.
+    func testToolRunSurvivesAnUnknownShape() throws {
+        let json = """
+        {"generatedAt":"2026-10-14T08:20:00.000Z","devices":[{"device":"case","items":[],"state":"ok","toolRuns":[
+          {"kind":"test","pid":123.0},
+          {},
+          {"kind":"lint","label":"eslint"}]}]}
+        """
+        guard let snapshot = decodeActivity(Data(json.utf8)) else { return }
+        guard let caseDevice = element(snapshot.devices, at: 0, field: "ActivitySnapshot.devices[0] (case)") else { return }
+        XCTAssertEqual(caseDevice.toolRuns.count, 3, "every run in the payload must be kept, including the empty one")
+
+        guard let fractional = element(caseDevice.toolRuns, at: 0, field: "devices[0].toolRuns") else { return }
+        XCTAssertEqual(fractional.pid, 123, "a pid sent as 123.0 must decode to 123")
+        XCTAssertEqual(fractional.kind, "test", "devices[0].toolRuns[0].kind")
+
+        guard let empty = element(caseDevice.toolRuns, at: 1, field: "devices[0].toolRuns") else { return }
+        XCTAssertEqual(empty.kind, "", "an empty run must decode with kind \"\"")
+        XCTAssertNil(empty.job, "an empty run's job must be nil")
+        XCTAssertNil(empty.label, "an empty run's label must be nil")
+        XCTAssertNil(empty.pid, "an empty run's pid must be nil")
+        XCTAssertNil(empty.since, "an empty run's since must be nil")
+        XCTAssertNil(empty.elapsedSec, "an empty run's elapsedSec must be nil")
+
+        guard let unknown = element(caseDevice.toolRuns, at: 2, field: "devices[0].toolRuns") else { return }
+        XCTAssertEqual(unknown.kind, "lint", "an unknown kind must be kept as it came; the formatter decides the words")
+        XCTAssertEqual(unknown.label, "eslint", "devices[0].toolRuns[2].label")
     }
 }

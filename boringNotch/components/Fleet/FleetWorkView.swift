@@ -2,8 +2,9 @@
 //  FleetWorkView.swift
 //  boringNotch
 //
-//  The CURRENT WORK column of the expanded Fleet panel: up to two running
-//  jobs in preview, a "+N jobs in Fleet" link to the full view, or an
+//  The CURRENT WORK column of the expanded Fleet panel: the heartbeat of the
+//  running Case jobs, the test and build commands they wait on, up to two
+//  running jobs in preview, a "+N jobs in Fleet" link to the full view, or an
 //  idle prompt when nothing is running. Reads only the model it is given.
 //
 
@@ -16,6 +17,9 @@ struct FleetWorkView: View {
     let runningTaskCount: Int
     /// The running Case jobs from `/api/jobs`; empty without that feed, and the column reads as before.
     var caseJobs: [CaseJob] = []
+    /// The test and build commands the Case jobs wait on, from `/api/activity`. They are work in
+    /// progress but not running jobs, so they get their own lines and never move `runningTaskCount`.
+    var toolRuns: [ToolRun] = []
 
     @Default(.fleetSkin) private var fleetSkin
     @State private var linkHovered = false
@@ -34,11 +38,16 @@ struct FleetWorkView: View {
 
             if !jobLines.isEmpty {
                 heartbeat
+                    .padding(.bottom, (jobs.isEmpty && toolRuns.isEmpty) ? 0 : 8)
+            }
+
+            if !toolRuns.isEmpty {
+                FleetToolRunLines(runs: toolRuns, theme: theme)
                     .padding(.bottom, jobs.isEmpty ? 0 : 8)
             }
 
             if jobs.isEmpty {
-                if jobLines.isEmpty { emptyState }
+                if jobLines.isEmpty && toolRuns.isEmpty { emptyState }
             } else {
                 previews
             }

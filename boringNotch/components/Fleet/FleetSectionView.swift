@@ -160,16 +160,20 @@ struct FleetSectionView: View {
     /// map takes at least `responseMapWidth` and the work column takes the
     /// remainder. This row absorbs whatever height the fixed rows leave.
     private var main: some View {
-        HStack(alignment: .top, spacing: 20) {
+        let model = store.panelModel
+        // One model value for every read below, so the map, the work list and the tool runs can never
+        // disagree about the same poll.
+        return HStack(alignment: .top, spacing: 20) {
             FleetResponseMapView(lanes: store.panelModel.agents, origin: store.panelModel.origin,
                                  workingCount: store.panelModel.workingCount)
                 .frame(minWidth: FleetPanelMetrics.responseMapWidth, maxWidth: .infinity)
             theme.line
                 .frame(width: 1)
                 .frame(maxHeight: .infinity)
-            FleetWorkView(jobs: store.panelModel.nowJobs,
-                          runningTaskCount: store.panelModel.runningTaskCount,
-                          caseJobs: store.panelModel.runningCaseJobs)
+            FleetWorkView(jobs: model.nowJobs,
+                          runningTaskCount: model.runningTaskCount,
+                          caseJobs: model.runningCaseJobs,
+                          toolRuns: model.toolRuns)
                 .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

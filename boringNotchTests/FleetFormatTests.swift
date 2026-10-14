@@ -23,10 +23,28 @@ final class FleetFormatTests: XCTestCase {
         FleetLane(id: "frank", label: "frank", state: state, jobs: jobs, decisions: decisions)
     }
 
-    /// The response map's origin lane ("case"), with `jobs` jobs and an optional reported speed.
-    private func origin(_ state: FleetNodeState, jobs: Int = 0, speed: Double? = nil) -> FleetLane {
+    /// The response map's origin lane ("case"), with `jobs` jobs, an optional reported speed and
+    /// the `toolRuns` long commands the dashboard says its jobs are waiting on.
+    private func origin(_ state: FleetNodeState, jobs: Int = 0, speed: Double? = nil,
+                        toolRuns: [ToolRun] = []) -> FleetLane {
         FleetLane(id: "case", label: "case", state: state,
-                  jobs: (0..<jobs).map { job("j\($0)") }, speed: speed)
+                  jobs: (0..<jobs).map { job("j\($0)") }, toolRuns: toolRuns, speed: speed)
+    }
+
+    /// One tool run as the activity feed reports it: `kind` "test"/"build"/"other", the optional
+    /// job, label and elapsed seconds the formatter turns into a line. pid and since stay nil -
+    /// the formatters never read them.
+    private func run(kind: String, job: String? = nil, label: String? = nil,
+                     elapsed: Int? = nil) -> ToolRun {
+        ToolRun(job: job, kind: kind, label: label, pid: nil, since: nil, elapsedSec: elapsed)
+    }
+
+    /// A fixed clock instant from an ISO 8601 string with fractional seconds, so time-dependent
+    /// formatters never judge by the wall clock.
+    private func date(_ iso: String) -> Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: iso) ?? Date(timeIntervalSince1970: 0)
     }
 
     // MARK: - unknown
@@ -555,6 +573,131 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.clampedIndex(2, count: 0), 0)
     }
 
+    // MARK: - Tool runs: the commands Case jobs wait on
+
+    func testToolRunAgePrintsSecondsMinutesAndHours() {
+        XCTAssertEqual(FleetFormat.toolRunAge(run(kind: "test", elapsed: 45)), "45s")
+        XCTAssertEqual(FleetFormat.toolRunAge(run(kind: "test", elapsed: 600)), "10m")
+        XCTAssertEqual(FleetFormat.toolRunAge(run(kind: "test", elapsed: 5400)), "1h30m")
+        XCTAssertNil(FleetFormat.toolRunAge(run(kind: "test", elapsed: nil)),
+                     "a run that reports no elapsed time has no age")
+    }
+
+    func testToolRunVerbNamesTheWorkTheKindMeans() {
+        XCTAssertEqual(FleetFormat.toolRunVerb(run(kind: "test")), "testing")
+        XCTAssertEqual(FleetFormat.toolRunVerb(run(kind: "build")), "building")
+        XCTAssertEqual(FleetFormat.toolRunVerb(run(kind: "other")), "running")
+        XCTAssertEqual(FleetFormat.toolRunVerb(run(kind: "")), "running",
+                     "an absent or unknown kind still reads as plain running work")
+    }
+
+    func testToolRunLineJoinsThePartsItHas() {
+        XCTAssertEqual(
+            FleetFormat.toolRunLine(run(kind: "test", job: "monitor-platform-split",
+                                        label: "smoke.cjs", elapsed: 600)),
+            "monitor-platform-split · smoke.cjs · 10m")
+        // A missing part drops out; the rest keep joining with the same separator.
+        XCTAssertEqual(
+            FleetFormat.toolRunLine(run(kind: "test", job: "monitor-platform-split", elapsed: 600)),
+            "monitor-platform-split · 10m")
+        XCTAssertEqual(
+            FleetFormat.toolRunLine(run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs")),
+            "monitor-platform-split · smoke.cjs")
+        XCTAssertEqual(FleetFormat.toolRunLine(run(kind: "test", label: "smoke.cjs", elapsed: 600)),
+                       "smoke.cjs · 10m")
+    }
+
+    func testClosedToolRunNamesOneRunOrCountsThem() throws {
+        XCTAssertNil(FleetFormat.closedToolRun([]), "no runs: the closed row keeps its own reading")
+        let one = try XCTUnwrap(FleetFormat.closedToolRun([run(kind: "test", elapsed: 600)]),
+                                "one run is a reading")
+        XCTAssertNil(one.number, "one run needs no count")
+        XCTAssertEqual(one.word, "testing")
+        XCTAssertEqual(one.age, "10m")
+        let build = try XCTUnwrap(FleetFormat.closedToolRun([run(kind: "build", elapsed: 600)]),
+                                  "one build run is a reading")
+        XCTAssertEqual(build.word, "building")
+        let many = try XCTUnwrap(
+            FleetFormat.closedToolRun([run(kind: "test", elapsed: 600),
+                                       run(kind: "build", elapsed: 120),
+                                       run(kind: "other", elapsed: 30)]),
+            "several runs are a reading")
+        XCTAssertEqual(many.number, "3")
+        XCTAssertEqual(many.word, "running")
+        XCTAssertNil(many.age, "counting runs names no single age")
+    }
+
+    func testOldestToolRunIsTheOneWaitingLongest() {
+        XCTAssertNil(FleetFormat.oldestToolRun([]), "no runs, no oldest")
+        let old = run(kind: "test", job: "old", elapsed: 600)
+        let fresh = run(kind: "build", job: "fresh", elapsed: 30)
+        XCTAssertEqual(FleetFormat.oldestToolRun([fresh, old]), old,
+                       "the run waiting longest is the oldest, whatever its place")
+        let mute = run(kind: "other", job: "mute")
+        XCTAssertEqual(FleetFormat.oldestToolRun([mute, old]), old,
+                       "a run that reports no elapsed time never wins the title")
+        let only = run(kind: "other", job: "mute")
+        XCTAssertEqual(FleetFormat.oldestToolRun([only]), only,
+                       "the lone run is the oldest of its list, elapsed time or not")
+    }
+
+    /// The row draws its sparkline at exactly this frame, so the number beside it never moves the
+    /// notch: the strip the preview shows is 40 pt of trend and 14 pt tall.
+    func testClosedSparklineFrameIsItsFixedSize() {
+        XCTAssertEqual(FleetPanelMetrics.closedSparklineWidth, 40)
+        XCTAssertEqual(FleetPanelMetrics.closedSparklineHeight, 14)
+    }
+
+    // MARK: - Closed sparkline series and speed grace
+
+    func testSparklineSeriesIsAlwaysExactlyItsFrameOfPoints() {
+        XCTAssertEqual(FleetFormat.sparklineSeries([]), Array(repeating: 0.0, count: 60),
+                     "no trend reads as sixty quiet points, not an empty path")
+        XCTAssertEqual(FleetFormat.sparklineSeries([nil, 3]),
+                       Array(repeating: 0.0, count: 58) + [0, 3],
+                     "the given points land last, nulls flat at zero, zero padding in front")
+        // A trend longer than the frame keeps its newest `count` points.
+        let long: [Double?] = (1...70).map(Double.init)
+        XCTAssertEqual(FleetFormat.sparklineSeries(long), Array(11...70).map(Double.init))
+        XCTAssertEqual(FleetFormat.sparklineSeries([nil, nil]), Array(repeating: 0.0, count: 60),
+                     "an all-null window is a flat line, not a gap")
+    }
+
+    func testSpeedIdleSecMeasuresFromTheLastMeasurement() {
+        let lastAt = "2026-10-13T23:41:59.737Z"
+        let now = date(lastAt)
+        XCTAssertEqual(FleetFormat.speedIdleSec(FleetSpeed(current: nil, lastAt: lastAt), now: now) ?? -1,
+                       0, accuracy: 0.001, "the instant of the last measurement is zero seconds idle")
+        XCTAssertEqual(
+            FleetFormat.speedIdleSec(FleetSpeed(current: nil, lastAt: lastAt), now: now + 31) ?? -1,
+            31, accuracy: 0.001)
+        XCTAssertNil(FleetFormat.speedIdleSec(FleetSpeed(current: nil, lastAt: nil), now: now),
+                     "without a lastAt there is no clock to measure from")
+        XCTAssertNil(FleetFormat.speedIdleSec(FleetSpeed(current: nil, lastAt: "not a date"), now: now),
+                     "an unparsable lastAt is as good as none")
+        XCTAssertNil(FleetFormat.speedIdleSec(nil, now: now), "no speed block, no idle time")
+    }
+
+    func testSpeedKeepsLastValueInsideTheGraceAndWithoutAClock() {
+        let lastAt = "2026-10-13T23:41:59.737Z"
+        let now = date(lastAt)
+        XCTAssertTrue(FleetFormat.speedKeepsLastValue(FleetSpeed(current: nil, lastAt: lastAt), now: now),
+                      "zero seconds idle is inside the grace")
+        XCTAssertTrue(
+            FleetFormat.speedKeepsLastValue(FleetSpeed(current: nil, lastAt: lastAt), now: now + 30),
+            "the last second of the grace still keeps the value")
+        XCTAssertFalse(
+            FleetFormat.speedKeepsLastValue(FleetSpeed(current: nil, lastAt: lastAt), now: now + 31),
+            "one second past the 30 s grace starts the count at zero")
+        // No clock to judge by: the value is kept - without a parsable lastAt there is nothing to
+        // time out.
+        XCTAssertTrue(FleetFormat.speedKeepsLastValue(FleetSpeed(current: nil, lastAt: nil), now: now))
+        XCTAssertTrue(
+            FleetFormat.speedKeepsLastValue(FleetSpeed(current: nil, lastAt: "not a date"), now: now))
+        XCTAssertTrue(FleetFormat.speedKeepsLastValue(nil, now: now), "no speed block keeps nothing")
+        XCTAssertEqual(FleetFormat.speedIdleGraceSec, 30)
+    }
+
     // MARK: - Footer rings
 
     func testRingLevelSplitsOkHotAlertAtTheDesignBoundaries() {
@@ -611,6 +754,40 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertNil(FleetFormat.caseBoxJobs(origin(.offline, jobs: 1)))
     }
 
+    // MARK: - Case box: while a tool run is the work
+
+    func testCaseBoxStateNamesTheRunningToolRun() {
+        let smoke = run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 600)
+        let build = run(kind: "build", job: "monitor-platform-split", label: "app", elapsed: 600)
+        let other = run(kind: "other", job: "monitor-platform-split", label: "seed.sh", elapsed: 600)
+        XCTAssertEqual(FleetFormat.caseBoxState(origin(.idle, toolRuns: [smoke])), "Testing")
+        XCTAssertEqual(FleetFormat.caseBoxState(origin(.idle, toolRuns: [build])), "Building")
+        XCTAssertEqual(FleetFormat.caseBoxState(origin(.idle, toolRuns: [other])), "Running")
+        // Real model work and unreachability outrank a run.
+        XCTAssertEqual(FleetFormat.caseBoxState(origin(.busy, jobs: 1, toolRuns: [smoke])), "Working")
+        XCTAssertEqual(FleetFormat.caseBoxState(origin(.offline, toolRuns: [smoke])), "Offline")
+    }
+
+    func testCaseBoxStateIsActiveForModelWorkOrToolRuns() {
+        let smoke = run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 600)
+        XCTAssertTrue(FleetFormat.caseBoxStateIsActive(origin(.busy, jobs: 2)), "model work is active")
+        XCTAssertTrue(FleetFormat.caseBoxStateIsActive(origin(.idle, toolRuns: [smoke])),
+                      "a waiting tool run is work the accent should show")
+        XCTAssertFalse(FleetFormat.caseBoxStateIsActive(origin(.idle)), "plain idle paints no accent")
+        XCTAssertFalse(FleetFormat.caseBoxStateIsActive(origin(.offline, toolRuns: [smoke])),
+                       "an unreachable machine is never active, runs or not")
+    }
+
+    func testCaseBoxToolRunAgeOnlyUnderARunningState() {
+        let smoke = run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 600)
+        XCTAssertEqual(FleetFormat.caseBoxToolRunAge(origin(.idle, toolRuns: [smoke])), "10m",
+                       "the age line under Testing says how long the run has waited")
+        XCTAssertNil(FleetFormat.caseBoxToolRunAge(origin(.busy, jobs: 1, toolRuns: [smoke])),
+                     "the working box shows its job line, not the run's age")
+        XCTAssertNil(FleetFormat.caseBoxToolRunAge(origin(.idle)),
+                     "plain idle has no age line")
+    }
+
     /// The closed row's right side is one optional reading: a reported speed or the last value the
     /// API measured wins over everything else; running jobs stand in only while no speed was ever
     /// measured; a fleet that measured nothing gets no reading at all, so the row draws no dash.
@@ -624,22 +801,31 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(reported.unit, " tok/s total")
         XCTAssertFalse(reported.dim)
 
-        // Busy with no current speed but a last value the API measured: the number dims, keeps its
-        // rate unit and marks itself idle - the running job count stays hidden. The numbers are the
-        // live activity feed's speed block of 2026-10-14T07:24Z, where lastValue 16.273848069517346 is
-        // the speed the API itself last measured (the trend still holds only nulls from the idle window).
+        // No current speed but a last value the API measured, the clock 10 s past the payload's
+        // lastAt and so inside the keep-the-last-value grace: the number dims, keeps its value, and
+        // its unit says idle in words - the sparkline shows when the fleet last wrote, the unit has
+        // to say this number is a remembered one, not a live one. The running job count stays
+        // hidden. The numbers are the live activity feed's speed block of 2026-10-14T07:24Z, where
+        // lastValue 16.273848069517346 is the speed the API itself last measured (the trend still
+        // holds only nulls from the idle window); the clock is fixed, so the wall clock cannot judge
+        // the grace.
+        // The unit itself comes from the ladder, so the assertion is the suffix, not one rung's
+        // spelling (see the ladder test for what the row's budget trims).
         let lastValueIdle = try XCTUnwrap(
             FleetFormat.closedRightReading(
                 speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
                                   trend: Array(repeating: nil, count: 60), stepSec: 10,
                                   lastValue: 16.273848069517346),
-                jobs: 1, total: true),
+                jobs: 1, total: true,
+                now: date("2026-10-13T23:41:59.737Z") + 10),
             "a last value the API measured is a reading")
         XCTAssertEqual(lastValueIdle.number, "16")
-        XCTAssertEqual(lastValueIdle.unit, " tok/s total · idle")
         XCTAssertTrue(lastValueIdle.dim)
+        XCTAssertTrue(lastValueIdle.unit.hasSuffix(" · idle"),
+                      "a kept value announces itself as remembered, got \(lastValueIdle.unit)")
+        // The API's lastValue outranks an older point still sitting in the trend. With no lastAt
+        // the row has no clock to judge by, so the value is kept.
 
-        // The API's lastValue outranks an older point still sitting in the trend.
         let withLastValue = try XCTUnwrap(
             FleetFormat.closedRightReading(
                 speed: FleetSpeed(current: nil, lastAt: nil, trend: [120, 90], stepSec: 10,
@@ -647,6 +833,8 @@ final class FleetFormatTests: XCTestCase {
                 jobs: 0, total: false),
             "lastValue is a reading")
         XCTAssertEqual(withLastValue.number, "16")
+        // The idle tail costs more than the row has beside a two-digit number, so "total" drops:
+        // the 40 pt sparkline is what trims the rate words (see the ladder test).
         XCTAssertEqual(withLastValue.unit, " tok/s · idle")
         XCTAssertTrue(withLastValue.dim)
         let trendOnly = try XCTUnwrap(
@@ -687,25 +875,59 @@ final class FleetFormatTests: XCTestCase {
                        " jobs")
     }
 
-    /// The closed row prints the number at `closedSpeedNumberSize`, so a long number trades its
-    /// unit down the ladder " tok/s total" -> " tok/s" -> " t/s" until the pair fits the row's
-    /// text budget again.
+    /// The dimmed reading keeps its last value for `speedIdleGraceSec` after the last measurement,
+    /// then prints 0 - dim either way. Inside the kept window the unit says idle in words; the zero
+    /// after it needs no marker, its being zero is the marker. The clock comes from the caller, so
+    /// both sides of the boundary sit on fixed instants, never the wall clock.
+    func testClosedRightReadingKeepsTheLastValueOnlyInsideTheGrace() throws {
+        let lastAt = "2026-10-13T23:41:59.737Z"
+        let speed = FleetSpeed(current: nil, lastAt: lastAt,
+                               trend: Array(repeating: nil, count: 60), stepSec: 10,
+                               lastValue: 16.273848069517346)
+
+        // 10 s after the measurement: inside the grace, so the last value stands, said as a kept one.
+        let kept = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: speed, jobs: 0, total: true,
+                                           now: date(lastAt) + 10),
+            "a kept last value is a reading")
+        XCTAssertEqual(kept.number, "16")
+        XCTAssertTrue(kept.dim)
+        XCTAssertTrue(kept.unit.hasSuffix(" · idle"),
+                      "inside the grace the kept value says idle, got \(kept.unit)")
+
+        // 31 s after: past the 30 s grace, the row prints 0 - still dim, still a rate unit, and no
+        // idle word: a zero already reads as nothing flowing, so marking it idle would only repeat it.
+        let zero = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: speed, jobs: 0, total: true,
+                                           now: date(lastAt) + 31),
+            "the zero after the grace is a reading")
+        XCTAssertEqual(zero.number, "0")
+        XCTAssertTrue(zero.dim)
+        XCTAssertTrue(zero.unit.contains("/s"), "the zero keeps a rate unit, got \(zero.unit)")
+        XCTAssertFalse(zero.unit.lowercased().contains("idle"),
+                       "the zeroed reading never says idle, got \(zero.unit)")
+    }
+
+    /// The closed row prints the number at `closedSpeedNumberSize` beside a 40 pt sparkline, so a
+    /// long number - or an idle reading with its " · idle" tail - trades its rate words down the
+    /// ladder " tok/s total" -> " tok/s" -> " t/s" until the pair fits the row's text budget again.
+    /// The idle suffix rides on every candidate, so the budget only ever trims the rate words in
+    /// front of it; when nothing fits, the shortest candidate wins.
     func testClosedSpeedUnitLadderNarrowsForALongNumber() {
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: true), " tok/s total")
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: false), " tok/s")
         // Long enough that even " tok/s" does not fit beside the number: the short form wins.
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true), " t/s")
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: false), " t/s")
-        // The idle reading keeps the ladder and appends " · idle" to whichever rate unit fits.
-        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: true, idle: true),
-                       " tok/s total · idle")
+        // The idle ladder keeps the same order: the " · idle" tail never drops, and it is the 40 pt
+        // sparkline sharing the row's budget that trims the rate words in front of it - measured at
+        // the bundled mono, " tok/s total · idle" is too wide beside a two-digit number, so "total"
+        // goes and the kept value reads " tok/s · idle".
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "16", total: true, idle: true),
+                       " tok/s · idle")
+        // Long number and idle tail together: nothing fits, so the shortest candidate wins.
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true, idle: true),
                        " t/s · idle")
-        // Whatever the font, the idle unit for "16" keeps its rate unit and marks itself idle.
-        let idleUnit = FleetFormat.closedSpeedUnit(number: "16", total: true, idle: true)
-        XCTAssertTrue(idleUnit.contains("/s"), "the idle unit keeps its rate unit, got \(idleUnit)")
-        XCTAssertTrue(idleUnit.hasSuffix(" · idle"),
-                      "the idle unit marks itself idle, got \(idleUnit)")
 
         // The fit helper measures the same pair the row renders.
         XCTAssertTrue(FleetFormat.closedSpeedFits(number: "47", unit: " tok/s total"))
@@ -760,17 +982,23 @@ final class FleetFormatTests: XCTestCase {
         // mono face, whose registration is memoised once per process.
         FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
         let theme = FleetTheme(skin: .black)
+        // The run the TESTING strip shows: the activity feed's shape, one 600 s smoke test.
+        let testRun = run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 600)
         let speedReading = try XCTUnwrap(
             FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2, total: true),
             "a reported speed has a reading")
+        // The clock sits 10 s after the payload's lastAt - inside the keep-the-last-value grace -
+        // so the idle row keeps 16 and never falls to 0 by the wall clock.
         let lastValueReading = try XCTUnwrap(
             FleetFormat.closedRightReading(
                 speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
                                   trend: Array(repeating: nil, count: 60), stepSec: 10,
                                   lastValue: 16.273848069517346),
-                jobs: 1, total: true),
+                jobs: 1, total: true,
+                now: date("2026-10-13T23:41:59.737Z") + 10),
             "the last value the API measured is a reading")
-        let idleReading = FleetFormat.closedRightReading(speed: nil, jobs: 0, total: false)
+        let idleReading = FleetFormat.closedRightReading(speed: nil, jobs: 0, total: false,
+                                                         now: date("2026-10-13T23:41:59.737Z"))
         XCTAssertNil(idleReading, "an idle fleet with nothing measured draws no number at all")
 
         func bitmap(for reading: FleetFormat.FleetClosedRightReading?) throws -> NSBitmapImageRep {
@@ -788,22 +1016,154 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(accentPixelCount(try bitmap(for: idleReading), theme: theme), 0,
                        "an idle row with no reading shows no accent at all")
 
+        // The tool-run strip, on its own request:
+        // `FLEET_TOOL_RUNS_PREVIEW=/tmp/toolruns.png xcodebuild test`. Two closed rows in the
+        // TESTING state (working 0, one 600 s test run, the 60-point null trend the feed ships):
+        // the kept reading 10 s after `lastAt` - 16, dim, its unit saying idle - above the idle
+        // "0 tok/s total" reading past the keep-the-last-value grace, so the committed image shows
+        // both states of the right side side by side. Then the case box idle with that same run,
+        // and the box busy with it: the idle box shows the run ("Testing" + its age) while the busy
+        // box keeps its own "Working" line. Each preview is `if let` rather than
+        // `guard … else { return }` so asking for one never skips the other.
+        if let toolRunsPath = ProcessInfo.processInfo.environment["FLEET_TOOL_RUNS_PREVIEW"] {
+            // 31 s after the same `lastAt` the kept reading above is taken from: past the 30 s
+            // grace, so this row shows the zero the kept value falls to.
+            let zeroReading = try XCTUnwrap(
+                FleetFormat.closedRightReading(
+                    speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
+                                      trend: Array(repeating: nil, count: 60), stepSec: 10,
+                                      lastValue: 16.273848069517346),
+                    jobs: 0, total: true,
+                    now: date("2026-10-13T23:41:59.737Z") + 31),
+                "the idle fleet past the grace still has its reading")
+            // 10 s after that same `lastAt`, inside the grace: the remembered 16 with its idle unit.
+            // The clock is pinned, so the strip never depends on when the test runs.
+            let keptReading = try XCTUnwrap(
+                FleetFormat.closedRightReading(
+                    speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
+                                      trend: Array(repeating: nil, count: 60), stepSec: 10,
+                                      lastValue: 16.273848069517346),
+                    jobs: 0, total: true,
+                    now: date("2026-10-13T23:41:59.737Z") + 10),
+                "the fleet inside the grace keeps its reading")
+            let toolRunTrend: [Double?] = Array(repeating: nil, count: 60)
+            let toolRunStrip = ImageRenderer(content: VStack(spacing: 6) {
+                FleetClosedRowView(working: 0, alert: nil, reading: keptReading, theme: theme,
+                                   gapWidth: 200, height: 28,
+                                   toolRuns: [testRun], trend: toolRunTrend)
+                FleetClosedRowView(working: 0, alert: nil, reading: zeroReading, theme: theme,
+                                   gapWidth: 200, height: 28,
+                                   toolRuns: [testRun], trend: toolRunTrend)
+                HStack(spacing: 20) {
+                    FleetCaseBoxView(lane: origin(.idle, toolRuns: [testRun]), theme: theme)
+                    FleetCaseBoxView(lane: origin(.busy, jobs: 1, toolRuns: [testRun]), theme: theme)
+                }
+            }.padding(16).background(Color.black))
+            toolRunStrip.scale = 3
+            let toolRunStripImage = try XCTUnwrap(toolRunStrip.nsImage, "the tool-run strip rendered")
+            let toolRunStripBitmap = try XCTUnwrap(
+                NSBitmapImageRep(data: try XCTUnwrap(toolRunStripImage.tiffRepresentation)),
+                "tool-run strip bitmap")
+            let toolRunPng = try XCTUnwrap(
+                toolRunStripBitmap.representation(using: .png, properties: [:]), "tool-run preview PNG")
+            XCTAssertNoThrow(try Data(toolRunPng).write(to: URL(fileURLWithPath: toolRunsPath)),
+                             "the tool-run preview wrote")
+        }
+
         // A preview strip, only on request: `FLEET_CLOSED_ROW_PREVIEW=/tmp/row.png xcodebuild test`.
-        guard let previewPath = ProcessInfo.processInfo.environment["FLEET_CLOSED_ROW_PREVIEW"] else { return }
-        let strip = ImageRenderer(content: VStack(spacing: 6) {
-            FleetClosedRowView(working: 2, alert: nil, reading: speedReading, theme: theme,
-                               gapWidth: 200, height: 28)
-            FleetClosedRowView(working: 2, alert: nil, reading: lastValueReading, theme: theme,
-                               gapWidth: 200, height: 28)
-            FleetClosedRowView(working: 2, alert: nil, reading: idleReading, theme: theme,
-                               gapWidth: 200, height: 28)
-        }.padding(16).background(Color.black))
-        strip.scale = 3
-        let stripImage = try XCTUnwrap(strip.nsImage, "the preview strip rendered")
-        let stripBitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(stripImage.tiffRepresentation)),
-                                       "preview strip bitmap")
-        let png = try XCTUnwrap(stripBitmap.representation(using: .png, properties: [:]), "preview PNG")
-        XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)), "the preview wrote")
+        if let previewPath = ProcessInfo.processInfo.environment["FLEET_CLOSED_ROW_PREVIEW"] {
+            let strip = ImageRenderer(content: VStack(spacing: 6) {
+                FleetClosedRowView(working: 2, alert: nil, reading: speedReading, theme: theme,
+                                   gapWidth: 200, height: 28)
+                FleetClosedRowView(working: 2, alert: nil, reading: lastValueReading, theme: theme,
+                                   gapWidth: 200, height: 28)
+                FleetClosedRowView(working: 2, alert: nil, reading: idleReading, theme: theme,
+                                   gapWidth: 200, height: 28)
+            }.padding(16).background(Color.black))
+            strip.scale = 3
+            let stripImage = try XCTUnwrap(strip.nsImage, "the preview strip rendered")
+            let stripBitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(stripImage.tiffRepresentation)),
+                                            "preview strip bitmap")
+            let png = try XCTUnwrap(stripBitmap.representation(using: .png, properties: [:]), "preview PNG")
+            XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)), "the preview wrote")
+        }
+    }
+
+    /// The CURRENT WORK column is the only place a waiting run's full command appears, so a leaf
+    /// view that painted nothing while runs existed would be indistinguishable from an empty fleet -
+    /// every formatter could stay right and the panel would still show Case doing nothing. Rendering
+    /// the view with two runs and with none, and counting the lit pixels both times, tells those
+    /// apart: the lines are there when the fleet has work, and the empty state really is blank.
+    /// Judged on luminance, not colour: the lines draw in `theme.dim`, so no accent is involved.
+    @MainActor
+    func testToolRunLinesDrawTheRunsAndNothingWithoutThem() throws {
+        // The run lines ask FleetType for the mono face, whose registration is memoised once per
+        // process. Register the test bundle's own faces first: without this the render would pin
+        // the system fallback for every later test, and FleetTypeTests would fail on our account.
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
+        let theme = FleetTheme(skin: .black)
+        // Two runs the activity feed reports: a 10 m smoke test and a 3 m build, each with the job
+        // and label the formatter puts on its line.
+        let runs = [
+            run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 600),
+            run(kind: "build", job: "boring-notch", label: "boringNotch", elapsed: 180),
+        ]
+
+        // The column's own width and the two 16 pt rows two runs take, on the black background:
+        // anything lit inside this box is the view's own doing, so a view that stopped drawing its
+        // lines would leave the box as empty as the no-runs render.
+        func linesBitmap(_ runList: [ToolRun]) throws -> NSBitmapImageRep {
+            let renderer = ImageRenderer(content: FleetToolRunLines(runs: runList, theme: theme)
+                .frame(width: FleetPanelMetrics.workColumnWidth,
+                       height: 2 * FleetPanelMetrics.caseJobLineHeight)
+                .background(Color.black))
+            renderer.scale = 3
+            let image = try XCTUnwrap(renderer.nsImage, "the tool-run lines rendered")
+            return try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)),
+                                 "tool-run lines bitmap")
+        }
+
+        XCTAssertGreaterThan(litPixelCount(try linesBitmap(runs)), 0,
+                             "two runs draw their lines")
+        XCTAssertEqual(litPixelCount(try linesBitmap([])), 0,
+                       "no runs draw no lines at all")
+
+        // A preview strip, only on request:
+        // `TEST_RUNNER_FLEET_TOOL_RUNS_LINES_PREVIEW=/tmp/runlines.png xcodebuild test`. The two
+        // runs above the empty column, so the blank state can be seen next to the painted one.
+        // `if let` rather than `guard … else { return }`, as in this file's other previews.
+        if let previewPath = ProcessInfo.processInfo.environment["FLEET_TOOL_RUNS_LINES_PREVIEW"] {
+            let strip = ImageRenderer(content: VStack(spacing: 12) {
+                FleetToolRunLines(runs: runs, theme: theme)
+                    .frame(width: FleetPanelMetrics.workColumnWidth,
+                           height: 2 * FleetPanelMetrics.caseJobLineHeight)
+                FleetToolRunLines(runs: [], theme: theme)
+                    .frame(width: FleetPanelMetrics.workColumnWidth,
+                           height: 2 * FleetPanelMetrics.caseJobLineHeight)
+            }.padding(16).background(Color.black))
+            strip.scale = 3
+            let stripImage = try XCTUnwrap(strip.nsImage, "the preview strip rendered")
+            let stripBitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(stripImage.tiffRepresentation)),
+                                            "preview strip bitmap")
+            let png = try XCTUnwrap(stripBitmap.representation(using: .png, properties: [:]), "preview PNG")
+            XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)), "the preview wrote")
+        }
+    }
+
+    /// Pixels lit above the black background: Rec.709 luminance over 0.15. The black skin's run
+    /// line (`dim`, 0x939A87) measures 0.59, and the background it sits on - `Color.black` under the
+    /// box - 0.00, so this counts the glyphs and their antialiasing and nothing else.
+    private func litPixelCount(_ bitmap: NSBitmapImageRep) -> Int {
+        var count = 0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                let luminance = 0.2126 * pixel.redComponent + 0.7152 * pixel.greenComponent
+                    + 0.0722 * pixel.blueComponent
+                if luminance > 0.15 { count += 1 }
+            }
+        }
+        return count
     }
 
     /// Pixels that are the skin's accent and nothing else: within 0.06 of the accent in every sRGB

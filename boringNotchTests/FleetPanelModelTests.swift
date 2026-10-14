@@ -38,7 +38,8 @@ final class FleetPanelModelTests: XCTestCase {
 
     private func deviceJSON(_ device: String, busy: Bool? = nil, items: [String] = [],
                             slotsUsed: Int? = nil, tokPerSec: Double? = nil,
-                            odinStatus: String? = nil, odinOpen: String? = nil) -> String {
+                            odinStatus: String? = nil, odinOpen: String? = nil,
+                            toolRuns: [String] = []) -> String {
         var p = ["\"device\":\"\(device)\"", "\"items\":[\(items.joined(separator: ","))]"]
         if let busy = busy { p.append("\"busy\":\(busy ? "true" : "false")") }
         if let slotsUsed = slotsUsed { p.append("\"slots\":{\"used\":\(slotsUsed),\"total\":4,\"busy\":[]}") }
@@ -47,6 +48,9 @@ final class FleetPanelModelTests: XCTestCase {
         if let odinStatus = odinStatus { odin.append("\"status\":\(odinStatus)") }
         if let odinOpen = odinOpen { odin.append("\"open\":\(odinOpen)") }
         if !odin.isEmpty { p.append("\"odin\":{" + odin.joined(separator: ",") + "}") }
+        // Only with runs: a payload built without them keeps omitting the key, which is what an
+        // old dashboard sends and the decoder must read as no runs.
+        if !toolRuns.isEmpty { p.append("\"toolRuns\":[\(toolRuns.joined(separator: ","))]") }
         return "{" + p.joined(separator: ",") + "}"
     }
 
@@ -359,6 +363,77 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(idle.workingCount, 0)
         let offline = panel(fleet: nil, activity: nil)
         XCTAssertEqual(FleetFormat.caseBoxState(offline.origin), "Offline")
+    }
+
+    /// The dashboard reports the long test/build commands Case jobs wait on on the `case` device
+    /// alone. They ride into the origin lane and nowhere else, and they are their own dimension: a
+    /// run must never turn a lane, or the fleet, busy.
+    func testCaseToolRunsRideTheOriginLane() {
+        let run = "{\"job\":\"boring-notch-wt\",\"kind\":\"test\",\"label\":\"smoke.cjs\",\"pid\":4211,"
+            + "\"since\":\"2026-10-13T22:23:17.558Z\",\"elapsedSec\":600}"
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("case", busy: false, items: [], toolRuns: [run])])) else { return }
+        let model = panel(fleet: f, activity: a)
+
+        XCTAssertEqual(model.toolRuns.count, 1)
+        let first = model.toolRuns.first
+        XCTAssertEqual(first?.job, "boring-notch-wt")
+        XCTAssertEqual(first?.kind, "test")
+        XCTAssertEqual(first?.label, "smoke.cjs")
+        XCTAssertEqual(first?.elapsedSec, 600)
+        XCTAssertEqual(model.origin.toolRuns, model.toolRuns, "the origin is the only carrier")
+        for other in model.agents {
+            XCTAssertTrue(other.toolRuns.isEmpty, "\(other.id) must never carry a tool run")
+        }
+
+        XCTAssertEqual(model.origin.state, .idle, "a run is not model work; the lane stays idle")
+        XCTAssertEqual(model.workingCount, 0)
+        XCTAssertFalse(model.isBusy)
+        XCTAssertEqual(model.runningTaskCount, 0)
+    }
+
+    /// An old dashboard sends no `toolRuns` key at all: that is no runs, not a decode failure, and
+    /// the closed row keeps its "0 working" (no run, so no reading replaces the job count).
+    func testOldPayloadWithoutToolRunsLeavesTheOriginEmpty() {
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("case", busy: false, items: [])])) else { return }
+        let model = panel(fleet: f, activity: a)
+        XCTAssertEqual(model.toolRuns, [])
+        XCTAssertNil(FleetFormat.closedToolRun(model.toolRuns), "no runs to show, so the closed row keeps its job count")
+    }
+
+    /// Real model work outranks a run in the case box: the box says "Working" and drops the run's
+    /// age line, while the run still reaches the current-work list.
+    func testModelWorkWinsOverAToolRunInTheCaseBox() {
+        let own = itemJSON("own", device: "case", since: "2026-10-02T06:20:00.000Z", elapsedSec: 30)
+        let run = "{\"job\":\"boring-notch-wt\",\"kind\":\"test\",\"label\":\"smoke.cjs\",\"elapsedSec\":600}"
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("case", busy: true, items: [own], toolRuns: [run])])) else { return }
+        let model = panel(fleet: f, activity: a)
+
+        XCTAssertEqual(model.origin.state, .busy)
+        XCTAssertEqual(model.workingCount, 1)
+        XCTAssertEqual(FleetFormat.caseBoxState(model.origin), "Working", "model work outranks the run")
+        XCTAssertNil(FleetFormat.caseBoxToolRunAge(model.origin), "a busy box shows its job line, not the run's age")
+        XCTAssertEqual(model.toolRuns.count, 1, "the run still reaches the current-work list")
+        XCTAssertEqual(model.runningTaskCount, 1)
+    }
+
+    /// Two runs on an idle case box: the closed row counts them, the box names the oldest run's
+    /// kind with its age.
+    func testTestAndBuildRunsReachTheClosedRowAndTheCaseBox() {
+        let build = "{\"job\":\"boring-notch-wt\",\"kind\":\"build\",\"label\":\"xcodebuild\",\"elapsedSec\":180}"
+        let test = "{\"job\":\"boring-notch-wt\",\"kind\":\"test\",\"label\":\"smoke.cjs\",\"elapsedSec\":600}"
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("case", busy: false, items: [], toolRuns: [build, test])])) else { return }
+        let model = panel(fleet: f, activity: a)
+
+        let closed = FleetFormat.closedToolRun(model.toolRuns)
+        XCTAssertEqual(closed?.number, "2")
+        XCTAssertEqual(closed?.word, "running")
+        XCTAssertEqual(FleetFormat.caseBoxState(model.origin), "Testing", "the oldest run is the test one")
+        XCTAssertEqual(FleetFormat.caseBoxToolRunAge(model.origin), "10m")
+        XCTAssertTrue(FleetFormat.caseBoxStateIsActive(model.origin))
     }
 
     func testRunningTaskCountCountsUniqueKeysAcrossBusyLanesAndSkipsOfflineLanes() {

@@ -310,6 +310,45 @@ struct OdinReport: Codable, Equatable {
     }
 }
 
+// MARK: - ToolRun
+
+/// One long command a Case job is waiting on, as the fleet dashboard reports it on the activity
+/// feed's `case` device: a test suite, a build, or another script the job started. These are
+/// their own dimension, separate from model work, so a job blocked on a long test run stays
+/// visible even while no model is writing. The dashboard is the only writer, so every field but
+/// the kind is optional, and an old dashboard that sends no array reads as no runs.
+struct ToolRun: Codable, Equatable, Identifiable {
+    var job: String?       // the Case job the command belongs to
+    var kind: String       // "test" | "build" | "other"; unknown or absent reads as ""
+    var label: String?     // short command label, e.g. "smoke.cjs"
+    var pid: Int?
+    var since: String?     // ISO start time
+    var elapsedSec: Int?
+
+    /// The process id is the identity while the dashboard reports one. Without it, the job,
+    /// label and start time together tell runs apart.
+    var id: String {
+        if let pid { return "\(pid)" }
+        return [job, label, since].compactMap { $0 }.joined(separator: "-")
+    }
+
+    private enum CodingKeys: String, CodingKey { case job, kind, label, pid, since, elapsedSec }
+}
+
+/// The lenient decode lives in an extension: sharing the decoder with the struct's own body would
+/// take the memberwise init with it, and the tests build runs by hand.
+extension ToolRun {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(job: c.looseString(.job),
+                  kind: c.looseString(.kind) ?? "",
+                  label: c.looseString(.label),
+                  pid: c.looseInt(.pid),
+                  since: c.looseString(.since),
+                  elapsedSec: c.looseInt(.elapsedSec))
+    }
+}
+
 // MARK: - DeviceActivity
 
 struct DeviceActivity: Codable, Equatable, Identifiable {
@@ -325,13 +364,17 @@ struct DeviceActivity: Codable, Equatable, Identifiable {
     var odin: OdinReport?
     /// The device's own decode speed in tokens/s; nil when the device reports none.
     var speed: Double?
+    /// Long commands this device's Case jobs are waiting on; an old dashboard that omits the
+    /// field reads as no runs.
+    var toolRuns: [ToolRun] = []
 
     var id: String {
         return device
     }
 
     private enum CodingKeys: String, CodingKey {
-        case device, busy, items, slots, tokPerSec, kvCachePct, running, waiting, state, odin, speed
+        case device, busy, items, slots, tokPerSec, kvCachePct, running, waiting, state, odin, speed,
+             toolRuns
     }
 
     init(from decoder: Decoder) throws {
@@ -347,6 +390,8 @@ struct DeviceActivity: Codable, Equatable, Identifiable {
         self.state = try container.decodeIfPresent(String.self, forKey: .state) ?? ""
         self.odin = try container.decodeIfPresent(OdinReport.self, forKey: .odin)
         self.speed = try container.decodeIfPresent(Double.self, forKey: .speed)
+        // An old dashboard omits the field; that is no runs, not a decode failure.
+        self.toolRuns = try container.decodeIfPresent([ToolRun].self, forKey: .toolRuns) ?? []
     }
 }
 
@@ -357,9 +402,11 @@ struct ActivitySnapshot: Codable, Equatable {
     var devices: [DeviceActivity]
     /// Fleet-wide decode speed; nil while the feed reports no speed block.
     var speed: FleetSpeed?
+    /// Fleet-wide count of long commands Case jobs are waiting on; nil when the feed predates them.
+    var toolRunsCount: Int?
 
     private enum CodingKeys: String, CodingKey {
-        case generatedAt, devices, speed
+        case generatedAt, devices, speed, toolRunsCount
     }
 
     init(from decoder: Decoder) throws {
@@ -367,6 +414,7 @@ struct ActivitySnapshot: Codable, Equatable {
         self.generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt) ?? ""
         self.devices = try container.decodeIfPresent([DeviceActivity].self, forKey: .devices) ?? []
         self.speed = try container.decodeIfPresent(FleetSpeed.self, forKey: .speed)
+        self.toolRunsCount = try container.decodeIfPresent(Int.self, forKey: .toolRunsCount)
     }
 
     static func decode(_ data: Data) throws -> ActivitySnapshot {

@@ -3,8 +3,9 @@
 //  boringNotch
 //
 //  The response map's centred origin node — while the origin runs work
-//  the box says "Working" with its job count, and falls back to
-//  "Online" / "Offline" while idle or unreachable.
+//  the box says "Working" with its job count; while idle but waiting on a
+//  test or build it says "Testing" / "Building" with that run's age; otherwise
+//  it falls back to "Online" / "Offline".
 //
 
 import SwiftUI
@@ -30,7 +31,12 @@ struct FleetCaseBoxView: View {
                         .foregroundColor(theme.text)
                     Text(FleetFormat.caseBoxState(lane))
                         .font(FleetType.mono(size: 11))
-                        .foregroundColor(lane.state == .busy ? theme.accent : theme.dim)
+                        .foregroundColor(FleetFormat.caseBoxStateIsActive(lane) ? theme.accent : theme.dim)
+                    if let runAge = FleetFormat.caseBoxToolRunAge(lane) {
+                        Text(runAge)
+                            .font(FleetType.mono(size: 11))
+                            .foregroundColor(theme.dim)
+                    }
                     if let jobs = FleetFormat.caseBoxJobs(lane) {
                         Text(jobs)
                             .font(FleetType.mono(size: 11))

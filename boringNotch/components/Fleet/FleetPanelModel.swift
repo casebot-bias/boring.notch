@@ -33,6 +33,10 @@ struct FleetLane: Identifiable, Equatable {
     var label: String
     var state: FleetNodeState
     var jobs: [FleetJob]
+    /// Long commands the lane's device is waiting on (the dashboard's `toolRuns`, only ever sent on
+    /// the case device): a job waiting on a test suite is work the notch must show, but it is its
+    /// own dimension - a run never makes the lane busy, so a busy lane still means model work.
+    var toolRuns: [ToolRun] = []
     /// The device's own decode speed in tokens/s; nil when the device reports none (nova: never).
     var speed: Double?
     var decisions: [FleetDecision] = []
@@ -152,6 +156,12 @@ struct FleetPanelModel: Equatable {
 
     /// case first, then the agents.
     var lanes: [FleetLane] { [origin] + agents }
+
+    /// The tool commands the case is waiting on right now (the dashboard's `toolRuns`). They are the
+    /// work a job does while no model writes: the collapsed row says "testing · 10m" instead of
+    /// "0 working" for them, and the current-work list names them. Empty without them, and empty on
+    /// an old dashboard that never sends the field.
+    var toolRuns: [ToolRun] { origin.toolRuns }
 
     var agentCount: Int { agents.count }
     /// Nodes that are working now: the busy agents plus the case origin while it runs its own or
@@ -342,6 +352,7 @@ enum FleetPanelModelBuilder {
         let device = device(id: id, in: activity)
         let state: FleetNodeState = machineOnline(machine) ? (deviceBusy(device) ? .busy : .idle) : .offline
         return FleetLane(id: id, label: id, state: state, jobs: toJobs(device?.items ?? []),
+                         toolRuns: device?.toolRuns ?? [],
                          speed: laneSpeed(device), probeFailed: probeFailed(device))
     }
 
@@ -365,6 +376,7 @@ enum FleetPanelModelBuilder {
             .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
             ?? (deviceBusy(device) ? .busy : .idle)
         return FleetLane(id: "pika", label: "pika", state: state, jobs: toJobs(device?.items ?? []),
+                         toolRuns: device?.toolRuns ?? [],
                          speed: laneSpeed(device), probeFailed: probeFailed(device))
     }
 
@@ -378,6 +390,7 @@ enum FleetPanelModelBuilder {
             .map { machineOnline($0) ? (deviceBusy(device) ? .busy : .idle) : .offline }
             ?? (deviceBusy(device) ? .busy : .idle)
         return FleetLane(id: "morpheus", label: "morpheus", state: state, jobs: toJobs(device?.items ?? []),
+                         toolRuns: device?.toolRuns ?? [],
                          speed: laneSpeed(device), probeFailed: probeFailed(device))
     }
 
@@ -390,6 +403,7 @@ enum FleetPanelModelBuilder {
         let device = device(id: "odin", in: activity)
         let state: FleetNodeState = machineOnline(machine) ? (deviceBusy(device) ? .busy : .idle) : .offline
         return FleetLane(id: "odin", label: "odin", state: state, jobs: toJobs(device?.items ?? []),
+                         toolRuns: device?.toolRuns ?? [],
                          speed: laneSpeed(device), decisions: decisions(from: device?.odin),
                          probeFailed: probeFailed(device))
     }
