@@ -438,7 +438,7 @@ final class FleetDecodingTests: XCTestCase {
         let lastAt = try XCTUnwrap(formatter.date(from: "2026-10-13T23:41:59.737Z"),
                                    "the payload's lastAt parses")
         let reading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: speed, jobs: 1, total: true,
+            FleetFormat.closedRightReading(speed: speed, jobs: 1,
                                            now: lastAt.addingTimeInterval(10)),
             "a last value the API measured is a reading")
         XCTAssertEqual(reading.number, "16")

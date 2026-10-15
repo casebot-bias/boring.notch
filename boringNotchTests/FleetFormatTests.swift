@@ -177,9 +177,13 @@ final class FleetFormatTests: XCTestCase {
     /// Both sides take the wider content plus the wing padding, never past the cap: a short row makes
     /// a narrow notch.
     func testClosedRowSideTakesTheWiderTextUpToTheCap() {
-        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 60, right: 70), 82)
-        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 90, right: 70), 102)
-        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 400, right: 70), FleetPanelMetrics.closedRowSideWidth)
+        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 60, right: 70,
+                                                        padding: FleetPanelMetrics.closedRowSidePadding), 82)
+        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 90, right: 70,
+                                                        padding: FleetPanelMetrics.closedRowSidePadding), 102)
+        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 400, right: 70,
+                                                        padding: FleetPanelMetrics.closedRowSidePadding),
+                       FleetPanelMetrics.closedRowSideWidth)
     }
 
     // MARK: - fraction
@@ -419,7 +423,7 @@ final class FleetFormatTests: XCTestCase {
             FleetPanelMetrics.responseMapColumnWidth - 11,
             "Needs you fits the alert row's detail room (that row has no badge)")
         // The closed row is one line per side; the longest left lines must fit the side budget.
-        for line in ["12 working · 7 down", "12 working · 3 critical", "120 tok/s", "47 tok/s total"] {
+        for line in ["12 working · 7 down", "12 working · 3 critical", "120 tok/s", "47 tok/s"] {
             XCTAssertLessThanOrEqual(
                 monospacedWidth(line, size: FleetPanelMetrics.minTextSize),
                 FleetPanelMetrics.closedRowTextWidth,
@@ -802,10 +806,10 @@ final class FleetFormatTests: XCTestCase {
         // A reported speed shows both of its parts, bright, whatever the job count.
         let reported = try XCTUnwrap(
             FleetFormat.closedRightReading(
-                speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 3, total: true),
+                speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 3),
             "a reported speed has a reading")
         XCTAssertEqual(reported.number, "47")
-        XCTAssertEqual(reported.unit, " tok/s total")
+        XCTAssertEqual(reported.unit, " tok/s")
         XCTAssertFalse(reported.dim)
 
         // No current speed but a last value the API measured, the clock 10 s past the payload's
@@ -823,7 +827,7 @@ final class FleetFormatTests: XCTestCase {
                 speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
                                   trend: Array(repeating: nil, count: 60), stepSec: 10,
                                   lastValue: 16.273848069517346),
-                jobs: 1, total: true,
+                jobs: 1,
                 now: date("2026-10-13T23:41:59.737Z") + 10),
             "a last value the API measured is a reading")
         XCTAssertEqual(lastValueIdle.number, "16")
@@ -837,17 +841,17 @@ final class FleetFormatTests: XCTestCase {
             FleetFormat.closedRightReading(
                 speed: FleetSpeed(current: nil, lastAt: nil, trend: [120, 90], stepSec: 10,
                                   lastValue: 16.27),
-                jobs: 0, total: false),
+                jobs: 0),
             "lastValue is a reading")
         XCTAssertEqual(withLastValue.number, "16")
-        // The idle tail costs more than the row has beside a two-digit number, so "total" drops:
-        // the 40 pt sparkline is what trims the rate words (see the ladder test).
+        // The idle tail still fits beside a two-digit number - the pair is 141 pt against the row's
+        // 160 pt text budget, so the first ladder rung holds (see the ladder test).
         XCTAssertEqual(withLastValue.unit, " tok/s · idle")
         XCTAssertTrue(withLastValue.dim)
         let trendOnly = try XCTUnwrap(
             FleetFormat.closedRightReading(
                 speed: FleetSpeed(current: nil, lastAt: nil, trend: [120, 90], stepSec: 10),
-                jobs: 0, total: false),
+                jobs: 0),
             "the newest non-nil trend point is a reading")
         XCTAssertEqual(trendOnly.number, "90")
         XCTAssertTrue(trendOnly.dim)
@@ -855,30 +859,30 @@ final class FleetFormatTests: XCTestCase {
 
     /// Nothing measured, nobody waiting: no reading, so the closed row draws no dash.
     func testClosedRightReadingIsNilWhenNothingWasEverMeasured() {
-        XCTAssertNil(FleetFormat.closedRightReading(speed: nil, jobs: 0, total: false))
+        XCTAssertNil(FleetFormat.closedRightReading(speed: nil, jobs: 0))
         // A speed block that never held a number is as good as no block at all.
         let neverMeasured = FleetSpeed(current: nil, lastAt: nil, trend: [])
-        XCTAssertNil(FleetFormat.closedRightReading(speed: neverMeasured, jobs: 0, total: false))
+        XCTAssertNil(FleetFormat.closedRightReading(speed: neverMeasured, jobs: 0))
     }
 
-    /// No speed yet while jobs run: their count stands in, bright, and is never a total.
+    /// No speed yet while jobs run: their count stands in, bright, as a job count - never a rate.
     func testClosedRightReadingShowsTheJobCountWhileNoSpeedExists() throws {
         let twoJobs = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: nil, jobs: 2, total: false),
+            FleetFormat.closedRightReading(speed: nil, jobs: 2),
             "running jobs have a reading")
         XCTAssertEqual(twoJobs.number, "2")
         XCTAssertEqual(twoJobs.unit, " jobs")
         XCTAssertFalse(twoJobs.dim)
 
         let oneJob = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: nil, jobs: 1, total: false),
+            FleetFormat.closedRightReading(speed: nil, jobs: 1),
             "one running job has a reading")
         XCTAssertEqual(oneJob.number, "1")
         XCTAssertEqual(oneJob.unit, " job")
         XCTAssertFalse(oneJob.dim)
 
-        // A job count is not the API's fleet total: total true never turns it into one.
-        XCTAssertEqual(FleetFormat.closedRightReading(speed: nil, jobs: 2, total: true)?.unit,
+        // The count stands in as a job count: it never takes a rate unit off the ladder.
+        XCTAssertEqual(FleetFormat.closedRightReading(speed: nil, jobs: 2)?.unit,
                        " jobs")
     }
 
@@ -894,7 +898,7 @@ final class FleetFormatTests: XCTestCase {
 
         // 10 s after the measurement: inside the grace, so the last value stands, said as a kept one.
         let kept = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: speed, jobs: 0, total: true,
+            FleetFormat.closedRightReading(speed: speed, jobs: 0,
                                            now: date(lastAt) + 10),
             "a kept last value is a reading")
         XCTAssertEqual(kept.number, "16")
@@ -905,7 +909,7 @@ final class FleetFormatTests: XCTestCase {
         // 31 s after: past the 30 s grace, the row prints 0 - still dim, still a rate unit, and no
         // idle word: a zero already reads as nothing flowing, so marking it idle would only repeat it.
         let zero = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: speed, jobs: 0, total: true,
+            FleetFormat.closedRightReading(speed: speed, jobs: 0,
                                            now: date(lastAt) + 31),
             "the zero after the grace is a reading")
         XCTAssertEqual(zero.number, "0")
@@ -917,31 +921,29 @@ final class FleetFormatTests: XCTestCase {
 
     /// The closed row prints the number at `closedSpeedNumberSize` beside a 24 pt sparkline, so a
     /// long number - or an idle reading with its " · idle" tail - trades its rate words down the
-    /// ladder " tok/s total" -> " tok/s" -> " t/s" until the pair fits the row's text budget again.
-    /// The idle suffix rides on every candidate, so the budget only ever trims the rate words in
-    /// front of it; when nothing fits, the shortest candidate wins.
+    /// ladder " tok/s" -> " t/s" until the pair fits the row's text budget again. The ladder is two
+    /// rungs now, and the closed row no longer says "total" - only the open panel's `tokenRateUnit`
+    /// still does. The idle suffix rides on every candidate, so the budget only ever trims the rate
+    /// words in front of it; when nothing fits, the shortest candidate wins.
     func testClosedSpeedUnitLadderNarrowsForALongNumber() {
-        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: true), " tok/s total")
-        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: false), " tok/s")
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47"), " tok/s")
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", idle: true), " tok/s · idle")
         // Ten digits: 24 pt sparkline + 3 + 84 (the digits) + 3 + 39.6 (" tok/s") = 153.6 <= 160, so
-        // " tok/s" fits and only the " total" word is trimmed; the short form is no longer the fallback.
-        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true), " tok/s")
-        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: false), " tok/s")
-        // The idle ladder keeps the same order: the " · idle" tail never drops, and it is the 24 pt
-        // sparkline sharing the row's budget that trims the rate words in front of it - measured at
-        // the bundled mono, " tok/s total · idle" is too wide beside a two-digit number, so "total"
-        // goes and the kept value reads " tok/s · idle".
-        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "16", total: true, idle: true),
-                       " tok/s · idle")
-        // Long number and idle tail together: nothing fits, so the shortest candidate wins.
-        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true, idle: true),
-                       " t/s · idle")
+        // even the long number still holds the first rung.
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890"), " tok/s")
+        // The idle tail is what nothing can hold beside ten digits: " tok/s · idle" needs 199.8 pt,
+        // so the pair falls to " t/s" and keeps the " · idle" the kept value announces itself with.
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", idle: true), " t/s · idle")
 
-        // The fit helper measures the same pair the row renders.
-        XCTAssertTrue(FleetFormat.closedSpeedFits(number: "47", unit: " tok/s total"))
-        // Ten digits: " tok/s" fits (153.6 <= 160) while " tok/s total" does not, so the pair flips there.
+        // The fit helper measures the same pair the row renders: the ten-digit number holds
+        // " tok/s" (24 + 3 + 84 + 3 + 39.6 = 153.6 <= 160) but not " tok/s · idle" (199.8 > 160).
+        // Even the short rung with the idle tail is too wide (186.6 > 160): the ladder hands back
+        // " t/s · idle" as its shortest candidate, not as a pair that fits.
+        XCTAssertTrue(FleetFormat.closedSpeedFits(number: "47", unit: " tok/s"))
+        XCTAssertTrue(FleetFormat.closedSpeedFits(number: "47", unit: " tok/s · idle"))
         XCTAssertTrue(FleetFormat.closedSpeedFits(number: "1234567890", unit: " tok/s"))
-        XCTAssertFalse(FleetFormat.closedSpeedFits(number: "1234567890", unit: " tok/s total"))
+        XCTAssertFalse(FleetFormat.closedSpeedFits(number: "1234567890", unit: " tok/s · idle"))
+        XCTAssertFalse(FleetFormat.closedSpeedFits(number: "1234567890", unit: " t/s · idle"))
     }
 
     /// The origin box says "Working" in the skin's accent - the black skin's only green - so
@@ -999,7 +1001,7 @@ final class FleetFormatTests: XCTestCase {
         // The run the TESTING strip shows: the activity feed's shape, one 600 s smoke test.
         let testRun = run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 600)
         let speedReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2, total: true),
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2),
             "a reported speed has a reading")
         // The clock sits 10 s after the payload's lastAt - inside the keep-the-last-value grace -
         // so the idle row keeps 16 and never falls to 0 by the wall clock.
@@ -1008,10 +1010,10 @@ final class FleetFormatTests: XCTestCase {
                 speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
                                   trend: Array(repeating: nil, count: 60), stepSec: 10,
                                   lastValue: 16.273848069517346),
-                jobs: 1, total: true,
+                jobs: 1,
                 now: date("2026-10-13T23:41:59.737Z") + 10),
             "the last value the API measured is a reading")
-        let idleReading = FleetFormat.closedRightReading(speed: nil, jobs: 0, total: false,
+        let idleReading = FleetFormat.closedRightReading(speed: nil, jobs: 0,
                                                          now: date("2026-10-13T23:41:59.737Z"))
         XCTAssertNil(idleReading, "an idle fleet with nothing measured draws no number at all")
 
@@ -1034,7 +1036,7 @@ final class FleetFormatTests: XCTestCase {
         // `FLEET_TOOL_RUNS_PREVIEW=/tmp/toolruns.png xcodebuild test`. Two closed rows in the
         // TESTING state (working 0, one 600 s test run, the 60-point null trend the feed ships):
         // the kept reading 10 s after `lastAt` - 16, dim, its unit saying idle - above the idle
-        // "0 tok/s total" reading past the keep-the-last-value grace, so the committed image shows
+        // "0 tok/s" reading past the keep-the-last-value grace, so the committed image shows
         // both states of the right side side by side. Then the case box idle with that same run,
         // and the box busy with it: the idle box shows the run ("Testing" + its age) while the busy
         // box keeps its own "Working" line. Each preview is `if let` rather than
@@ -1047,7 +1049,7 @@ final class FleetFormatTests: XCTestCase {
                     speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
                                       trend: Array(repeating: nil, count: 60), stepSec: 10,
                                       lastValue: 16.273848069517346),
-                    jobs: 0, total: true,
+                    jobs: 0,
                     now: date("2026-10-13T23:41:59.737Z") + 31),
                 "the idle fleet past the grace still has its reading")
             // 10 s after that same `lastAt`, inside the grace: the remembered 16 with its idle unit.
@@ -1057,7 +1059,7 @@ final class FleetFormatTests: XCTestCase {
                     speed: FleetSpeed(current: nil, lastAt: "2026-10-13T23:41:59.737Z",
                                       trend: Array(repeating: nil, count: 60), stepSec: 10,
                                       lastValue: 16.273848069517346),
-                    jobs: 0, total: true,
+                    jobs: 0,
                     now: date("2026-10-13T23:41:59.737Z") + 10),
                 "the fleet inside the grace keeps its reading")
             let toolRunTrend: [Double?] = Array(repeating: nil, count: 60)
@@ -1114,7 +1116,7 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetPanelMetrics.closedBarHeight(38), 26.6, accuracy: 0.0001)
         // the bitmap is the rendered row at scale 2: 42 px for 21 pt
         let speedReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2, total: true),
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2),
             "a reported speed has a reading")
         XCTAssertEqual(try rowBitmap(working: 2, alert: nil, reading: speedReading, blackHole: false).pixelsHigh,
                        42)
@@ -1125,7 +1127,7 @@ final class FleetFormatTests: XCTestCase {
     @MainActor
     func testTheShorterBarClipsNoTextOrSparkline() throws {
         let speedReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2, total: true),
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2),
             "a reported speed has a reading")
         let flatTrend: [Double?] = Array(repeating: 0, count: 60)
         let bitmap = try rowBitmap(working: 2, alert: "3 critical", reading: speedReading, blackHole: false,
@@ -1156,15 +1158,15 @@ final class FleetFormatTests: XCTestCase {
         let theme = FleetTheme(skin: .black)
         let flat: [Double?] = Array(repeating: 0, count: 60)
         let zeroReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0, total: true))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0))
         let bigReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0, total: true))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0))
         // The bitmap has two wings and two pixels per point.
         let wing = CGFloat(try rowBitmap(working: 0, alert: nil, reading: zeroReading,
                                         blackHole: false, gap: 0, trend: flat).pixelsWide) / 4
         let rightContent = FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing
             + FleetPanelMetrics.closedNumberMinWidth + FleetPanelMetrics.closedSpeedSpacing
-            + FleetType.monoWidth(text: " tok/s total", size: FleetPanelMetrics.minTextSize)
+            + FleetType.monoWidth(text: " tok/s", size: FleetPanelMetrics.minTextSize)
         XCTAssertEqual(wing, rightContent + FleetPanelMetrics.closedRowSidePadding, accuracy: 0.5)
 
         // The old sparkline was 40 pt wide and the speed number had no three-digit reserve.
@@ -1207,11 +1209,12 @@ final class FleetFormatTests: XCTestCase {
         FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
         let flat: [Double?] = Array(repeating: 0, count: 60)
         let zeroReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0, total: true))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0))
         let rightContent = FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing
             + FleetPanelMetrics.closedNumberMinWidth + FleetPanelMetrics.closedSpeedSpacing
-            + FleetType.monoWidth(text: " tok/s total", size: FleetPanelMetrics.minTextSize)
-        let wing = FleetPanelMetrics.closedRowSide(left: 0, right: rightContent)
+            + FleetType.monoWidth(text: " tok/s", size: FleetPanelMetrics.minTextSize)
+        let wing = FleetPanelMetrics.closedRowSide(left: 0, right: rightContent,
+                                                    padding: FleetPanelMetrics.closedRowSidePadding)
         let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: false)
         let bitmap = try rowBitmap(working: 0, alert: nil, reading: zeroReading,
                                    blackHole: false, gap: gap, trend: flat)
@@ -1247,9 +1250,9 @@ final class FleetFormatTests: XCTestCase {
         FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
         let flat: [Double?] = Array(repeating: 0, count: 60)
         let zeroReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0, total: true))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0))
         let bigReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0, total: true))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0))
         let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: false)
         let zeroWidth = CGFloat(try rowBitmap(working: 0, alert: nil, reading: zeroReading,
                                              blackHole: false, gap: gap, trend: flat).pixelsWide) / 2
@@ -1267,13 +1270,13 @@ final class FleetFormatTests: XCTestCase {
         let flat: [Double?] = Array(repeating: 0, count: 60)
         let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: false)
         let zeroReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0, total: true))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0))
         let oneFortySevenReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0, total: true))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0))
         let ninetyNineNineReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 999, lastAt: nil), jobs: 0, total: true))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 999, lastAt: nil), jobs: 0))
         let thousandReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 1000, lastAt: nil), jobs: 0, total: true))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 1000, lastAt: nil), jobs: 0))
 
         // The bar's width in points: the bitmap has two pixels per point.
         func width(_ reading: FleetFormat.FleetClosedRightReading) throws -> CGFloat {

@@ -219,7 +219,7 @@ final class FleetBlackHoleTests: XCTestCase {
         if let previewPath = ProcessInfo.processInfo.environment["FLEET_BLACK_HOLE_PREVIEW"] {
             let reading = try XCTUnwrap(
                 FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil),
-                                               jobs: 4, total: true),
+                                               jobs: 4),
                 "a reported speed has a reading")
             let preview = ImageRenderer(content: FleetClosedRowView(
                 working: 4, alert: nil, reading: reading, theme: theme, gapWidth: 200, height: FleetPanelMetrics.closedBarHeight(30),
