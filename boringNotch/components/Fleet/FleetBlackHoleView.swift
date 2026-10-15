@@ -71,6 +71,14 @@ struct FleetBlackHoleState: Equatable {
     }
 }
 
+extension FleetBlackHoleState {
+    /// The timeline's pause rule: only work that shows, a notch that is really on screen and no
+    /// Reduce Motion still frame keep the clock running.
+    func isAnimating(notchVisible: Bool, reduceMotion: Bool) -> Bool {
+        isVisible && notchVisible && !reduceMotion
+    }
+}
+
 // MARK: - Particle model
 
 /// One infalling dot: its phase along the disc (0 = the outer edge, 1 = the core), its angle in
@@ -172,34 +180,46 @@ extension EnvironmentValues {
 
 /// The closed row's black hole: a tilted, spinning accretion disc around a black core. The
 /// clock arrives through `time`: pinned it draws one still frame, otherwise a timeline drives
-/// it at no more than 30 fps. The row only builds this view while work runs, so nothing ticks
-/// while the row draws no hole.
+/// it at no more than 30 fps. The row builds this view only while work runs, and an idle hole
+/// draws nothing. Its timeline pauses when the notch window is off screen (the app fades a
+/// display's notch window out with `alphaValue = 0`) or Reduce Motion asks for a still frame.
 struct FleetBlackHoleView: View {
-    let working: Int
+    let state: FleetBlackHoleState
     /// An explicit pin for previews and the docs image; the tests pin through the environment
     /// instead, because the row builds this view without naming the clock.
     var frozenTime: Double? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.fleetBlackHoleFrozenTime) private var environmentFrozenTime
+    /// The window probe behind the hole keeps this current.
+    @State private var notchVisible = true
 
     /// Reduce Motion always draws one still frame at 0, so the runtime never reads a timeline.
     private var time: Double? { reduceMotion ? 0 : frozenTime ?? environmentFrozenTime }
 
     var body: some View {
-        Group {
-            if let time {
-                FleetBlackHoleFrame(working: working, time: time, showsParticles: !reduceMotion)
-            } else {
-                // 30 fps is plenty for an 18 pt hole and keeps the notch's redraw cost honest.
-                TimelineView(.animation(minimumInterval: FleetBlackHoleMetrics.frameInterval, paused: false)) { timeline in
-                    FleetBlackHoleFrame(working: working,
-                                        time: timeline.date.timeIntervalSinceReferenceDate,
-                                        showsParticles: true)
+        if !state.isVisible {
+            EmptyView()
+        } else {
+            Group {
+                if let time {
+                    FleetBlackHoleFrame(working: state.working, time: time, showsParticles: !reduceMotion)
+                } else {
+                    // 30 fps is plenty for an 18 pt hole and keeps the notch's redraw cost honest.
+                    TimelineView(.animation(minimumInterval: FleetBlackHoleMetrics.frameInterval,
+                                            paused: !state.isAnimating(notchVisible: notchVisible, reduceMotion: reduceMotion))) { timeline in
+                        FleetBlackHoleFrame(working: state.working,
+                                            time: timeline.date.timeIntervalSinceReferenceDate,
+                                            showsParticles: true)
+                    }
+                    // The probe rides with the timeline it pauses: a still frame costs no window
+                    // query and no timer, and it never enters a rendered image (an image renderer
+                    // cannot lay out an AppKit view, so it would paint its placeholder over the hole).
+                    .background(FleetNotchVisibility(isVisible: $notchVisible))
                 }
             }
+            .frame(width: FleetBlackHoleMetrics.size, height: FleetBlackHoleMetrics.size)
+            .accessibilityHidden(true)
         }
-        .frame(width: FleetBlackHoleMetrics.size, height: FleetBlackHoleMetrics.size)
-        .accessibilityHidden(true)
     }
 }
 

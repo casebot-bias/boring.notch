@@ -142,6 +142,23 @@ final class FleetBlackHoleTests: XCTestCase {
         XCTAssertEqual(nonsense.working, 0, "and it clamps to zero rather than leaking through")
     }
 
+    /// Pins the PM finding: the hole's TimelineView must not tick while the notch window is hidden,
+    /// while nothing works, or under Reduce Motion. Each message names the case it covers.
+    func testTheTimelinePausesForAHiddenNotchAndAnIdleFleet() {
+        let working = FleetBlackHoleState.resolve(working: 4, toolRuns: [])
+        XCTAssertTrue(working.isAnimating(notchVisible: true, reduceMotion: false),
+                      "a visible notch with work running keeps the hole spinning")
+        XCTAssertFalse(working.isAnimating(notchVisible: false, reduceMotion: false),
+                       "a notch window that is off screen pauses the timeline - the app fades one out with alphaValue 0 and it must not keep drawing")
+        XCTAssertFalse(working.isAnimating(notchVisible: true, reduceMotion: true),
+                       "Reduce Motion draws one still frame and never spins")
+        XCTAssertFalse(FleetBlackHoleState.resolve(working: 0, toolRuns: []).isAnimating(notchVisible: true, reduceMotion: false),
+                       "0 working pauses the timeline")
+        let testRun = ToolRun(job: "case", kind: "test", label: nil, pid: nil, since: nil, elapsedSec: 600)
+        XCTAssertTrue(FleetBlackHoleState.resolve(working: 0, toolRuns: [testRun]).isAnimating(notchVisible: true, reduceMotion: false),
+                      "a case test run that nothing else is doing still keeps the hole alive")
+    }
+
     /// The row makes room for the hole only while work runs: shown, it is wider by exactly the
     /// 18 pt disc plus its 6 pt gap, and it paints warm pixels the idle row cannot produce.
     @MainActor

@@ -46,7 +46,7 @@ struct FleetClosedRowView: View {
                 // build). The row reserves its 18 pt only while it shows and the fade carries the
                 // width, so the text slides instead of jumping when the work starts or stops.
                 if blackHole.isVisible {
-                    FleetBlackHoleView(working: blackHole.working)
+                    FleetBlackHoleView(state: blackHole)
                         .transition(.opacity)
                 }
                 // The count and its suffix keep their shared baseline; the hole centres on the pair.
