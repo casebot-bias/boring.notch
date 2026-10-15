@@ -440,4 +440,33 @@ final class NotchWindowPlannerTests: XCTestCase {
         XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState { $0.powerStatusRow = true }))
         XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState { $0.systemHUD = true }))
     }
+
+    /// Show Fleet owns the closed notch: while the fleet row is on, media playing must not hand the
+    /// notch to the music live activity, and with the fleet row off the old order stands.
+    func testShowFleetOwnsTheClosedNotchEvenWhileMediaPlays() {
+        // fleetRow is the fleet row's own predicate: Show Fleet on, the feed reachable, and a
+        // closed height to draw in. The app builds it in `boringNotchApp`.
+        XCTAssertEqual(NotchWindowPlanner.closedNotchFace(faceState {
+            $0.musicActive = true; $0.musicLiveActivityEnabled = true; $0.fleetRow = true }),
+            .fleetRow, "media playing with Show Fleet on draws the fleet row")
+        XCTAssertEqual(NotchWindowPlanner.closedNotchFace(faceState {
+            $0.musicActive = true; $0.musicLiveActivityEnabled = true }),
+            .musicLiveActivity, "with Show Fleet off media playing still draws the live activity")
+        XCTAssertEqual(NotchWindowPlanner.closedNotchFace(faceState {
+            $0.showFace = true; $0.musicActive = true; $0.musicLiveActivityEnabled = true }),
+            .musicLiveActivity, "the live activity still beats the face branch")
+        XCTAssertEqual(NotchWindowPlanner.closedNotchFace(faceState {
+            $0.showFace = true; $0.fleetRow = true }),
+            .fleetRow, "the fleet row beats the face animation too")
+        XCTAssertEqual(NotchWindowPlanner.closedNotchFace(faceState { $0.showFace = true }),
+                       .faceAnimation)
+        XCTAssertEqual(NotchWindowPlanner.closedNotchFace(faceState()), .none,
+                       "no fleet row and neither music nor the face qualifies: no standing face")
+        XCTAssertEqual(NotchWindowPlanner.closedNotchFace(faceState {
+            $0.musicActive = true; $0.showFace = true }), .none,
+            "media playing with the live activity off draws nothing, not the face")
+        XCTAssertTrue(NotchWindowPlanner.closedFaceDrawn(faceState {
+            $0.musicActive = true; $0.fleetRow = true; $0.hideOnClosed = true }),
+            "the fleet row draws even while the notch is hidden on closed")
+    }
 }
