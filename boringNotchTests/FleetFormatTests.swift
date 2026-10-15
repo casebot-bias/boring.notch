@@ -1203,6 +1203,83 @@ final class FleetFormatTests: XCTestCase {
         }
     }
 
+    /// The notched geometry - notch width 185 pt and the camera gap with its 5 pt clearance per side
+    /// (195 pt) - is the owner's MacBook. There each wing gives its content 6 pt, so the bar hugs the
+    /// camera and is narrower than main's, which padded nothing and said "tok/s total".
+    @MainActor
+    func testTheClosedRowOnANotchedDisplayHugsTheCamera() throws {
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
+        let theme = FleetTheme(skin: .black)
+        let flat: [Double?] = Array(repeating: 0, count: 60)
+        let zeroReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0))
+        let oneFortySevenReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0))
+
+        let padding = FleetPanelMetrics.closedRowWingPadding(hasHardwareNotch: true)
+        XCTAssertEqual(padding, 6, "a display with a hardware notch gives each wing 6 pt")
+        let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: true)
+        XCTAssertEqual(gap, 195, "the 185 pt notch plus 5 pt clearance per side")
+
+        // The notched wing: the speed side's content plus its 6 pt padding. The bitmap has two
+        // wings and two pixels per point.
+        let notchedContent = FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing
+            + FleetPanelMetrics.closedNumberMinWidth + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: " tok/s", size: FleetPanelMetrics.minTextSize)
+        let wing = CGFloat(try rowBitmap(working: 0, alert: nil, reading: zeroReading, blackHole: false,
+                                         gap: 0, hasHardwareNotch: true, trend: flat).pixelsWide) / 4
+        XCTAssertEqual(wing, notchedContent + padding, accuracy: 0.5)
+
+        // The notched bar: two equal wings around the 195 pt camera gap. The working count must
+        // not move the width - the wings stay equal and the gap stays on the centre.
+        let notchedWidth = CGFloat(try rowBitmap(working: 0, alert: nil, reading: zeroReading,
+                                                 blackHole: false, gap: gap,
+                                                 hasHardwareNotch: true, trend: flat).pixelsWide) / 2
+        let busyNotchedWidth = CGFloat(try rowBitmap(working: 12, alert: nil, reading: zeroReading,
+                                                     blackHole: false, gap: gap,
+                                                     hasHardwareNotch: true, trend: flat).pixelsWide) / 2
+        XCTAssertEqual(notchedWidth, busyNotchedWidth, accuracy: 0.5,
+                       "the working count leaves the wings equal")
+        XCTAssertEqual(notchedWidth, 2 * (notchedContent + padding) + gap, accuracy: 1.0,
+                       "the render snaps to the half-point grid")
+
+        // Main's same content at this geometry, from the old rule: a 40 pt sparkline, no
+        // three-digit reserve, the "tok/s total" unit, and wings padded to the old 12 pt rule
+        // capped at the 160 pt text budget, around a gap of the notch plus 5 pt per side.
+        let oldRightContent: CGFloat = 40 + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: "0", size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium)
+            + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: " tok/s total", size: FleetPanelMetrics.minTextSize)
+        let mainNotchedWidth: CGFloat = 2 * min(FleetPanelMetrics.closedRowTextWidth, oldRightContent) + (185 + 10)
+        XCTAssertLessThan(notchedWidth, mainNotchedWidth,
+                          "the notched bar measures \(notchedWidth) pt against main's \(mainNotchedWidth) pt "
+                            + "(\(notchedWidth / mainNotchedWidth) of it); the 75 % the follow-up asked for is "
+                            + "out of reach at this content: 75 % of main's width would need a 70.1 pt content "
+                            + "while this one measures 94.8 pt (sparkline 24 + three-digit reserve 25.2 + "
+                            + "\" tok/s\" 39.6 + 6 pt of spacing)")
+
+        // Request the notched preview with
+        // `TEST_RUNNER_FLEET_CLOSED_NOTCHED_PREVIEW=/tmp/notched.png xcodebuild test`.
+        if let previewPath = ProcessInfo.processInfo.environment["FLEET_CLOSED_NOTCHED_PREVIEW"] {
+            let notchedGap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: true)
+            let strip = ImageRenderer(content: VStack(spacing: 6) {
+                FleetClosedRowView(working: 0, alert: nil, reading: zeroReading, theme: theme,
+                                   gapWidth: notchedGap, hasHardwareNotch: true, height: closedBarHeight, trend: flat)
+                FleetClosedRowView(working: 12, alert: nil, reading: oneFortySevenReading, theme: theme,
+                                   gapWidth: notchedGap, hasHardwareNotch: true, height: closedBarHeight, trend: flat)
+                FleetClosedRowView(working: 2, alert: "3 critical", reading: zeroReading, theme: theme,
+                                   gapWidth: notchedGap, hasHardwareNotch: true, height: closedBarHeight, trend: flat)
+            }.padding(.horizontal, 14).padding(.vertical, 6).background(Color.black))
+            strip.scale = 3
+            XCTAssertNotNil(strip.nsImage, "The notched preview rendered.")
+            let image = try XCTUnwrap(strip.nsImage)
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)))
+            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)),
+                             "The notched preview wrote.")
+        }
+    }
+
     // Equal wings keep the middle centred even when the working count changes.
     @MainActor
     func testTheClosedRowWingsAreEqualSoTheMiddleStaysCentred() throws {
@@ -1333,12 +1410,13 @@ final class FleetFormatTests: XCTestCase {
     /// The closed row at `closedBarHeight` on black, at scale 2: the frame the closed bar draws in.
     @MainActor
     private func rowBitmap(working: Int, alert: String?, reading: FleetFormat.FleetClosedRightReading?,
-                           blackHole: Bool, gap: CGFloat = 200, trend: [Double?]? = nil) throws -> NSBitmapImageRep {
+                           blackHole: Bool, gap: CGFloat = 200, hasHardwareNotch: Bool = false,
+                           trend: [Double?]? = nil) throws -> NSBitmapImageRep {
         // The rows ask FleetType for the mono face, whose registration is memoised once per process.
         FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
         let renderer = ImageRenderer(content: FleetClosedRowView(
             working: working, alert: alert, reading: reading, theme: FleetTheme(skin: .black),
-            gapWidth: gap, height: closedBarHeight, trend: trend,
+            gapWidth: gap, hasHardwareNotch: hasHardwareNotch, height: closedBarHeight, trend: trend,
             blackHole: blackHole ? FleetBlackHoleState(working: working, isVisible: true) : .hidden
         ).background(Color.black))
         renderer.scale = 2
