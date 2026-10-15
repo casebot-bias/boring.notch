@@ -96,6 +96,8 @@ enum NotchWindowPlanner {
     /// open notch, the hello animation, a power-status row, a system HUD, the music live activity
     /// or the face animation (both suppressed while `hideOnClosed`), and finally the fleet row.
     /// The debug log reports this, so it must not claim a face the view would not draw.
+    /// `fleetRow` is the fleet row's own predicate (Show Fleet on, the feed reachable, a closed
+    /// height to draw in), and it outranks `musicActive` and `showFace`: Show Fleet owns the notch.
     struct NotchFaceState: Equatable {
         var isOpen = false
         var helloAnimation = false
@@ -108,14 +110,36 @@ enum NotchWindowPlanner {
         var fleetRow = false
     }
 
+    /// The closed notch's standing faces, in the order the view picks them. Show Fleet owns the
+    /// closed notch while it is on: the owner wants the device activity and the speed reading back
+    /// even while media plays, so the music live activity and the face animation only take the notch
+    /// with the fleet row off.
+    enum ClosedNotchFace: Equatable {
+        case musicLiveActivity
+        case faceAnimation
+        case fleetRow
+        /// Neither of the three qualifies: the closed notch draws no standing face at all.
+        case none
+    }
+
+    static func closedNotchFace(_ state: NotchFaceState) -> ClosedNotchFace {
+        if state.fleetRow { return .fleetRow }
+        // While media plays the face branch can never draw - it asks for a player that is idle and
+        // stopped - so a player with the live activity off (or the notch hidden on closed) leaves
+        // the closed notch with no standing face at all.
+        if state.musicActive {
+            return state.musicLiveActivityEnabled && !state.hideOnClosed ? .musicLiveActivity : .none
+        }
+        if state.showFace, !state.hideOnClosed { return .faceAnimation }
+        return .none
+    }
+
     static func closedFaceDrawn(_ state: NotchFaceState) -> Bool {
         if state.isOpen { return true }
         if state.helloAnimation { return true }
         if state.powerStatusRow { return true }
         if state.systemHUD { return true }
-        if state.musicActive { return state.musicLiveActivityEnabled && !state.hideOnClosed }
-        if state.showFace { return !state.hideOnClosed }
-        return state.fleetRow
+        return closedNotchFace(state) != .none
     }
 
     /// Screen list -> windows mapping.

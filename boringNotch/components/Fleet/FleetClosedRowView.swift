@@ -30,26 +30,42 @@ struct FleetClosedRowView: View {
     /// The speed trend behind the sparkline, 10 s apart, oldest first. nil draws no sparkline (the
     /// job-count reading has none); an empty trend still draws, flat at 0.
     var trend: [Double?]? = nil
+    /// The black hole's place in this row, resolved by `FleetClosedIndicator` from the fleet's
+    /// working count and the case's running tool runs. `.hidden` is a row with no hole.
+    var blackHole: FleetBlackHoleState = .hidden
 
     var body: some View {
         // Both sides take the wider text's width so the camera gap sits on the physical notch's
         // centre; unequal sides would push the gap off-centre and the notch would cover text.
         FleetEqualSidesLayout {
-            // Left block: "2 working", plus "· 1 down" / "· 3 critical" only when something is wrong.
-            // All linked is the normal case and is not shown: the notch stays narrow (owner request).
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                workingLabel
-                if let alert {
-                    Text("·")
-                        .font(.system(size: 12))
-                        .foregroundColor(theme.dim)
-                    Text(alert)
-                        .font(FleetType.mono(size: 11))
-                        .foregroundColor(theme.hotText)
+            // Left block: the black hole while the fleet works, "2 working" beside it, plus
+            // "· 1 down" / "· 3 critical" only when something is wrong. All linked is the normal
+            // case and is not shown: the notch stays narrow (owner request).
+            HStack(spacing: FleetBlackHoleMetrics.gap) {
+                // The hole leads the count while anything works (or the case waits on a test or a
+                // build). The row reserves its 18 pt only while it shows and the fade carries the
+                // width, so the text slides instead of jumping when the work starts or stops.
+                if blackHole.isVisible {
+                    FleetBlackHoleView(state: blackHole)
+                        .transition(.opacity)
                 }
+                // The count and its suffix keep their shared baseline; the hole centres on the pair.
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    workingLabel
+                    if let alert {
+                        Text("·")
+                            .font(.system(size: 12))
+                            .foregroundColor(theme.dim)
+                        Text(alert)
+                            .font(FleetType.mono(size: 11))
+                            .foregroundColor(theme.hotText)
+                    }
+                }
+                .lineLimit(1)
+                .fixedSize()
             }
-            .lineLimit(1)
             .fixedSize()
+            .animation(.easeInOut(duration: FleetBlackHoleMetrics.fadeSeconds), value: blackHole.isVisible)
 
             // Hardware-notch gap spacer: notch width plus 5 pt clearance per side
             Rectangle()
