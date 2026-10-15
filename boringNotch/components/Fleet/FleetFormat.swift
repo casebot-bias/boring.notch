@@ -713,6 +713,13 @@ enum FleetPanelMetrics {
     /// took its budget from the sparkline's height; 24 pt still shows the ten-minute trend, and it pays
     /// for the number's three-digit reserve (`closedNumberMinWidth`).
     static let closedSparklineWidth: CGFloat = 24
+    /// Whether the closed row draws its sparkline in this geometry. It draws it where the bar has the
+    /// room, and drops it beside a camera cutout: there the 195 pt camera gap is fixed, the wings have
+    /// to reach 75 % of main's width (owner follow-up), and the sparkline's 24 pt plus its spacing is
+    /// the only block big enough to give. The number and the unit carry the reading on their own.
+    static func closedRowShowsSparkline(hasHardwareNotch: Bool) -> Bool {
+        !hasHardwareNotch
+    }
     /// Short enough to sit inside the speed number's line box without pushing the row taller. The
     /// height follows the bar's 70 % (0.7 x 14), so the sparkline stays inside the shorter bar.
     static let closedSparklineHeight: CGFloat = 10

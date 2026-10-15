@@ -87,9 +87,12 @@ struct FleetClosedRowView: View {
             // "tok/s total"); while only cloud jobs run (the case's model reports no tok/s) the row
             // shows how many jobs run. No reading at all leaves the side empty.
             if let reading {
-                // The sparkline sits left of the number, so the reading reads as the trend, then the value.
+                // The sparkline sits left of the number, so the reading reads as the trend, then the
+                // value - where the geometry has room for it (see
+                // `FleetPanelMetrics.closedRowShowsSparkline`): beside a camera cutout the row drops
+                // it, and the number and the unit carry the reading alone.
                 HStack(alignment: .center, spacing: FleetPanelMetrics.closedSpeedSpacing) {
-                    if let trend {
+                    if let trend, FleetPanelMetrics.closedRowShowsSparkline(hasHardwareNotch: hasHardwareNotch) {
                         FleetClosedSparkline(values: FleetFormat.sparklineSeries(trend), theme: theme)
                             .frame(width: FleetPanelMetrics.closedSparklineWidth,
                                    height: FleetPanelMetrics.closedSparklineHeight)
