@@ -1258,6 +1258,75 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(zeroWidth, bigWidth, accuracy: 0.5)
     }
 
+    /// The closed row animates its whole width on one key. Four digits pass the three-digit reserve and
+    /// really widen the bar, so that change must move the bar, while the reserve still holds 0 -> 147.
+    @MainActor
+    func testTheClosedRowWidthAnimationCoversEveryContentChange() throws {
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
+        let theme = FleetTheme(skin: .black)
+        let flat: [Double?] = Array(repeating: 0, count: 60)
+        let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: false)
+        let zeroReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0, total: true))
+        let oneFortySevenReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0, total: true))
+        let ninetyNineNineReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 999, lastAt: nil), jobs: 0, total: true))
+        let thousandReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 1000, lastAt: nil), jobs: 0, total: true))
+
+        // The bar's width in points: the bitmap has two pixels per point.
+        func width(_ reading: FleetFormat.FleetClosedRightReading) throws -> CGFloat {
+            CGFloat(try rowBitmap(working: 0, alert: nil, reading: reading, blackHole: false,
+                                  gap: 2 * FleetPanelMetrics.closedRowSidePadding, trend: flat).pixelsWide) / 2
+        }
+
+        // The row is two wings, and both wings are as wide as the wider side, so each digit the number
+        // grows past the reserve moves the bar twice: once per wing.
+        let thousandWidth = try width(thousandReading)
+        let ninetyNineNineWidth = try width(ninetyNineNineReading)
+        let extraDigitWidth = FleetType.monoWidth(text: "1000", size: FleetPanelMetrics.closedSpeedNumberSize,
+                                                  weight: .medium) - FleetPanelMetrics.closedNumberMinWidth
+        XCTAssertEqual(thousandWidth - ninetyNineNineWidth, 2 * extraDigitWidth, accuracy: 1.0,
+                       "999 -> 1000 moves the bar by two extra digit widths, one per wing")
+
+        // A rate inside the three-digit reserve does not move the bar, so the animation has nothing to cover there.
+        let zeroWidth = try width(zeroReading)
+        let oneFortySevenWidth = try width(oneFortySevenReading)
+        XCTAssertEqual(zeroWidth, oneFortySevenWidth, accuracy: 0.5,
+                       "0 -> 147 stays inside the three-digit reserve and does not move the bar")
+
+        // The animation watches `widthKey`, so the key must change whenever any input the width comes from changes.
+        func makeRow(working: Int, alert: String?, reading: FleetFormat.FleetClosedRightReading?,
+                     toolRuns: [ToolRun], blackHole: FleetBlackHoleState) -> FleetClosedRowView {
+            FleetClosedRowView(working: working, alert: alert, reading: reading, theme: theme,
+                               gapWidth: gap, height: closedBarHeight, toolRuns: toolRuns, trend: flat,
+                               blackHole: blackHole)
+        }
+        let baseRow = makeRow(working: 0, alert: nil, reading: zeroReading, toolRuns: [], blackHole: .hidden)
+        XCTAssertEqual(baseRow.widthKey,
+                       makeRow(working: 0, alert: nil, reading: zeroReading, toolRuns: [], blackHole: .hidden).widthKey,
+                       "two identical rows share one width key")
+        XCTAssertNotEqual(baseRow.widthKey,
+                          makeRow(working: 0, alert: nil, reading: thousandReading, toolRuns: [], blackHole: .hidden).widthKey,
+                          "the reading crossing the three-digit reserve changes the width key")
+        XCTAssertNotEqual(baseRow.widthKey,
+                          makeRow(working: 12, alert: nil, reading: zeroReading, toolRuns: [], blackHole: .hidden).widthKey,
+                          "the working count changes the width key")
+        XCTAssertNotEqual(baseRow.widthKey,
+                          makeRow(working: 0, alert: "3 critical", reading: zeroReading, toolRuns: [], blackHole: .hidden).widthKey,
+                          "the alert changes the width key")
+        XCTAssertNotEqual(baseRow.widthKey,
+                          makeRow(working: 0, alert: nil, reading: zeroReading,
+                                  toolRuns: [run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 600)],
+                                  blackHole: .hidden).widthKey,
+                          "the working count's tool runs change the width key")
+        XCTAssertNotEqual(baseRow.widthKey,
+                          makeRow(working: 0, alert: nil, reading: zeroReading, toolRuns: [],
+                                  blackHole: FleetBlackHoleState(working: 4, isVisible: true)).widthKey,
+                          "the black hole changes the width key")
+    }
+
     /// The closed row at `closedBarHeight` on black, at scale 2: the frame the closed bar draws in.
     @MainActor
     private func rowBitmap(working: Int, alert: String?, reading: FleetFormat.FleetClosedRightReading?,

@@ -657,6 +657,11 @@ enum FleetPanelMetrics {
     static let closedRowSidePadding: CGFloat = 12
     /// One wing's ceiling: the text budget plus that padding. No wing grows past it.
     static var closedRowSideWidth: CGFloat { closedRowTextWidth + closedRowSidePadding }
+    /// Seconds the closed row's width takes to follow a content change. The reading's three-digit
+    /// reserve absorbs "0" -> "147"; a longer number ("999" -> "1000"), a longer count or alert, the
+    /// case's run words or the black hole's slice still move the bar, and this is the animation that
+    /// carries them instead of a jump.
+    static let closedRowWidthSeconds: Double = 0.3
     /// One wing's width: the wider of the two sides' content plus the padding, never past the cap.
     static func closedRowSide(left: CGFloat, right: CGFloat) -> CGFloat {
         min(closedRowSideWidth, max(left, right) + closedRowSidePadding)

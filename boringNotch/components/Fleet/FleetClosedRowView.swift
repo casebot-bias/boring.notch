@@ -70,7 +70,6 @@ struct FleetClosedRowView: View {
                 .fixedSize()
             }
             .fixedSize()
-            .animation(.easeInOut(duration: FleetBlackHoleMetrics.fadeSeconds), value: blackHole.isVisible)
 
             // Hardware-notch gap spacer: notch width plus 5 pt clearance per side
             Rectangle()
@@ -108,6 +107,11 @@ struct FleetClosedRowView: View {
             }
         }
         .frame(height: height)
+        // Anything that can move the row's width animates: the reading's three-digit reserve absorbs
+        // "0" -> "147", but a longer number ("999" -> "1000"), a longer count or alert, the case's run
+        // words or the black hole's slice still change the width. Watching one key over all of them
+        // carries the change instead of snapping the bar.
+        .animation(.easeInOut(duration: FleetPanelMetrics.closedRowWidthSeconds), value: widthKey)
     }
 
     /// The left block's lead: "2 working" while anything works, otherwise the case's running test or
@@ -144,6 +148,16 @@ struct FleetClosedRowView: View {
                 .font(.system(size: FleetPanelMetrics.minTextSize))
                 .foregroundColor(theme.text)
         }
+    }
+
+    /// Everything the row's width depends on, in one comparable value: the count, the alert, the
+    /// case's running tool run (its number, word and age), the reading and the black hole's slice.
+    /// The width animation watches this, so no content change can move the bar without an animation.
+    var widthKey: String {
+        let run = FleetFormat.closedToolRun(toolRuns)
+        return [String(working), alert ?? "", run?.number ?? "", run?.word ?? "", run?.age ?? "",
+                reading?.number ?? "", reading?.unit ?? "", String(blackHole.isVisible)]
+            .joined(separator: "|")
     }
 }
 
