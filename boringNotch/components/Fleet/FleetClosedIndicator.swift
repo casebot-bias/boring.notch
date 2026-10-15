@@ -26,16 +26,25 @@ struct FleetClosedIndicator: View {
             // Register here so the width helper doesn't pin the fallback path (memoised, free after first call).
             let _ = FleetType.registerBundledFonts()
             let model = store.panelModel
+            // The geometry this bar draws in: a display with a camera cutout keeps the gap the cutout
+            // needs and gives each wing 6 pt of padding, so the closed bar hugs the camera there.
+            let hasHardwareNotch = (vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) }?
+                .safeAreaInsets.top ?? 0) > 0
             // Both sides take the wider text's width so the camera gap sits on the physical notch's
             // centre; unequal sides would push the gap off-centre and the notch would cover text.
             FleetClosedRowView(
                 working: model.workingCount,
                 alert: FleetFormat.closedAlert(critical: model.criticalCount, down: model.downCount),
                 reading: FleetFormat.closedRightReading(speed: model.speed,
-                                                       jobs: model.runningTaskCount,
-                                                       total: model.speedIsTotal),
+                                                       jobs: model.runningTaskCount),
                 theme: theme,
-                gapWidth: vm.closedNotchSize.width + 10,
+                // The middle of the closed row: a display with a hardware notch keeps the camera gap
+                // (`notchWidth + 10`, the cutout plus 5 pt of clearance per side); a display without one has
+                // no cutout to clear, so the middle is one padding wide and the bar fits its content.
+                gapWidth: FleetPanelMetrics.closedRowGap(
+                    notchWidth: vm.closedNotchSize.width,
+                    hasHardwareNotch: hasHardwareNotch),
+                hasHardwareNotch: hasHardwareNotch,
                 // The bar is 70 % of the closed notch: the notch's own height left it hanging well below the menu bar.
                 height: FleetPanelMetrics.closedBarHeight(vm.effectiveClosedNotchHeight),
                 toolRuns: model.toolRuns,

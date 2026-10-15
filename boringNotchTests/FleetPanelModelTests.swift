@@ -350,8 +350,8 @@ final class FleetPanelModelTests: XCTestCase {
         // No speed anywhere in this payload and one running job: the job count stands in as the
         // closed row's reading (the helper returns an optional, and a job count is one).
         let closed = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: model.speed, jobs: model.runningTaskCount,
-                                           total: model.speedIsTotal),
+            FleetFormat.closedRightReading(speed: model.speed,
+                                           jobs: model.runningTaskCount),
             "the running job is a reading")
         XCTAssertEqual(closed.number, "1")
         XCTAssertEqual(closed.unit, " job")

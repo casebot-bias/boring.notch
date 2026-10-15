@@ -14,6 +14,10 @@ import SwiftUI
 /// build takes the count's place while nothing works), the hardware gap in the middle and the speed
 /// reading on the right. Split out of `FleetClosedIndicator` (which owns the store, the skin default
 /// and the view model) so the row itself can be rendered without them.
+/// Both wings are as wide as the wider side's content plus the display's padding (6 pt beside a camera
+/// cutout, 12 pt otherwise), so the row is only as wide as its text needs. The text hugs the middle
+/// either way: the camera gap on a display with a hardware notch, and one padding wide without one,
+/// stays on the row's centre, over the camera.
 /// The bar draws at 70 % of the closed notch (`FleetPanelMetrics.closedBarHeight`), so every
 /// label in it sits on the fleet's 11 pt floor (`FleetPanelMetrics.minTextSize`).
 struct FleetClosedRowView: View {
@@ -25,6 +29,9 @@ struct FleetClosedRowView: View {
     let theme: FleetTheme
     /// The hardware notch plus 5 pt clearance per side.
     let gapWidth: CGFloat
+    /// The geometry this row draws in: a display with a hardware notch gives each wing only 6 pt of
+    /// padding, so the bar hugs the camera and stays narrow.
+    var hasHardwareNotch: Bool = false
     let height: CGFloat
     /// The case's running tests and builds. Read only while nothing works: the left side then names
     /// the run ("testing · 10m", "2 running") instead of "0 working".
@@ -37,9 +44,12 @@ struct FleetClosedRowView: View {
     var blackHole: FleetBlackHoleState = .hidden
 
     var body: some View {
-        // Both sides take the wider text's width so the camera gap sits on the physical notch's
-        // centre; unequal sides would push the gap off-centre and the notch would cover text.
-        FleetEqualSidesLayout {
+        // Both sides take the wider text's width plus the padding so the camera gap sits on the physical
+        // notch's centre; unequal sides would push the gap off-centre and the notch would cover text.
+        // The wing padding follows the display: 6 pt beside a camera cutout, 12 pt where the bar can
+        // afford the air. The layout is told, so the equal-wings rule keeps the gap on the centre.
+        let sidePadding = FleetPanelMetrics.closedRowWingPadding(hasHardwareNotch: hasHardwareNotch)
+        FleetEqualSidesLayout(sidePadding: sidePadding) {
             // Left block: the black hole while the fleet works, "2 working" beside it, plus
             // "· 1 down" / "· 3 critical" only when something is wrong. All linked is the normal
             // case and is not shown: the notch stays narrow (owner request).
@@ -67,7 +77,6 @@ struct FleetClosedRowView: View {
                 .fixedSize()
             }
             .fixedSize()
-            .animation(.easeInOut(duration: FleetBlackHoleMetrics.fadeSeconds), value: blackHole.isVisible)
 
             // Hardware-notch gap spacer: notch width plus 5 pt clearance per side
             Rectangle()
@@ -78,7 +87,10 @@ struct FleetClosedRowView: View {
             // "tok/s total"); while only cloud jobs run (the case's model reports no tok/s) the row
             // shows how many jobs run. No reading at all leaves the side empty.
             if let reading {
-                // The sparkline sits left of the number, so the reading reads as the trend, then the value.
+                // The sparkline sits left of the number, so the reading reads as the trend, then
+                // the value. It is 24 pt in every geometry: the owner keeps the trend display on a
+                // notched MacBook too, where it costs 54 pt of the bar (see FleetPanelMetrics.
+                // closedSparklineWidth).
                 HStack(alignment: .center, spacing: FleetPanelMetrics.closedSpeedSpacing) {
                     if let trend {
                         FleetClosedSparkline(values: FleetFormat.sparklineSeries(trend), theme: theme)
@@ -90,6 +102,9 @@ struct FleetClosedRowView: View {
                             .font(FleetType.mono(size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium))
                             .foregroundColor(reading.dim ? theme.dim : theme.accent)
                             .lineLimit(1)
+                            // At least three digits wide, filled from the unit's side: the number grows into its own
+                            // reserve instead of moving the sparkline, the wing and so the whole bar.
+                            .frame(minWidth: FleetPanelMetrics.closedNumberMinWidth, alignment: .trailing)
                         Text(reading.unit)
                             .font(FleetType.mono(size: FleetPanelMetrics.minTextSize))
                             .foregroundColor(theme.dim)
@@ -102,6 +117,11 @@ struct FleetClosedRowView: View {
             }
         }
         .frame(height: height)
+        // Anything that can move the row's width animates: the reading's three-digit reserve absorbs
+        // "0" -> "147", but a longer number ("999" -> "1000"), a longer count or alert, the case's run
+        // words or the black hole's slice still change the width. Watching one key over all of them
+        // carries the change instead of snapping the bar.
+        .animation(.easeInOut(duration: FleetPanelMetrics.closedRowWidthSeconds), value: widthKey)
     }
 
     /// The left block's lead: "2 working" while anything works, otherwise the case's running test or
@@ -138,6 +158,16 @@ struct FleetClosedRowView: View {
                 .font(.system(size: FleetPanelMetrics.minTextSize))
                 .foregroundColor(theme.text)
         }
+    }
+
+    /// Everything the row's width depends on, in one comparable value: the count, the alert, the
+    /// case's running tool run (its number, word and age), the reading and the black hole's slice.
+    /// The width animation watches this, so no content change can move the bar without an animation.
+    var widthKey: String {
+        let run = FleetFormat.closedToolRun(toolRuns)
+        return [String(working), alert ?? "", run?.number ?? "", run?.word ?? "", run?.age ?? "",
+                reading?.number ?? "", reading?.unit ?? "", String(blackHole.isVisible)]
+            .joined(separator: "|")
     }
 }
 
@@ -179,21 +209,26 @@ struct FleetClosedSparkline: View {
 
 // MARK: - Equal Sides Layout
 
-/// Lays out [left, gap, right] with both sides as wide as the wider of the two (see
-/// `FleetPanelMetrics.closedRowSide`): the left text hugs the gap from the left, the right text from
-/// the right, and the gap stays on the row's centre, over the camera.
+/// Lays out [left, gap, right] with both wings as wide as the wider side's content plus the display's
+/// padding (see `FleetPanelMetrics.closedRowSide`): the left text
+/// hugs the gap from the left, the right text from the right, and the gap stays on the row's centre,
+/// over the camera. The row's total width comes from `FleetPanelMetrics.closedRowWidth`.
 struct FleetEqualSidesLayout: Layout {
+    /// The wing padding on each side, chosen by the view from the display's hardware notch.
+    let sidePadding: CGFloat
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard subviews.count == 3 else { return .zero }
         let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let side = FleetPanelMetrics.closedRowSide(left: sizes[0].width, right: sizes[2].width)
-        return CGSize(width: side * 2 + sizes[1].width, height: sizes.map(\.height).max() ?? 0)
+        return CGSize(width: FleetPanelMetrics.closedRowWidth(left: sizes[0].width, right: sizes[2].width,
+                                                              gap: sizes[1].width, padding: sidePadding),
+                      height: sizes.map(\.height).max() ?? 0)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         guard subviews.count == 3 else { return }
         let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let side = FleetPanelMetrics.closedRowSide(left: sizes[0].width, right: sizes[2].width)
+        let side = FleetPanelMetrics.closedRowSide(left: sizes[0].width, right: sizes[2].width, padding: sidePadding)
         let leftWidth = min(sizes[0].width, side)
         let rightWidth = min(sizes[2].width, side)
         subviews[0].place(at: CGPoint(x: bounds.minX + side - leftWidth, y: bounds.midY), anchor: .leading,

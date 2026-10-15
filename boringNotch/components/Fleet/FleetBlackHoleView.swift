@@ -16,8 +16,6 @@ import SwiftUI
 enum FleetBlackHoleMetrics {
     static let size: CGFloat = 18
     static let gap: CGFloat = 6
-    /// The row's width fade, so the text slides rather than jumping when work starts or stops.
-    static let fadeSeconds: Double = 0.3
     static let maxFPS: Double = 30
     static var frameInterval: Double { 1 / maxFPS }
     /// Seconds for the disc's conic sweep to come back round; the spin multiplies it.
