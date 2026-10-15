@@ -642,10 +642,16 @@ final class FleetFormatTests: XCTestCase {
     }
 
     /// The row draws its sparkline at exactly this frame, so the number beside it never moves the
-    /// notch: the strip the preview shows is 40 pt of trend and 14 pt tall.
+    /// notch: the strip the preview shows is 40 pt of trend, 10 pt tall - the 0.7 x 14 share rounded
+    /// to a whole point, so the sparkline stays inside the shorter bar. The width is the bar's width
+    /// budget and does not change, because the cut is height-only.
     func testClosedSparklineFrameIsItsFixedSize() {
         XCTAssertEqual(FleetPanelMetrics.closedSparklineWidth, 40)
-        XCTAssertEqual(FleetPanelMetrics.closedSparklineHeight, 14)
+        XCTAssertEqual(FleetPanelMetrics.closedSparklineHeight, 10,
+                       "0.7 x 14, rounded to a whole point")
+        XCTAssertLessThan(FleetPanelMetrics.closedSparklineHeight,
+                          FleetPanelMetrics.closedBarHeight(30),
+                          "and it fits inside the closed bar")
     }
 
     // MARK: - Closed sparkline series and speed grace
@@ -973,6 +979,10 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)), "the preview wrote")
     }
 
+    /// The closed notch the job machine's display produces: a 30 pt menu bar. The fleet bar is 70 % of it.
+    private let closedNotch: CGFloat = 30
+    private var closedBarHeight: CGFloat { FleetPanelMetrics.closedBarHeight(closedNotch) }
+
     /// The closed row prints its speed number in the skin's accent - the black skin's only green -
     /// while a fleet that never measured anything hands the row no reading, so the row paints no
     /// accent at all and the busy row's green pixels can only come from that number.
@@ -1003,7 +1013,7 @@ final class FleetFormatTests: XCTestCase {
 
         func bitmap(for reading: FleetFormat.FleetClosedRightReading?) throws -> NSBitmapImageRep {
             let renderer = ImageRenderer(content: FleetClosedRowView(
-                working: 2, alert: nil, reading: reading, theme: theme, gapWidth: 200, height: 28
+                working: 2, alert: nil, reading: reading, theme: theme, gapWidth: 200, height: closedBarHeight
             ).background(Color.black))
             renderer.scale = 2
             let image = try XCTUnwrap(renderer.nsImage, "the closed row rendered")
@@ -1049,10 +1059,10 @@ final class FleetFormatTests: XCTestCase {
             let toolRunTrend: [Double?] = Array(repeating: nil, count: 60)
             let toolRunStrip = ImageRenderer(content: VStack(spacing: 6) {
                 FleetClosedRowView(working: 0, alert: nil, reading: keptReading, theme: theme,
-                                   gapWidth: 200, height: 28,
+                                   gapWidth: 200, height: closedBarHeight,
                                    toolRuns: [testRun], trend: toolRunTrend)
                 FleetClosedRowView(working: 0, alert: nil, reading: zeroReading, theme: theme,
-                                   gapWidth: 200, height: 28,
+                                   gapWidth: 200, height: closedBarHeight,
                                    toolRuns: [testRun], trend: toolRunTrend)
                 HStack(spacing: 20) {
                     FleetCaseBoxView(lane: origin(.idle, toolRuns: [testRun]), theme: theme)
@@ -1071,14 +1081,16 @@ final class FleetFormatTests: XCTestCase {
         }
 
         // A preview strip, only on request: `FLEET_CLOSED_ROW_PREVIEW=/tmp/row.png xcodebuild test`.
+        // Its three rows are the closed bar at its new height (`closedBarHeight`, 70 % of the closed
+        // notch), each with one reading: the live speed, the kept value and the idle row.
         if let previewPath = ProcessInfo.processInfo.environment["FLEET_CLOSED_ROW_PREVIEW"] {
             let strip = ImageRenderer(content: VStack(spacing: 6) {
                 FleetClosedRowView(working: 2, alert: nil, reading: speedReading, theme: theme,
-                                   gapWidth: 200, height: 28)
+                                   gapWidth: 200, height: closedBarHeight)
                 FleetClosedRowView(working: 2, alert: nil, reading: lastValueReading, theme: theme,
-                                   gapWidth: 200, height: 28)
+                                   gapWidth: 200, height: closedBarHeight)
                 FleetClosedRowView(working: 2, alert: nil, reading: idleReading, theme: theme,
-                                   gapWidth: 200, height: 28)
+                                   gapWidth: 200, height: closedBarHeight)
             }.padding(16).background(Color.black))
             strip.scale = 3
             let stripImage = try XCTUnwrap(strip.nsImage, "the preview strip rendered")
@@ -1087,6 +1099,67 @@ final class FleetFormatTests: XCTestCase {
             let png = try XCTUnwrap(stripBitmap.representation(using: .png, properties: [:]), "preview PNG")
             XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)), "the preview wrote")
         }
+    }
+
+    /// The bar is 70 % of the closed notch (owner request: it hung well below the menu bar), and the
+    /// rendered row is exactly that tall - the text must fit inside it.
+    @MainActor
+    func testTheClosedBarIsSeventyPercentOfTheClosedNotch() throws {
+        XCTAssertEqual(FleetPanelMetrics.closedBarHeightScale, 0.7, accuracy: 0.0001)
+        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(30), 21, accuracy: 0.0001)
+        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(38), 26.6, accuracy: 0.0001)
+        // the bitmap is the rendered row at scale 2: 42 px for 21 pt
+        let speedReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2, total: true),
+            "a reported speed has a reading")
+        XCTAssertEqual(try rowBitmap(working: 2, alert: nil, reading: speedReading, blackHole: false).pixelsHigh,
+                       42)
+    }
+
+    /// The shorter bar must clip no text: the busy row at `closedBarHeight` puts no ink in its topmost
+    /// or bottommost two pixel rows, so the glyphs and the sparkline stay inside the bar.
+    @MainActor
+    func testTheShorterBarClipsNoTextOrSparkline() throws {
+        let speedReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2, total: true),
+            "a reported speed has a reading")
+        let flatTrend: [Double?] = Array(repeating: 0, count: 60)
+        let bitmap = try rowBitmap(working: 2, alert: "3 critical", reading: speedReading, blackHole: false,
+                                   trend: flatTrend)
+        XCTAssertEqual(bitmap.pixelsHigh, 42, "21 pt at scale 2")
+
+        // Ink is any colour channel above 0.05; the black background is 0 in every channel.
+        func hasInk(inRows rows: Range<Int>) -> Bool {
+            for y in rows {
+                for x in 0..<bitmap.pixelsWide {
+                    guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                    if pixel.redComponent > 0.05 || pixel.greenComponent > 0.05 || pixel.blueComponent > 0.05 {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+        XCTAssertFalse(hasInk(inRows: 0..<2), "no ink in the topmost two pixel rows")
+        XCTAssertFalse(hasInk(inRows: (bitmap.pixelsHigh - 2)..<bitmap.pixelsHigh),
+                       "no ink in the bottommost two pixel rows")
+    }
+
+    /// The closed row at `closedBarHeight` on black, at scale 2: the frame the closed bar draws in.
+    @MainActor
+    private func rowBitmap(working: Int, alert: String?, reading: FleetFormat.FleetClosedRightReading?,
+                           blackHole: Bool, trend: [Double?]? = nil) throws -> NSBitmapImageRep {
+        // The rows ask FleetType for the mono face, whose registration is memoised once per process.
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
+        let renderer = ImageRenderer(content: FleetClosedRowView(
+            working: working, alert: alert, reading: reading, theme: FleetTheme(skin: .black),
+            gapWidth: 200, height: closedBarHeight, trend: trend,
+            blackHole: blackHole ? FleetBlackHoleState(working: working, isVisible: true) : .hidden
+        ).background(Color.black))
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.nsImage, "the closed row rendered")
+        return try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)),
+                             "closed row bitmap")
     }
 
     /// The CURRENT WORK column is the only place a waiting run's full command appears, so a leaf

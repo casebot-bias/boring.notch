@@ -191,10 +191,12 @@ final class FleetBlackHoleTests: XCTestCase {
         func frozen<V: View>(_ view: V) -> some View { view.environment(\.fleetBlackHoleFrozenTime, 1.7) }
 
         let shownRow = try bitmap(frozen(FleetClosedRowView(
-            working: 4, alert: nil, reading: nil, theme: theme, gapWidth: 80, height: 28,
+            working: 4, alert: nil, reading: nil, theme: theme, gapWidth: 80,
+            // 30 pt is the job machine's closed notch; the fleet bar is 70% of that
+            height: FleetPanelMetrics.closedBarHeight(30),
             blackHole: shown).background(Color.black)))
         let hiddenRow = try bitmap(frozen(FleetClosedRowView(
-            working: 4, alert: nil, reading: nil, theme: theme, gapWidth: 80, height: 28,
+            working: 4, alert: nil, reading: nil, theme: theme, gapWidth: 80, height: FleetPanelMetrics.closedBarHeight(30),
             blackHole: .hidden).background(Color.black)))
 
         let reserved = shownRow.pixelsWide - hiddenRow.pixelsWide
@@ -220,7 +222,7 @@ final class FleetBlackHoleTests: XCTestCase {
                                                jobs: 4, total: true),
                 "a reported speed has a reading")
             let preview = ImageRenderer(content: FleetClosedRowView(
-                working: 4, alert: nil, reading: reading, theme: theme, gapWidth: 200, height: 28,
+                working: 4, alert: nil, reading: reading, theme: theme, gapWidth: 200, height: FleetPanelMetrics.closedBarHeight(30),
                 blackHole: shown)
                 .environment(\.fleetBlackHoleFrozenTime, 1.7)
                 .padding(16)

@@ -14,6 +14,8 @@ import SwiftUI
 /// build takes the count's place while nothing works), the hardware gap in the middle and the speed
 /// reading on the right. Split out of `FleetClosedIndicator` (which owns the store, the skin default
 /// and the view model) so the row itself can be rendered without them.
+/// The bar draws at 70 % of the closed notch (`FleetPanelMetrics.closedBarHeight`), so every
+/// label in it sits on the fleet's 11 pt floor (`FleetPanelMetrics.minTextSize`).
 struct FleetClosedRowView: View {
     let working: Int
     let alert: String?
@@ -54,10 +56,10 @@ struct FleetClosedRowView: View {
                     workingLabel
                     if let alert {
                         Text("·")
-                            .font(.system(size: 12))
+                            .font(.system(size: FleetPanelMetrics.minTextSize))
                             .foregroundColor(theme.dim)
                         Text(alert)
-                            .font(FleetType.mono(size: 11))
+                            .font(FleetType.mono(size: FleetPanelMetrics.minTextSize))
                             .foregroundColor(theme.hotText)
                     }
                 }
@@ -110,30 +112,30 @@ struct FleetClosedRowView: View {
         if working == 0, let run = FleetFormat.closedToolRun(toolRuns) {
             if let number = run.number {
                 Text(number)
-                    .font(FleetType.mono(size: 12, weight: .medium))
+                    .font(FleetType.mono(size: FleetPanelMetrics.minTextSize, weight: .medium))
                     .foregroundColor(theme.text)
                     + Text(" \(run.word)")
-                    .font(.system(size: 12))
+                    .font(.system(size: FleetPanelMetrics.minTextSize))
                     .foregroundColor(theme.text)
             } else {
                 Text(run.word)
-                    .font(.system(size: 12))
+                    .font(.system(size: FleetPanelMetrics.minTextSize))
                     .foregroundColor(theme.text)
                 if let age = run.age {
                     Text("·")
-                        .font(.system(size: 12))
+                        .font(.system(size: FleetPanelMetrics.minTextSize))
                         .foregroundColor(theme.dim)
                     Text(age)
-                        .font(FleetType.mono(size: 11))
+                        .font(FleetType.mono(size: FleetPanelMetrics.minTextSize))
                         .foregroundColor(theme.dim)
                 }
             }
         } else {
             Text("\(working)")
-                .font(FleetType.mono(size: 12, weight: .medium))
+                .font(FleetType.mono(size: FleetPanelMetrics.minTextSize, weight: .medium))
                 .foregroundColor(theme.text)
                 + Text(" working")
-                .font(.system(size: 12))
+                .font(.system(size: FleetPanelMetrics.minTextSize))
                 .foregroundColor(theme.text)
         }
     }
