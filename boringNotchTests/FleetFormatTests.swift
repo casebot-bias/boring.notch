@@ -174,10 +174,11 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.closedAlert(critical: 3, down: 1), "3 critical")
     }
 
-    /// Both sides take the wider text, never past the cap: a short row makes a narrow notch.
+    /// Both sides take the wider content plus the wing padding, never past the cap: a short row makes
+    /// a narrow notch.
     func testClosedRowSideTakesTheWiderTextUpToTheCap() {
-        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 60, right: 70), 70)
-        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 90, right: 70), 90)
+        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 60, right: 70), 82)
+        XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 90, right: 70), 102)
         XCTAssertEqual(FleetPanelMetrics.closedRowSide(left: 400, right: 70), FleetPanelMetrics.closedRowSideWidth)
     }
 
@@ -642,11 +643,11 @@ final class FleetFormatTests: XCTestCase {
     }
 
     /// The row draws its sparkline at exactly this frame, so the number beside it never moves the
-    /// notch: the strip the preview shows is 40 pt of trend, 10 pt tall - the 0.7 x 14 share rounded
-    /// to a whole point, so the sparkline stays inside the shorter bar. The width is the bar's width
-    /// budget and does not change, because the cut is height-only.
+    /// notch: the strip the preview shows is 24 pt of trend, 10 pt tall - the 0.7 x 14 share rounded
+    /// to a whole point, so the sparkline stays inside the shorter bar. The 24 pt width is the width
+    /// cut's share of the bar's width budget: it pays for the speed number's three-digit reserve.
     func testClosedSparklineFrameIsItsFixedSize() {
-        XCTAssertEqual(FleetPanelMetrics.closedSparklineWidth, 40)
+        XCTAssertEqual(FleetPanelMetrics.closedSparklineWidth, 24)
         XCTAssertEqual(FleetPanelMetrics.closedSparklineHeight, 10,
                        "0.7 x 14, rounded to a whole point")
         XCTAssertLessThan(FleetPanelMetrics.closedSparklineHeight,
@@ -914,7 +915,7 @@ final class FleetFormatTests: XCTestCase {
                        "the zeroed reading never says idle, got \(zero.unit)")
     }
 
-    /// The closed row prints the number at `closedSpeedNumberSize` beside a 40 pt sparkline, so a
+    /// The closed row prints the number at `closedSpeedNumberSize` beside a 24 pt sparkline, so a
     /// long number - or an idle reading with its " · idle" tail - trades its rate words down the
     /// ladder " tok/s total" -> " tok/s" -> " t/s" until the pair fits the row's text budget again.
     /// The idle suffix rides on every candidate, so the budget only ever trims the rate words in
@@ -922,10 +923,11 @@ final class FleetFormatTests: XCTestCase {
     func testClosedSpeedUnitLadderNarrowsForALongNumber() {
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: true), " tok/s total")
         XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "47", total: false), " tok/s")
-        // Long enough that even " tok/s" does not fit beside the number: the short form wins.
-        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true), " t/s")
-        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: false), " t/s")
-        // The idle ladder keeps the same order: the " · idle" tail never drops, and it is the 40 pt
+        // Ten digits: 24 pt sparkline + 3 + 84 (the digits) + 3 + 39.6 (" tok/s") = 153.6 <= 160, so
+        // " tok/s" fits and only the " total" word is trimmed; the short form is no longer the fallback.
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: true), " tok/s")
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "1234567890", total: false), " tok/s")
+        // The idle ladder keeps the same order: the " · idle" tail never drops, and it is the 24 pt
         // sparkline sharing the row's budget that trims the rate words in front of it - measured at
         // the bundled mono, " tok/s total · idle" is too wide beside a two-digit number, so "total"
         // goes and the kept value reads " tok/s · idle".
@@ -937,7 +939,9 @@ final class FleetFormatTests: XCTestCase {
 
         // The fit helper measures the same pair the row renders.
         XCTAssertTrue(FleetFormat.closedSpeedFits(number: "47", unit: " tok/s total"))
-        XCTAssertFalse(FleetFormat.closedSpeedFits(number: "1234567890", unit: " tok/s"))
+        // Ten digits: " tok/s" fits (153.6 <= 160) while " tok/s total" does not, so the pair flips there.
+        XCTAssertTrue(FleetFormat.closedSpeedFits(number: "1234567890", unit: " tok/s"))
+        XCTAssertFalse(FleetFormat.closedSpeedFits(number: "1234567890", unit: " tok/s total"))
     }
 
     /// The origin box says "Working" in the skin's accent - the black skin's only green - so
@@ -1145,15 +1149,124 @@ final class FleetFormatTests: XCTestCase {
                        "no ink in the bottommost two pixel rows")
     }
 
+    // Content-sized wings keep the closed bar below seventy percent of its previous width.
+    @MainActor
+    func testTheClosedRowFitsItsContentAndIsUnderSeventyPercentOfTheOldBar() throws {
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
+        let theme = FleetTheme(skin: .black)
+        let flat: [Double?] = Array(repeating: 0, count: 60)
+        let zeroReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0, total: true))
+        let bigReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0, total: true))
+        // The bitmap has two wings and two pixels per point.
+        let wing = CGFloat(try rowBitmap(working: 0, alert: nil, reading: zeroReading,
+                                        blackHole: false, gap: 0, trend: flat).pixelsWide) / 4
+        let rightContent = FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing
+            + FleetPanelMetrics.closedNumberMinWidth + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: " tok/s total", size: FleetPanelMetrics.minTextSize)
+        XCTAssertEqual(wing, rightContent + FleetPanelMetrics.closedRowSidePadding, accuracy: 0.5)
+
+        // The old sparkline was 40 pt wide and the speed number had no three-digit reserve.
+        let oldRightContent: CGFloat = 40 + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: "0", size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium)
+            + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: " tok/s total", size: FleetPanelMetrics.minTextSize)
+        // A display without a hardware notch had a 185 pt closed notch width, and the old code
+        // added 5 pt clearance on each side on every display.
+        let oldWidth = 2 * min(FleetPanelMetrics.closedRowTextWidth, oldRightContent) + (185 + 10)
+        let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: false)
+        let newWidth = CGFloat(try rowBitmap(working: 0, alert: nil, reading: zeroReading,
+                                            blackHole: false, gap: gap, trend: flat).pixelsWide) / 2
+        XCTAssertLessThanOrEqual(newWidth, 0.70 * oldWidth,
+                                 "The new width \(newWidth) must be at most 70 percent of the old width \(oldWidth).")
+
+        // Request the preview with `TEST_RUNNER_FLEET_CLOSED_WIDTH_PREVIEW=/tmp/width.png xcodebuild test`.
+        if let previewPath = ProcessInfo.processInfo.environment["FLEET_CLOSED_WIDTH_PREVIEW"] {
+            let renderer = ImageRenderer(content: VStack(spacing: 6) {
+                FleetClosedRowView(working: 0, alert: nil, reading: zeroReading, theme: theme,
+                                   gapWidth: gap, height: closedBarHeight, trend: flat)
+                FleetClosedRowView(working: 12, alert: nil, reading: bigReading, theme: theme,
+                                   gapWidth: gap, height: closedBarHeight, trend: flat)
+                FleetClosedRowView(working: 2, alert: "3 critical", reading: zeroReading, theme: theme,
+                                   gapWidth: gap, height: closedBarHeight, trend: flat)
+            }.padding(.horizontal, 14).padding(.vertical, 6).background(Color.black))
+            renderer.scale = 3
+            XCTAssertNotNil(renderer.nsImage, "The closed-width preview rendered.")
+            let image = try XCTUnwrap(renderer.nsImage)
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)))
+            let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)),
+                             "The closed-width preview wrote.")
+        }
+    }
+
+    // Equal wings keep the middle centred even when the working count changes.
+    @MainActor
+    func testTheClosedRowWingsAreEqualSoTheMiddleStaysCentred() throws {
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
+        let flat: [Double?] = Array(repeating: 0, count: 60)
+        let zeroReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0, total: true))
+        let rightContent = FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing
+            + FleetPanelMetrics.closedNumberMinWidth + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: " tok/s total", size: FleetPanelMetrics.minTextSize)
+        let wing = FleetPanelMetrics.closedRowSide(left: 0, right: rightContent)
+        let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: false)
+        let bitmap = try rowBitmap(working: 0, alert: nil, reading: zeroReading,
+                                   blackHole: false, gap: gap, trend: flat)
+        let busyBitmap = try rowBitmap(working: 12, alert: nil, reading: zeroReading,
+                                       blackHole: false, gap: gap, trend: flat)
+        let scale: CGFloat = 2
+        XCTAssertEqual(CGFloat(bitmap.pixelsWide) / scale, CGFloat(busyBitmap.pixelsWide) / scale, accuracy: 0.5)
+        // The render snaps to the half-point pixel grid, and SwiftUI's text measurement can sit a
+        // fraction from NSFont's, so the rendered width is the metric's arithmetic rounded to that
+        // grid (305.5 rendered against 304.8 from the metrics at scale 2).
+        XCTAssertEqual(CGFloat(bitmap.pixelsWide) / scale, 2 * wing + gap, accuracy: 1.0)
+
+        // Ink is any sRGB channel above 0.05 against the black background.
+        func hasInk(inColumn x: Int) -> Bool {
+            for y in 0..<bitmap.pixelsHigh {
+                guard let pixel = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                if pixel.redComponent > 0.05 || pixel.greenComponent > 0.05 || pixel.blueComponent > 0.05 {
+                    return true
+                }
+            }
+            return false
+        }
+        let lastLeftInk = try XCTUnwrap((0..<Int(ceil(wing * scale))).last(where: hasInk))
+        let firstRightInk = try XCTUnwrap(
+            (Int(ceil((wing + gap) * scale))..<bitmap.pixelsWide).first(where: hasInk))
+        XCTAssertEqual(CGFloat(lastLeftInk) / scale, wing, accuracy: 2)
+        XCTAssertEqual(CGFloat(firstRightInk) / scale, wing + gap, accuracy: 2)
+    }
+
+    // Reserving three digits keeps the bar still while the rate changes from zero to 147.
+    @MainActor
+    func testTheClosedSpeedNumberKeepsThreeDigits() throws {
+        FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
+        let flat: [Double?] = Array(repeating: 0, count: 60)
+        let zeroReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0, total: true))
+        let bigReading = try XCTUnwrap(
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0, total: true))
+        let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: false)
+        let zeroWidth = CGFloat(try rowBitmap(working: 0, alert: nil, reading: zeroReading,
+                                             blackHole: false, gap: gap, trend: flat).pixelsWide) / 2
+        let bigWidth = CGFloat(try rowBitmap(working: 0, alert: nil, reading: bigReading,
+                                            blackHole: false, gap: gap, trend: flat).pixelsWide) / 2
+        XCTAssertEqual(zeroWidth, bigWidth, accuracy: 0.5)
+    }
+
     /// The closed row at `closedBarHeight` on black, at scale 2: the frame the closed bar draws in.
     @MainActor
     private func rowBitmap(working: Int, alert: String?, reading: FleetFormat.FleetClosedRightReading?,
-                           blackHole: Bool, trend: [Double?]? = nil) throws -> NSBitmapImageRep {
+                           blackHole: Bool, gap: CGFloat = 200, trend: [Double?]? = nil) throws -> NSBitmapImageRep {
         // The rows ask FleetType for the mono face, whose registration is memoised once per process.
         FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
         let renderer = ImageRenderer(content: FleetClosedRowView(
             working: working, alert: alert, reading: reading, theme: FleetTheme(skin: .black),
-            gapWidth: 200, height: closedBarHeight, trend: trend,
+            gapWidth: gap, height: closedBarHeight, trend: trend,
             blackHole: blackHole ? FleetBlackHoleState(working: working, isVisible: true) : .hidden
         ).background(Color.black))
         renderer.scale = 2

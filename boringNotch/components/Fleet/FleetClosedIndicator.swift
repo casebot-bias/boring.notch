@@ -35,7 +35,13 @@ struct FleetClosedIndicator: View {
                                                        jobs: model.runningTaskCount,
                                                        total: model.speedIsTotal),
                 theme: theme,
-                gapWidth: vm.closedNotchSize.width + 10,
+                // The middle of the closed row: a display with a hardware notch keeps the camera gap
+                // (`notchWidth + 10`, the cutout plus 5 pt of clearance per side); a display without one has
+                // no cutout to clear, so the middle is one padding wide and the bar fits its content.
+                gapWidth: FleetPanelMetrics.closedRowGap(
+                    notchWidth: vm.closedNotchSize.width,
+                    hasHardwareNotch: (vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) }?
+                        .safeAreaInsets.top ?? 0) > 0),
                 // The bar is 70 % of the closed notch: the notch's own height left it hanging well below the menu bar.
                 height: FleetPanelMetrics.closedBarHeight(vm.effectiveClosedNotchHeight),
                 toolRuns: model.toolRuns,

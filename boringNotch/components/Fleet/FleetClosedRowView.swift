@@ -14,6 +14,9 @@ import SwiftUI
 /// build takes the count's place while nothing works), the hardware gap in the middle and the speed
 /// reading on the right. Split out of `FleetClosedIndicator` (which owns the store, the skin default
 /// and the view model) so the row itself can be rendered without them.
+/// Both wings are as wide as the wider side's content plus `FleetPanelMetrics.closedRowSidePadding`
+/// (12 pt), so the row is only as wide as its text needs. The middle, the camera gap on a display with
+/// a hardware notch and one padding wide without one, stays on the row's centre, over the camera.
 /// The bar draws at 70 % of the closed notch (`FleetPanelMetrics.closedBarHeight`), so every
 /// label in it sits on the fleet's 11 pt floor (`FleetPanelMetrics.minTextSize`).
 struct FleetClosedRowView: View {
@@ -37,8 +40,8 @@ struct FleetClosedRowView: View {
     var blackHole: FleetBlackHoleState = .hidden
 
     var body: some View {
-        // Both sides take the wider text's width so the camera gap sits on the physical notch's
-        // centre; unequal sides would push the gap off-centre and the notch would cover text.
+        // Both sides take the wider text's width plus the padding so the camera gap sits on the physical
+        // notch's centre; unequal sides would push the gap off-centre and the notch would cover text.
         FleetEqualSidesLayout {
             // Left block: the black hole while the fleet works, "2 working" beside it, plus
             // "· 1 down" / "· 3 critical" only when something is wrong. All linked is the normal
@@ -90,6 +93,9 @@ struct FleetClosedRowView: View {
                             .font(FleetType.mono(size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium))
                             .foregroundColor(reading.dim ? theme.dim : theme.accent)
                             .lineLimit(1)
+                            // At least three digits wide, filled from the unit's side: the number grows into its own
+                            // reserve instead of moving the sparkline, the wing and so the whole bar.
+                            .frame(minWidth: FleetPanelMetrics.closedNumberMinWidth, alignment: .trailing)
                         Text(reading.unit)
                             .font(FleetType.mono(size: FleetPanelMetrics.minTextSize))
                             .foregroundColor(theme.dim)
@@ -179,15 +185,17 @@ struct FleetClosedSparkline: View {
 
 // MARK: - Equal Sides Layout
 
-/// Lays out [left, gap, right] with both sides as wide as the wider of the two (see
-/// `FleetPanelMetrics.closedRowSide`): the left text hugs the gap from the left, the right text from
-/// the right, and the gap stays on the row's centre, over the camera.
+/// Lays out [left, gap, right] with both wings as wide as the wider side's content plus
+/// `FleetPanelMetrics.closedRowSidePadding` (see `FleetPanelMetrics.closedRowSide`): the left text
+/// hugs the gap from the left, the right text from the right, and the gap stays on the row's centre,
+/// over the camera. The row's total width comes from `FleetPanelMetrics.closedRowWidth`.
 struct FleetEqualSidesLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard subviews.count == 3 else { return .zero }
         let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let side = FleetPanelMetrics.closedRowSide(left: sizes[0].width, right: sizes[2].width)
-        return CGSize(width: side * 2 + sizes[1].width, height: sizes.map(\.height).max() ?? 0)
+        return CGSize(width: FleetPanelMetrics.closedRowWidth(left: sizes[0].width, right: sizes[2].width,
+                                                              gap: sizes[1].width),
+                      height: sizes.map(\.height).max() ?? 0)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
