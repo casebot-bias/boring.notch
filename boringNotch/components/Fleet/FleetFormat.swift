@@ -275,9 +275,8 @@ enum FleetFormat {
     /// without one still get the honest reading): the kept number is announced as a remembered one. Past
     /// that window the side is a dimmed "0" with no idle marker - the zero needs none. A stale number is
     /// worse than an honest zero. Only when no speed was ever measured do running jobs stand in, bright,
-    /// and never as a total; no speed and no jobs leaves the side empty. Beside a camera cutout
-    /// (`hasHardwareNotch`) the unit is the shortest rung, " t/s" (see `closedSpeedUnit`).
-    static func closedRightReading(speed: FleetSpeed?, jobs: Int, hasHardwareNotch: Bool = false, now: Date = Date()) -> FleetClosedRightReading? {
+    /// and never as a total; no speed and no jobs leaves the side empty.
+    static func closedRightReading(speed: FleetSpeed?, jobs: Int, now: Date = Date()) -> FleetClosedRightReading? {
         if let speed, speed.current != nil || speedLastValue(speed) != nil {
             let number: String
             let idle: Bool
@@ -292,7 +291,7 @@ enum FleetFormat {
                 idle = false
             }
             return FleetClosedRightReading(number: number,
-                                           unit: closedSpeedUnit(number: number, idle: idle, hasHardwareNotch: hasHardwareNotch),
+                                           unit: closedSpeedUnit(number: number, idle: idle),
                                            dim: speedIsIdle(speed))
         }
         if jobs > 0 {
@@ -563,16 +562,15 @@ enum FleetFormat {
     }
 
     /// The closed row's speed unit: the first candidate that fits the reading by `closedSpeedFits`,
-    /// else the shortest. Beside a camera cutout the bar has only 70.1 pt of content per wing for the
-    /// sparkline, the number and the unit, so the reading takes the shortest rung, " t/s"; a display
-    /// with no cutout reads "tok/s", and the open panel's header keeps the fuller "tok/s total"
-    /// (`tokenRateUnit(total:)`). While `idle` every candidate carries " · idle", so the remembered
-    /// value announces that the fleet stopped writing: the sparkline shows when, but the unit has to
-    /// say the number is a kept one, not a live one. The idle suffix rides on every candidate, so the
-    /// row's own budget only ever trims the rate words in front of it. The reading must stay inside
-    /// the closed row's text budget so it neither truncates nor widens the notch.
-    static func closedSpeedUnit(number: String, idle: Bool = false, hasHardwareNotch: Bool = false) -> String {
-        let rates = hasHardwareNotch ? [" t/s"] : [" tok/s", " t/s"]
+    /// else the shortest. The row reads "tok/s" for a number short enough to fit the budget, and falls
+    /// back to " t/s" when the number is too long; the open panel's header keeps the fuller "tok/s
+    /// total" (`tokenRateUnit(total:)`). While `idle` every candidate carries " · idle", so the
+    /// remembered value announces that the fleet stopped writing: the sparkline shows when, but the
+    /// unit has to say the number is a kept one, not a live one. The idle suffix rides on every
+    /// candidate, so the row's own budget only ever trims the rate words in front of it. The reading
+    /// must stay inside the closed row's text budget so it neither truncates nor widens the notch.
+    static func closedSpeedUnit(number: String, idle: Bool = false) -> String {
+        let rates = [" tok/s", " t/s"]
         let units = idle ? rates.map { $0 + " · idle" } : rates
         return units.first { closedSpeedFits(number: number, unit: $0) } ?? units[units.count - 1]
     }
@@ -705,13 +703,6 @@ enum FleetPanelMetrics {
     static var closedNumberMinWidth: CGFloat {
         FleetType.monoWidth(text: String(repeating: "0", count: closedNumberMinDigits),
                             size: closedSpeedNumberSize, weight: .medium)
-    }
-    /// The reserve the speed number draws into in this geometry: the three-digit box where the bar
-    /// has room, and none beside a camera cutout. There the notched bar's 75 % width bound (owner
-    /// follow-up) leaves 70.1 pt of content per wing, which the 24 pt sparkline, its spacing and the
-    /// unit already fill; the row's width animation carries the number's growth instead.
-    static func closedNumberReserveWidth(hasHardwareNotch: Bool) -> CGFloat {
-        hasHardwareNotch ? 0 : closedNumberMinWidth
     }
     /// The closed row's speed sparkline: the last ten minutes of trend readings drawn left of the
     /// speed number, `closedSpeedSpacing` from it. Small on purpose - it only has to show *when* the
