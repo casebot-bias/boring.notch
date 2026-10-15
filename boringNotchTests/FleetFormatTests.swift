@@ -1205,30 +1205,40 @@ final class FleetFormatTests: XCTestCase {
 
     /// The notched geometry - notch width 185 pt and the camera gap with its 5 pt clearance per side
     /// (195 pt) - is the owner's MacBook. There each wing gives its content 6 pt and keeps the 24 pt
-    /// sparkline: the owner keeps the trend display on the notched MacBook too. The bar is therefore
-    /// 396.6 pt, 85.7 % of main's 463 pt. The follow-up's 75 % bound is unreachable while the
-    /// sparkline is drawn - the test computes that floor itself. Main's bar, which padded nothing and
-    /// said "tok/s total", is the comparison the bar is measured against.
+    /// sparkline, and the reading is trimmed to fit: no three-digit number reserve and the shortest
+    /// " t/s" rung. The bar is therefore 336.6 pt, 72.7 % of main's 463 pt, inside the follow-up's 75 %
+    /// bound. A display with no cutout keeps " tok/s" and the reserve.
     @MainActor
     func testTheClosedRowOnANotchedDisplayHugsTheCamera() throws {
         FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
         let theme = FleetTheme(skin: .black)
         let flat: [Double?] = Array(repeating: 0, count: 60)
         let zeroReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 0, lastAt: nil), jobs: 0,
+                                           hasHardwareNotch: true))
         let oneFortySevenReading = try XCTUnwrap(
-            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0))
+            FleetFormat.closedRightReading(speed: FleetSpeed(current: 147, lastAt: nil), jobs: 0,
+                                           hasHardwareNotch: true))
 
         let padding = FleetPanelMetrics.closedRowWingPadding(hasHardwareNotch: true)
         XCTAssertEqual(padding, 6, "a display with a hardware notch gives each wing 6 pt")
         let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: true)
         XCTAssertEqual(gap, 195, "the 185 pt notch plus 5 pt clearance per side")
 
-        // The notched wing: the speed side's content - sparkline, number, unit - plus its 6 pt
-        // padding. The bitmap has two wings and two pixels per point.
+        // The geometry rule the trim rides on: beside a cutout the number has no reserve and the unit
+        // is the shortest rung; without one the three-digit reserve and " tok/s" are drawn.
+        XCTAssertEqual(FleetPanelMetrics.closedNumberReserveWidth(hasHardwareNotch: true), 0)
+        XCTAssertEqual(FleetPanelMetrics.closedNumberReserveWidth(hasHardwareNotch: false),
+                       FleetPanelMetrics.closedNumberMinWidth)
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "0", hasHardwareNotch: true), " t/s")
+        XCTAssertEqual(FleetFormat.closedSpeedUnit(number: "0", hasHardwareNotch: false), " tok/s")
+
+        // The notched wing: the speed side's content - sparkline, one-digit number, " t/s" - plus its
+        // 6 pt padding. The bitmap has two wings and two pixels per point.
         let notchedContent = FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing
-            + FleetPanelMetrics.closedNumberMinWidth + FleetPanelMetrics.closedSpeedSpacing
-            + FleetType.monoWidth(text: " tok/s", size: FleetPanelMetrics.minTextSize)
+            + FleetType.monoWidth(text: "0", size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium)
+            + FleetPanelMetrics.closedSpeedSpacing
+            + FleetType.monoWidth(text: " t/s", size: FleetPanelMetrics.minTextSize)
         let wing = CGFloat(try rowBitmap(working: 0, alert: nil, reading: zeroReading, blackHole: false,
                                          gap: 0, hasHardwareNotch: true, trend: flat).pixelsWide) / 4
         XCTAssertEqual(wing, notchedContent + padding, accuracy: 0.5)
@@ -1255,19 +1265,23 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(notchedWidth, busyNotchedWidth, accuracy: 0.5,
                        "the working count leaves the wings equal")
         XCTAssertEqual(notchedWidth, 2 * (notchedContent + padding) + gap, accuracy: 1.0,
-                       "the render snaps to the half-point grid; as drawn, with the three-digit "
-                       + "reserve the follow-up keeps, the notched bar measures \(notchedWidth) pt "
-                       + "against main's \(mainNotchedWidth) pt - \(percent) % of it")
+                       "the render snaps to the half-point grid; the notched bar is two wings of "
+                       + "content plus the camera gap, as drawn: \(notchedWidth) pt")
+        XCTAssertLessThanOrEqual(notchedWidth, 0.75 * mainNotchedWidth,
+                                 "the notched bar is \(notchedWidth) pt against main's \(mainNotchedWidth) pt "
+                                 + "- \(percent) % of it, past the follow-up's 75 % bound of "
+                                 + "\(0.75 * mainNotchedWidth) pt")
 
-        // The trend display is back at the notched geometry: with the sparkline drawn, the flat
-        // 60-point trend costs its 24 pt plus the 3 pt spacing before it on each wing, so the
-        // trended row is 54 pt of bar wider than the same row with no trend at all.
+        // The trend display is back at the notched geometry: `notchedContent` above counts the
+        // sparkline's 24 pt, so the bar's width matching that content is the proof it is drawn, and
+        // the same row with no trend is narrower - without the sparkline the left text (51.5 pt),
+        // not the reading (37.8 pt), is the wider side and sets the wing, so the bar grows by less
+        // than the sparkline's 27 pt of content here.
         let notchedNoTrendWidth = CGFloat(try rowBitmap(working: 0, alert: nil, reading: zeroReading,
                                                         blackHole: false, gap: gap,
                                                         hasHardwareNotch: true, trend: nil).pixelsWide) / 2
-        XCTAssertEqual(notchedWidth - notchedNoTrendWidth,
-                       2 * (FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing),
-                       accuracy: 1.0, "the notched row draws its 24 pt sparkline, 27 pt per wing")
+        XCTAssertGreaterThan(notchedWidth, notchedNoTrendWidth,
+                             "the notched row draws its 24 pt sparkline, and the flat trend widens it")
 
         // Without a camera cutout the sparkline is drawn: its 24 pt and the 3 pt spacing before it
         // cost 27 pt of content per wing, so the flat trend widens the bar by 54 pt.
@@ -1282,9 +1296,8 @@ final class FleetFormatTests: XCTestCase {
                        2 * (FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing),
                        accuracy: 1.0, "the open geometry draws the sparkline, 27 pt per wing")
 
-        // The follow-up's two asks - the 24 pt sparkline and at most 75 % of main's width - cannot
-        // both hold, and the test proves it with the same arithmetic instead of asserting a bound
-        // the render could meet: even the smallest bar that still draws the sparkline overshoots.
+        // The follow-up's content - the 24 pt sparkline and " tok/s" - overshoots the 75 % bound even at
+        // its smallest: one digit and no reserve. The floor is computed from the same arithmetic.
         let sparklineFloorContent = FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing
             + FleetType.monoWidth(text: "0", size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium)
             + FleetPanelMetrics.closedSpeedSpacing
@@ -1293,14 +1306,11 @@ final class FleetFormatTests: XCTestCase {
         let floorRatio = Double(sparklineFloorBar / mainNotchedWidth)
         let floorPercent = String(format: "%.1f", floorRatio * 100)
         XCTAssertGreaterThan(sparklineFloorBar, 0.75 * mainNotchedWidth,
-                             "the follow-up asks for a 24 pt sparkline and for at most 75 % of main's "
-                             + "\(mainNotchedWidth) pt, which is \(0.75 * mainNotchedWidth) pt - a content of "
-                             + "at most \((0.75 * mainNotchedWidth - gap - 2 * padding) / 2) pt; with the "
-                             + "sparkline the smallest possible notched bar - no three-digit reserve at "
-                             + "all, a one-digit number, both spacings - is \(sparklineFloorBar) pt = "
-                             + "\(floorPercent) % of main, so the bound cannot hold while the trend is "
-                             + "drawn; as drawn, with the three-digit reserve the follow-up keeps, the "
-                             + "bar is \(notchedWidth) pt = \(percent) %")
+                             "the content the follow-up lists - the 24 pt sparkline, the three-digit reserve, "
+                             + "\" tok/s\", a one-digit number - is \(sparklineFloorContent) pt at best "
+                             + "(one digit, no reserve, \" tok/s\"), i.e. \(sparklineFloorBar) pt = "
+                             + "\(floorPercent) % of main, which is why the reserve and the longer unit trim "
+                             + "beside a cutout; the trimmed row is \(notchedWidth) pt = \(percent) %")
         // Request the notched preview with
         // `TEST_RUNNER_FLEET_CLOSED_NOTCHED_PREVIEW=/tmp/notched.png xcodebuild test`.
         if let previewPath = ProcessInfo.processInfo.environment["FLEET_CLOSED_NOTCHED_PREVIEW"] {

@@ -102,9 +102,12 @@ struct FleetClosedRowView: View {
                             .font(FleetType.mono(size: FleetPanelMetrics.closedSpeedNumberSize, weight: .medium))
                             .foregroundColor(reading.dim ? theme.dim : theme.accent)
                             .lineLimit(1)
-                            // At least three digits wide, filled from the unit's side: the number grows into its own
-                            // reserve instead of moving the sparkline, the wing and so the whole bar.
-                            .frame(minWidth: FleetPanelMetrics.closedNumberMinWidth, alignment: .trailing)
+                            // At least three digits wide where the bar has room, filled from the unit's side:
+                            // the number grows into its own reserve instead of moving the sparkline, the wing
+                            // and so the whole bar. Beside a camera cutout there is no room for a reserve
+                            // (`closedNumberReserveWidth`), and the row's width animation carries the change.
+                            .frame(minWidth: FleetPanelMetrics.closedNumberReserveWidth(hasHardwareNotch: hasHardwareNotch),
+                                   alignment: .trailing)
                         Text(reading.unit)
                             .font(FleetType.mono(size: FleetPanelMetrics.minTextSize))
                             .foregroundColor(theme.dim)

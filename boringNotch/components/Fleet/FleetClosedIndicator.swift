@@ -35,8 +35,11 @@ struct FleetClosedIndicator: View {
             FleetClosedRowView(
                 working: model.workingCount,
                 alert: FleetFormat.closedAlert(critical: model.criticalCount, down: model.downCount),
+                // The reading trims to the geometry too: " t/s" beside a camera cutout, where the
+                // 75 % width bound leaves no room for the longer unit or a number reserve.
                 reading: FleetFormat.closedRightReading(speed: model.speed,
-                                                       jobs: model.runningTaskCount),
+                                                       jobs: model.runningTaskCount,
+                                                       hasHardwareNotch: hasHardwareNotch),
                 theme: theme,
                 // The middle of the closed row: a display with a hardware notch keeps the camera gap
                 // (`notchWidth + 10`, the cutout plus 5 pt of clearance per side); a display without one has
