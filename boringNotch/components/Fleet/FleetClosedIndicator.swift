@@ -36,13 +36,15 @@ struct FleetClosedIndicator: View {
                                                        total: model.speedIsTotal),
                 theme: theme,
                 gapWidth: vm.closedNotchSize.width + 10,
-                height: vm.effectiveClosedNotchHeight,
+                // The bar is 70 % of the closed notch: the notch's own height left it hanging well below the menu bar.
+                height: FleetPanelMetrics.closedBarHeight(vm.effectiveClosedNotchHeight),
                 toolRuns: model.toolRuns,
                 trend: model.speed?.trend,
                 blackHole: FleetBlackHoleState.resolve(working: model.workingCount, toolRuns: model.toolRuns)
             )
         } else {
             // Original spacer — keeps layout identical when fleet is unreachable
+            // The bare notch keeps the closed notch's own height; only the fleet bar is shortened.
             Rectangle()
                 .fill(.clear)
                 .frame(

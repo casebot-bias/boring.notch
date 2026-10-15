@@ -636,10 +636,19 @@ enum FleetPanelMetrics {
     /// the tab strip that carries the health text free the room the map's four rows need, so the
     /// notch does not grow.
     static let fleetSectionHeight: CGFloat = 300
+    /// The closed fleet bar's height as a share of the closed notch's own height. The closed notch is
+    /// as tall as the display's menu bar (30 pt on the job machine's screen, the hardware notch's
+    /// 38 pt on a MacBook), which left the fleet row hanging well below the menu bar. The bar draws in
+    /// 70 % of it; the open notch and the other closed faces keep their height.
+    static let closedBarHeightScale: CGFloat = 0.7
+    /// The closed fleet bar's height for a closed notch of `closedNotchHeight` pt.
+    static func closedBarHeight(_ closedNotchHeight: CGFloat) -> CGFloat {
+        closedNotchHeight * closedBarHeightScale
+    }
     /// The closed-notch row: one line per side ("2 working" or "2 working · 1 down" / the speed).
     /// Both sides are as wide as the wider text, so the camera gap stays centred and the notch is
     /// only as wide as it needs to be. This cap holds the longest left line in 11 pt monospaced
-    /// width (a safe upper bound for the 12 pt proportional "working").
+    /// width (a safe upper bound for the 11 pt proportional "working").
     static let closedRowTextWidth: CGFloat = 160
     static var closedRowSideWidth: CGFloat { closedRowTextWidth }
     /// One side's width: the wider of the two texts, never past the cap.
@@ -647,16 +656,20 @@ enum FleetPanelMetrics {
         min(closedRowSideWidth, max(left, right))
     }
     /// The closed row's speed reading: the number at this size (medium weight), its unit at
-    /// `minTextSize` after this spacing. The closed row draws its speed reading with these and the
-    /// fit rule (`closedSpeedFits`) measures with the same numbers.
-    static let closedSpeedNumberSize: CGFloat = 20
+    /// `minTextSize` after this spacing. The bar is 70 % of the closed notch, so the number drops from
+    /// 20 pt to 14 pt (0.7 x 20, whose line box still fits the shorter bar) and the row's labels sit
+    /// on `minTextSize`. The closed row draws its speed reading with these and the fit rule
+    /// (`closedSpeedFits`) measures with the same numbers.
+    static let closedSpeedNumberSize: CGFloat = 14
     static let closedSpeedSpacing: CGFloat = 3
     /// The closed row's speed sparkline: the last ten minutes of trend readings drawn left of the
     /// speed number, `closedSpeedSpacing` from it. Small on purpose - it only has to show *when* the
     /// line last rose, and `closedSpeedFits` subtracts its width from the row's text budget.
     static let closedSparklineWidth: CGFloat = 40
-    /// Short enough to sit inside the speed number's line box without pushing the row taller.
-    static let closedSparklineHeight: CGFloat = 14
+    /// Short enough to sit inside the speed number's line box without pushing the row taller. The
+    /// height follows the bar's 70 % (0.7 x 14), so the sparkline stays inside the shorter bar. The
+    /// 40 pt width is the bar's width budget and does not change, because the cut is height-only.
+    static let closedSparklineHeight: CGFloat = 10
     /// The current-work column: 604 pt section, less the 18 pt lead and 1 pt rule, the 292 pt map and
     /// the 20 + 1 + 20 pt around the hairline.
     static let workColumnWidth: CGFloat = 252
