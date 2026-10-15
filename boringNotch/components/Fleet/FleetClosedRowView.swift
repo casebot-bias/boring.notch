@@ -87,12 +87,12 @@ struct FleetClosedRowView: View {
             // "tok/s total"); while only cloud jobs run (the case's model reports no tok/s) the row
             // shows how many jobs run. No reading at all leaves the side empty.
             if let reading {
-                // The sparkline sits left of the number, so the reading reads as the trend, then the
-                // value - where the geometry has room for it (see
-                // `FleetPanelMetrics.closedRowShowsSparkline`): beside a camera cutout the row drops
-                // it, and the number and the unit carry the reading alone.
+                // The sparkline sits left of the number, so the reading reads as the trend, then
+                // the value. It is 24 pt in every geometry: the owner keeps the trend display on a
+                // notched MacBook too, where it costs 54 pt of the bar (see FleetPanelMetrics.
+                // closedSparklineWidth).
                 HStack(alignment: .center, spacing: FleetPanelMetrics.closedSpeedSpacing) {
-                    if let trend, FleetPanelMetrics.closedRowShowsSparkline(hasHardwareNotch: hasHardwareNotch) {
+                    if let trend {
                         FleetClosedSparkline(values: FleetFormat.sparklineSeries(trend), theme: theme)
                             .frame(width: FleetPanelMetrics.closedSparklineWidth,
                                    height: FleetPanelMetrics.closedSparklineHeight)
