@@ -18,8 +18,10 @@ import SwiftUI
 /// cutout, 12 pt otherwise), so the row is only as wide as its text needs. The text hugs the middle
 /// either way: the camera gap on a display with a hardware notch, and one padding wide without one,
 /// stays on the row's centre, over the camera.
-/// The bar draws at 70 % of the closed notch (`FleetPanelMetrics.closedBarHeight`), so every
-/// label in it sits on the fleet's 11 pt floor (`FleetPanelMetrics.minTextSize`).
+/// The bar's height follows the display (`FleetPanelMetrics.closedBarHeight`): the closed notch's own
+/// height beside a camera cutout, 70 % of it where there is none. Both are taller than the fleet's
+/// 11 pt floor (`FleetPanelMetrics.minTextSize`), and `.frame(height: height)` with the equal-sides
+/// layout placing at `bounds.midY` keeps the row centred in either bar.
 struct FleetClosedRowView: View {
     let working: Int
     let alert: String?

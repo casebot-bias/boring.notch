@@ -655,7 +655,7 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetPanelMetrics.closedSparklineHeight, 10,
                        "0.7 x 14, rounded to a whole point")
         XCTAssertLessThan(FleetPanelMetrics.closedSparklineHeight,
-                          FleetPanelMetrics.closedBarHeight(30),
+                          FleetPanelMetrics.closedBarHeight(30, hasHardwareNotch: false),
                           "and it fits inside the closed bar")
     }
 
@@ -985,9 +985,16 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)), "the preview wrote")
     }
 
-    /// The closed notch the job machine's display produces: a 30 pt menu bar. The fleet bar is 70 % of it.
+    /// The closed notch the job machine's display produces: a 30 pt menu bar on a display with no
+    /// camera cutout, so the fleet bar is 70 % of it. The notched geometry - the owner's MacBook, a
+    /// hardware 38 pt notch, where the bar is the notch's own height - is `notchedBarHeight`.
     private let closedNotch: CGFloat = 30
-    private var closedBarHeight: CGFloat { FleetPanelMetrics.closedBarHeight(closedNotch) }
+    private var closedBarHeight: CGFloat { FleetPanelMetrics.closedBarHeight(closedNotch, hasHardwareNotch: false) }
+    /// The owner's MacBook: a 38 pt hardware notch. There the bar is that height whole.
+    private let notchedClosedNotch: CGFloat = 38
+    private var notchedBarHeight: CGFloat {
+        FleetPanelMetrics.closedBarHeight(notchedClosedNotch, hasHardwareNotch: true)
+    }
 
     /// The closed row prints its speed number in the skin's accent - the black skin's only green -
     /// while a fleet that never measured anything hands the row no reading, so the row paints no
@@ -1107,19 +1114,26 @@ final class FleetFormatTests: XCTestCase {
         }
     }
 
-    /// The bar is 70 % of the closed notch (owner request: it hung well below the menu bar), and the
-    /// rendered row is exactly that tall - the text must fit inside it.
+    /// The bar's height follows the display: beside a hardware notch it is the notch's own height, so
+    /// its bottom edge lines up with the cutout; a display with no cutout keeps the 70 % bar that
+    /// clears the menu bar. The rendered row is exactly that tall - the text must fit inside it.
     @MainActor
-    func testTheClosedBarIsSeventyPercentOfTheClosedNotch() throws {
+    func testTheClosedBarMatchesTheNotchOnANotchedDisplayAndSeventyPercentWithoutOne() throws {
         XCTAssertEqual(FleetPanelMetrics.closedBarHeightScale, 0.7, accuracy: 0.0001)
-        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(30), 21, accuracy: 0.0001)
-        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(38), 26.6, accuracy: 0.0001)
-        // the bitmap is the rendered row at scale 2: 42 px for 21 pt
+        // The owner's MacBook: a 38 pt hardware notch draws a 38 pt bar.
+        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(38, hasHardwareNotch: true), 38, accuracy: 0.0001)
+        // The job machine's display: no cutout, so the 30 pt closed notch keeps the 21 pt bar.
+        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(30, hasHardwareNotch: false), 21, accuracy: 0.0001)
+
         let speedReading = try XCTUnwrap(
             FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2),
             "a reported speed has a reading")
+        // The bitmap is the rendered row at scale 2: 42 px for the 21 pt bar, 76 px for the 38 pt one.
         XCTAssertEqual(try rowBitmap(working: 2, alert: nil, reading: speedReading, blackHole: false).pixelsHigh,
                        42)
+        XCTAssertEqual(try rowBitmap(working: 2, alert: nil, reading: speedReading, blackHole: false,
+                                     hasHardwareNotch: true, height: notchedBarHeight).pixelsHigh,
+                       76, "the notched bar renders as tall as the 38 pt hardware notch")
     }
 
     /// The shorter bar must clip no text: the busy row at `closedBarHeight` puts no ink in its topmost
@@ -1220,6 +1234,11 @@ final class FleetFormatTests: XCTestCase {
         let padding = FleetPanelMetrics.closedRowWingPadding(hasHardwareNotch: true)
         XCTAssertEqual(padding, 6, "a display with a hardware notch gives each wing 6 pt")
         let gap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: true)
+        // The bar this geometry draws: 76 px at scale 2 = the 38 pt hardware notch's own height.
+        let notchedBarBitmap = try rowBitmap(working: 2, alert: nil, reading: zeroReading,
+                                             blackHole: false, gap: gap, hasHardwareNotch: true,
+                                             height: notchedBarHeight, trend: flat)
+        XCTAssertEqual(notchedBarBitmap.pixelsHigh, 76, "the notched bar is the notch's own height")
         XCTAssertEqual(gap, 195, "the 185 pt notch plus 5 pt clearance per side")
 
         // The owner's content rule: the closed row reads " tok/s" in every geometry, and the idle
@@ -1293,17 +1312,17 @@ final class FleetFormatTests: XCTestCase {
                        2 * (FleetPanelMetrics.closedSparklineWidth + FleetPanelMetrics.closedSpeedSpacing),
                        accuracy: 1.0, "the open geometry draws the sparkline, 27 pt per wing")
 
-        // Request the notched preview with
+        // The preview strip draws the notched rows at the notch's own 38 pt height. Request it with
         // `TEST_RUNNER_FLEET_CLOSED_NOTCHED_PREVIEW=/tmp/notched.png xcodebuild test`.
         if let previewPath = ProcessInfo.processInfo.environment["FLEET_CLOSED_NOTCHED_PREVIEW"] {
             let notchedGap = FleetPanelMetrics.closedRowGap(notchWidth: 185, hasHardwareNotch: true)
             let strip = ImageRenderer(content: VStack(spacing: 6) {
                 FleetClosedRowView(working: 0, alert: nil, reading: zeroReading, theme: theme,
-                                   gapWidth: notchedGap, hasHardwareNotch: true, height: closedBarHeight, trend: flat)
+                                   gapWidth: notchedGap, hasHardwareNotch: true, height: notchedBarHeight, trend: flat)
                 FleetClosedRowView(working: 12, alert: nil, reading: oneFortySevenReading, theme: theme,
-                                   gapWidth: notchedGap, hasHardwareNotch: true, height: closedBarHeight, trend: flat)
+                                   gapWidth: notchedGap, hasHardwareNotch: true, height: notchedBarHeight, trend: flat)
                 FleetClosedRowView(working: 2, alert: "3 critical", reading: zeroReading, theme: theme,
-                                   gapWidth: notchedGap, hasHardwareNotch: true, height: closedBarHeight, trend: flat)
+                                   gapWidth: notchedGap, hasHardwareNotch: true, height: notchedBarHeight, trend: flat)
             }.padding(.horizontal, 14).padding(.vertical, 6).background(Color.black))
             strip.scale = 3
             XCTAssertNotNil(strip.nsImage, "The notched preview rendered.")
@@ -1312,6 +1331,8 @@ final class FleetFormatTests: XCTestCase {
             let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
             XCTAssertNoThrow(try Data(png).write(to: URL(fileURLWithPath: previewPath)),
                              "The notched preview wrote.")
+            print("closed fleet bar preview: notched 38 pt closed notch -> \(notchedBarHeight) pt bar "
+                  + "(row bitmap \(notchedBarBitmap.pixelsHigh) px at scale 2)")
         }
     }
 
@@ -1443,15 +1464,16 @@ final class FleetFormatTests: XCTestCase {
     }
 
     /// The closed row at `closedBarHeight` on black, at scale 2: the frame the closed bar draws in.
+    /// `height` overrides the 21 pt un-notched bar with the display's own, the notched 38 pt case.
     @MainActor
     private func rowBitmap(working: Int, alert: String?, reading: FleetFormat.FleetClosedRightReading?,
                            blackHole: Bool, gap: CGFloat = 200, hasHardwareNotch: Bool = false,
-                           trend: [Double?]? = nil) throws -> NSBitmapImageRep {
+                           height: CGFloat? = nil, trend: [Double?]? = nil) throws -> NSBitmapImageRep {
         // The rows ask FleetType for the mono face, whose registration is memoised once per process.
         FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
         let renderer = ImageRenderer(content: FleetClosedRowView(
             working: working, alert: alert, reading: reading, theme: FleetTheme(skin: .black),
-            gapWidth: gap, hasHardwareNotch: hasHardwareNotch, height: closedBarHeight, trend: trend,
+            gapWidth: gap, hasHardwareNotch: hasHardwareNotch, height: height ?? closedBarHeight, trend: trend,
             blackHole: blackHole ? FleetBlackHoleState(working: working, isVisible: true) : .hidden
         ).background(Color.black))
         renderer.scale = 2

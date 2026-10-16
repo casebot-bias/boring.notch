@@ -45,8 +45,11 @@ struct FleetClosedIndicator: View {
                     notchWidth: vm.closedNotchSize.width,
                     hasHardwareNotch: hasHardwareNotch),
                 hasHardwareNotch: hasHardwareNotch,
-                // The bar is 70 % of the closed notch: the notch's own height left it hanging well below the menu bar.
-                height: FleetPanelMetrics.closedBarHeight(vm.effectiveClosedNotchHeight),
+                // The bar's height follows the display: beside the camera cutout it is the closed
+                // notch's own height, so its bottom edge lines up with the hardware notch's; a display
+                // without a cutout keeps the shorter 70 % bar that clears the menu bar.
+                height: FleetPanelMetrics.closedBarHeight(vm.effectiveClosedNotchHeight,
+                                                          hasHardwareNotch: hasHardwareNotch),
                 toolRuns: model.toolRuns,
                 trend: model.speed?.trend,
                 blackHole: FleetBlackHoleState.resolve(working: model.workingCount, toolRuns: model.toolRuns)
