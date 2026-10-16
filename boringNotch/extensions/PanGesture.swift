@@ -34,7 +34,39 @@ extension View {
     }
 }
 
-private struct ScrollMonitor: NSViewRepresentable {
+/// A pane that scrolls itself puts this marker behind its box, so a scroll that lands on the box
+/// belongs to the pane: the box's own ScrollView already handled it, and it must not also drive the
+/// notch's pan gesture (a two-finger scroll down the findings used to close the notch).
+final class ScrollClaimView: NSView {
+    /// True when `point`, in window coordinates, lands on a marked pane.
+    static func claims(_ point: NSPoint, in window: NSWindow?) -> Bool {
+        guard let root = window?.contentView else { return false }
+        return root.markedPane(at: point)
+    }
+
+    /// The marker never draws and never takes an event: the ScrollView in front of it keeps every
+    /// scroll and click, and only the pan gesture's monitor reads the marker.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// The SwiftUI wrapper a pane puts behind its box: `.background(ScrollClaim())`.
+struct ScrollClaim: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { ScrollClaimView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+private extension NSView {
+    /// Walks the (SwiftUI hosting) tree for a `ScrollClaimView` whose frame holds `point`, window space.
+    func markedPane(at point: NSPoint) -> Bool {
+        for child in subviews {
+            if child is ScrollClaimView, child.convert(child.bounds, to: nil).contains(point) { return true }
+            if child.markedPane(at: point) { return true }
+        }
+        return false
+    }
+}
+
+struct ScrollMonitor: NSViewRepresentable {
     let direction: PanDirection
     let threshold: CGFloat
     let action: (CGFloat, NSEvent.Phase) -> Void
@@ -104,7 +136,21 @@ private struct ScrollMonitor: NSViewRepresentable {
             endTask = nil
         }
 
-        private func handleScroll(_ event: NSEvent) {
+        func handleScroll(_ event: NSEvent) { handleScroll(event, in: event.window) }
+
+        /// The monitor's whole policy for one event, with the window passed in so a test can drive it.
+        func handleScroll(_ event: NSEvent, in window: NSWindow?) {
+            // A scroll that lands on a pane which scrolls itself belongs to that pane. The notch's own
+            // progress still comes back, so an in-flight gesture ends with no translation.
+            if ScrollClaimView.claims(event.locationInWindow, in: window) {
+                if active { action(0, .ended) }
+                accumulated = 0
+                active = false
+                endTask?.cancel()
+                endTask = nil
+                return
+            }
+
             if event.phase == .ended || event.momentumPhase == .ended {
                 if active {
                     action(accumulated.magnitude, .ended)

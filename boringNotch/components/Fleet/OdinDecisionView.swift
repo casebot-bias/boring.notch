@@ -312,7 +312,9 @@ struct OdinDecisionView: View {
     /// QUESTION / ODIN FOUND switch over the findings box. The box is a real
     /// ScrollView: as tall as its text up to `OdinDecisionPaneMetrics.maxHeight`,
     /// scrollable by trackpad and wheel, with a fade while text is cut off below.
-    /// A fresh scroll view (new decision or pane) starts at the top.
+    /// A fresh scroll view (new decision or pane) starts at the top. The box claims
+    /// its own scrolls (ScrollClaim), so scrolling it never drives the notch's own
+    /// gestures.
     private func questionPane(_ d: FleetDecision) -> some View {
         let boxHeight = OdinDecisionPaneMetrics.boxHeight(contentHeight: paneScroll.contentHeight)
         return VStack(alignment: .leading, spacing: 4) {
@@ -325,6 +327,7 @@ struct OdinDecisionView: View {
             }
             .scrollIndicators(.visible)
             .coordinateSpace(name: Self.paneScrollSpace)
+            .background(ScrollClaim())
             .frame(height: boxHeight, alignment: .top)
             .mask(paneFade(boxHeight: boxHeight))
             .onPreferenceChange(OdinPaneScrollKey.self) { paneScroll = $0 }

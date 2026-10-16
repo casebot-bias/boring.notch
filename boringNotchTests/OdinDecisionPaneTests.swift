@@ -147,6 +147,107 @@ final class OdinDecisionPaneTests: XCTestCase {
         XCTAssertGreaterThan(brightest(rep, region), 0.35, "Visible finding row must contain bright text: \(region)", file: file, line: line)
     }
 
+    @MainActor private func windowBox(_ scroll: NSScrollView, in host: NSView) -> NSRect {
+        var rect = box(scroll, in: host)
+        if !host.isFlipped { rect.origin.y = host.bounds.height - rect.maxY }
+        return host.convert(rect, to: nil)
+    }
+
+    @MainActor func testTheFindingsBoxClaimsItsOwnScroll() throws {
+        let (view, window) = host(PaneDriver(decision()))
+        defer { window.close() }
+        func marker(in view: NSView) -> ScrollClaimView? {
+            if let marker = view as? ScrollClaimView { return marker }
+            return view.subviews.lazy.compactMap { marker(in: $0) }.first
+        }
+        let claim = try XCTUnwrap(marker(in: view), "The real findings box must install a ScrollClaimView")
+        let scroll = try scrollView(view)
+        let rect = scroll.convert(scroll.bounds, to: nil)
+        let clip = windowBox(scroll, in: view)
+        let claimed = claim.convert(claim.bounds, to: nil)
+        let centre = NSPoint(x: rect.midX, y: rect.midY)
+        let options = NSPoint(x: rect.maxX + 20, y: rect.midY)
+        let above = NSPoint(x: rect.midX, y: rect.maxY + 5)
+        print("ODIN claim rect=\(claimed), box rect=\(rect), clip rect=\(clip), centre=\(centre), options=\(options), above=\(above)")
+        XCTAssertEqual(claimed.minX, rect.minX, accuracy: 1.5)
+        XCTAssertEqual(claimed.maxX, rect.maxX, accuracy: 1.5)
+        XCTAssertEqual(claimed.minY, rect.minY, accuracy: 1.5)
+        XCTAssertEqual(claimed.maxY, rect.maxY, accuracy: 1.5)
+        // The narrower clip view is inside the claim: the scroller gutter is claimed too, on purpose.
+        XCTAssertTrue(claimed.contains(clip))
+        XCTAssertLessThan(clip.width, claimed.width)
+        XCTAssertTrue(ScrollClaimView.claims(centre, in: window))
+        XCTAssertTrue(view.convert(view.bounds, to: nil).contains(options))
+        XCTAssertFalse(ScrollClaimView.claims(options, in: window))
+        XCTAssertFalse(ScrollClaimView.claims(above, in: window))
+        XCTAssertFalse(ScrollClaimView.claims(centre, in: nil))
+        let parent = try XCTUnwrap(claim.superview)
+        XCTAssertNil(claim.hitTest(parent.convert(centre, from: nil)))
+    }
+
+    @MainActor func testAScrollOnTheBoxDoesNotDriveTheNotchGesture() throws {
+        let (view, window) = host(PaneDriver(decision()))
+        defer { window.close() }
+        window.setFrameOrigin(.zero)
+        pump(0.05)
+        let rect = windowBox(try scrollView(view), in: view)
+        let centre = NSPoint(x: rect.midX, y: rect.midY)
+        let options = NSPoint(x: rect.maxX + 20, y: rect.midY)
+        XCTAssertTrue(view.convert(view.bounds, to: nil).contains(options))
+        XCTAssertFalse(ScrollClaimView.claims(options, in: window))
+        let screenHeight = try XCTUnwrap(NSScreen.screens.first).frame.height
+        func wheel(at point: NSPoint) throws -> NSEvent {
+            let cg = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+                wheelCount: 1, wheel1: -8, wheel2: 0, wheel3: 0))
+            cg.location = CGPoint(x: window.frame.minX + point.x,
+                                  y: screenHeight - (window.frame.minY + point.y))
+            let event = try XCTUnwrap(NSEvent(cgEvent: cg))
+            XCTAssertEqual(event.locationInWindow, point, "Scroll event mapping must preserve the requested window point")
+            return event
+        }
+        var actions: [(CGFloat, NSEvent.Phase)] = []
+        func pairs() -> String {
+            actions.map { "(\($0.0), \($0.1 == .began ? "began" : $0.1 == .changed ? "changed" : $0.1 == .ended ? "ended" : String($0.1.rawValue)))" }.joined(separator: ", ")
+        }
+        let coordinator = ScrollMonitor.Coordinator(direction: .up, threshold: 4) {
+            actions.append(($0, $1))
+        }
+        defer { coordinator.removeMonitor() }
+        for _ in 0..<6 {
+            coordinator.handleScroll(try wheel(at: centre), in: window)
+            pump(0.03)
+        }
+        print("ODIN box actions=[\(pairs())]")
+        XCTAssertFalse(actions.contains { $0.1 == .began || $0.1 == .changed }, pairs())
+        XCTAssertFalse(actions.contains { $0.0 > 4 }, pairs())
+        actions.removeAll()
+        for _ in 0..<6 {
+            coordinator.handleScroll(try wheel(at: options), in: window)
+            pump(0.03)
+        }
+        print("ODIN options actions=[\(pairs())]")
+        XCTAssertTrue(actions.contains { $0.1 == .began && $0.0 >= 4 }, pairs())
+
+        // Start a fresh gesture, then cross into the box while it is still active.
+        coordinator.removeMonitor()
+        actions.removeAll()
+        for _ in 0..<6 {
+            coordinator.handleScroll(try wheel(at: options), in: window)
+            if actions.contains(where: { $0.1 == .began && $0.0 >= 4 }) { break }
+            pump(0.03)
+        }
+        XCTAssertTrue(actions.contains { $0.1 == .began && $0.0 >= 4 }, pairs())
+        let beforeReset = actions.count
+        coordinator.handleScroll(try wheel(at: centre), in: window)
+        pump(0.4)
+        print("ODIN reset actions=[\(pairs())], reset suffix=\(actions.dropFirst(beforeReset))")
+        XCTAssertEqual(actions.count, beforeReset + 1, pairs())
+        if actions.count > beforeReset {
+            XCTAssertEqual(actions[beforeReset].0, 0, pairs())
+            XCTAssertEqual(actions[beforeReset].1, .ended, pairs())
+        }
+    }
+
     @MainActor func testTheTallBoxScrollsToTheLastFinding() throws {
         let (view, window) = host(PaneDriver(decision()))
         defer { window.close() }

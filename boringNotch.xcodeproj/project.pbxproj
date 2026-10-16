@@ -185,6 +185,7 @@
 		B1F0A0022E60000100000001 /* BrightnessManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F0A0012E60000100000001 /* BrightnessManager.swift */; };
 		B1F747F92EC7E94000F841DB /* LottieView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F747F82EC7E94000F841DB /* LottieView.swift */; };
 		B1FEB4992C7686630066EBBC /* PanGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1FEB4982C7686630066EBBC /* PanGesture.swift */; };
+		CA17C1A10000000000000001 /* PanGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1FEB4982C7686630066EBBC /* PanGesture.swift */; };
 		B3392077C15FAF55C7DD3094 /* FleetDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8273CC303EF7BBAF5F641041 /* FleetDecodingTests.swift */; };
 		ECAFCF11E67C413CA9E34329 /* FleetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5104882A2AF59662ADF23254 /* FleetModels.swift */; };
 		F38DE6482D8243E7008B5C6D /* BatteryActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */; };
@@ -1127,6 +1128,7 @@
 				F7E0A1000000000000000005 /* FleetThemeTests.swift in Sources */,
 				D1DEC1510000000000000001 /* OdinDecisionView.swift in Sources */,
 				D1DEC1510000000000000002 /* OdinDecisionPaneTests.swift in Sources */,
+				CA17C1A10000000000000001 /* PanGesture.swift in Sources */,
 				5E7E8A1FCBA76A6EE9F3284E /* FleetPanelModel.swift in Sources */,
 				B3392077C15FAF55C7DD3094 /* FleetDecodingTests.swift in Sources */,
 				5411D456ED82369EDE9D5BB1 /* FleetFormatTests.swift in Sources */,
