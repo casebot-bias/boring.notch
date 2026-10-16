@@ -4,15 +4,50 @@
 //
 //  The ODIN tab: one chip per open decision, the reason with an "Open PR ↗"
 //  link, a QUESTION / ODIN FOUND switch over the findings box, and the
-//  option list with the "Send decision" button. The chip strip and the
-//  findings box drag open (offset + clip, never scrolling containers) so
-//  their text renders everywhere, offscreen PNGs included. Labels and
+//  option list with the "Send decision" button. The findings box is a real
+//  ScrollView, not an offset-and-clip drag: only a scroll container gives
+//  trackpad and wheel scrolling and a scroll indicator, and it can be exactly
+//  as tall as its text up to 96 pt. Only the chip strip still drags open
+//  (offset + clip), since it is a single row that never scrolls; that keeps
+//  its text rendering everywhere, offscreen PNGs included. Labels and
 //  sentences draw in SF Pro, data in JetBrains Mono, nothing below 11 pt.
 //
 
 import AppKit
 import Defaults
 import SwiftUI
+
+/// The findings box: ceiling, fade height and the two rules the box obeys.
+enum OdinDecisionPaneMetrics {
+    /// The tallest the findings box draws; longer text scrolls inside it.
+    static let maxHeight: CGFloat = 96
+    /// Height of the bottom fade shown while more text is below the box.
+    static let fadeHeight: CGFloat = 12
+    /// The content's own height, never past `maxHeight`; 0 (not measured yet) draws the ceiling.
+    static func boxHeight(contentHeight: CGFloat) -> CGFloat {
+        contentHeight > 0 ? min(maxHeight, contentHeight) : maxHeight
+    }
+    /// True while text is cut off below the box's lower edge.
+    static func moreBelow(offset: CGFloat, boxHeight: CGFloat, contentHeight: CGFloat) -> Bool {
+        contentHeight > 0 && offset + boxHeight < contentHeight - 0.5
+    }
+}
+
+/// What the box measures about itself: how far it is scrolled, how tall its content is.
+struct OdinPaneScroll: Equatable {
+    var offset: CGFloat = 0
+    var contentHeight: CGFloat = 0
+    static let top = OdinPaneScroll()
+}
+
+/// One measurement per layout pass from the box's own GeometryReader.
+struct OdinPaneScrollKey: PreferenceKey {
+    static var defaultValue = OdinPaneScroll.top
+    static func reduce(value: inout OdinPaneScroll, nextValue: () -> OdinPaneScroll) {
+        let next = nextValue()
+        if next.contentHeight > 0 { value = next }
+    }
+}
 
 struct OdinDecisionView: View {
     let decisions: [FleetDecision]
@@ -23,14 +58,32 @@ struct OdinDecisionView: View {
     var caseJobs: [CaseJob] = []
     let onSend: (FleetDecision, OdinOption) -> Void
 
+    /// Fixture entry: the proof harness renders ODIN FOUND without a click, since a synthesized
+    /// click never reaches a SwiftUI button in-process. The tab itself always starts on QUESTION.
+    init(decisions: [FleetDecision],
+         sendingJob: String?,
+         sentJob: String?,
+         error: String?,
+         caseJobs: [CaseJob] = [],
+         startsOnFound: Bool = false,
+         onSend: @escaping (FleetDecision, OdinOption) -> Void) {
+        self.decisions = decisions
+        self.sendingJob = sendingJob
+        self.sentJob = sentJob
+        self.error = error
+        self.caseJobs = caseJobs
+        self.onSend = onSend
+        _pane = State(initialValue: startsOnFound ? .found : .question)
+    }
+
     @Default(.fleetSkin) private var fleetSkin
     @State private var index = 0
     @State private var pane: Pane = .question
     @State private var picked: [String: String] = [:]
     @State private var chipOffset: CGFloat = 0
     @State private var chipDragStart: CGFloat?
-    @State private var paneOffset: CGFloat = 0
-    @State private var paneDragStart: CGFloat?
+    @State private var paneScroll = OdinPaneScroll.top
+    private static let paneScrollSpace = "odinPaneScroll"
 
     private enum Pane { case question, found }
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
@@ -256,63 +309,85 @@ struct OdinDecisionView: View {
 
     // MARK: - Question pane
 
-    /// QUESTION / ODIN FOUND switch over the 96 pt findings box, which drags
-    /// open vertically (offset + clip, clamped at the top) and resets on any
-    /// decision or pane change.
+    /// QUESTION / ODIN FOUND switch over the findings box. The box is a real
+    /// ScrollView: as tall as its text up to `OdinDecisionPaneMetrics.maxHeight`,
+    /// scrollable by trackpad and wheel, with a fade while text is cut off below.
+    /// A fresh scroll view (new decision or pane) starts at the top.
     private func questionPane(_ d: FleetDecision) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let boxHeight = OdinDecisionPaneMetrics.boxHeight(contentHeight: paneScroll.contentHeight)
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 12) {
                 paneButton("QUESTION", active: pane == .question) { pane = .question }
                 paneButton("ODIN FOUND \(d.found.count)", active: pane == .found) { pane = .found }
             }
-            Group {
-                switch pane {
-                case .question:
-                    Text(FleetFormat.decisionQuestion(d))
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundColor(theme.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                case .found:
-                    if d.found.isEmpty {
-                        Text("Odin found nothing to report.")
-                            .font(.system(size: 11))
-                            .foregroundColor(theme.dim)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(Array(d.found.enumerated()), id: \.offset) { _, line in
-                                HStack(alignment: .top, spacing: 6) {
-                                    Rectangle()
-                                        .fill(theme.hot)
-                                        .frame(width: 4, height: 4)
-                                        .padding(.top, 4)
-                                    Text(line)
-                                        .font(FleetType.mono(size: 11))
-                                        .foregroundColor(theme.dim)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
+            ScrollView(.vertical) {
+                paneContent(d)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .offset(y: paneOffset)
-            .frame(height: 96, alignment: .top)
-            .clipped()
-            .contentShape(Rectangle())
-            .gesture(DragGesture()
-                .onChanged { value in
-                    let start = paneDragStart ?? paneOffset
-                    paneDragStart = start
-                    paneOffset = min(0, start + value.translation.height)
-                }
-                .onEnded { _ in paneDragStart = nil })
-            .onChange(of: index) { paneOffset = 0 }
-            .onChange(of: pane) { paneOffset = 0 }
+            .scrollIndicators(.visible)
+            .coordinateSpace(name: Self.paneScrollSpace)
+            .frame(height: boxHeight, alignment: .top)
+            .mask(paneFade(boxHeight: boxHeight))
+            .onPreferenceChange(OdinPaneScrollKey.self) { paneScroll = $0 }
+            // A fresh scroll view starts at the top: the old drag offset reset on both changes.
+            .id("\(key(d))-\(pane)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The findings box's text: the question, or the ODIN FOUND lines.
+    private func paneContent(_ d: FleetDecision) -> some View {
+        Group {
+            switch pane {
+            case .question:
+                Text(FleetFormat.decisionQuestion(d))
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundColor(theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .found:
+                if d.found.isEmpty {
+                    Text("Odin found nothing to report.")
+                        .font(.system(size: 11))
+                        .foregroundColor(theme.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(d.found.enumerated()), id: \.offset) { _, line in
+                            HStack(alignment: .top, spacing: 6) {
+                                Rectangle()
+                                    .fill(theme.hot)
+                                    .frame(width: 4, height: 4)
+                                    .padding(.top, 4)
+                                Text(line)
+                                    .font(FleetType.mono(size: 11))
+                                    .foregroundColor(theme.dim)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(GeometryReader { geo in
+            Color.clear.preference(key: OdinPaneScrollKey.self, value: OdinPaneScroll(
+                offset: -geo.frame(in: .named(Self.paneScrollSpace)).minY,
+                contentHeight: geo.size.height))
+        })
+    }
+
+    /// Bottom fade of the findings box: a gradient mask while text is cut off below, a plain mask otherwise.
+    @ViewBuilder
+    private func paneFade(boxHeight: CGFloat) -> some View {
+        if OdinDecisionPaneMetrics.moreBelow(offset: paneScroll.offset, boxHeight: boxHeight, contentHeight: paneScroll.contentHeight) {
+            LinearGradient(stops: [
+                .init(color: .black, location: 0),
+                .init(color: .black, location: 1 - OdinDecisionPaneMetrics.fadeHeight / boxHeight),
+                .init(color: .clear, location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+        } else {
+            Color.black
+        }
     }
 
     /// One underline-tab of the QUESTION / ODIN FOUND switch.
