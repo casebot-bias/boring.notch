@@ -655,7 +655,7 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetPanelMetrics.closedSparklineHeight, 10,
                        "0.7 x 14, rounded to a whole point")
         XCTAssertLessThan(FleetPanelMetrics.closedSparklineHeight,
-                          FleetPanelMetrics.closedBarHeight(30, hasHardwareNotch: false),
+                          FleetPanelMetrics.closedBarHeight(30, hardwareNotchHeight: 0),
                           "and it fits inside the closed bar")
     }
 
@@ -987,13 +987,16 @@ final class FleetFormatTests: XCTestCase {
 
     /// The closed notch the job machine's display produces: a 30 pt menu bar on a display with no
     /// camera cutout, so the fleet bar is 70 % of it. The notched geometry - the owner's MacBook, a
-    /// hardware 38 pt notch, where the bar is the notch's own height - is `notchedBarHeight`.
+    /// hardware 38 pt notch - is `notchedBarHeight`.
     private let closedNotch: CGFloat = 30
-    private var closedBarHeight: CGFloat { FleetPanelMetrics.closedBarHeight(closedNotch, hasHardwareNotch: false) }
-    /// The owner's MacBook: a 38 pt hardware notch. There the bar is that height whole.
-    private let notchedClosedNotch: CGFloat = 38
+    private var closedBarHeight: CGFloat {
+        FleetPanelMetrics.closedBarHeight(closedNotch, hardwareNotchHeight: 0)
+    }
+    /// The owner's MacBook: `safeAreaInsets.top` is 38 pt there. The bar is that height whole,
+    /// whatever the closed notch's own height says - `closedNotch` is passed on purpose.
+    private let notchedHardwareNotchHeight: CGFloat = 38
     private var notchedBarHeight: CGFloat {
-        FleetPanelMetrics.closedBarHeight(notchedClosedNotch, hasHardwareNotch: true)
+        FleetPanelMetrics.closedBarHeight(closedNotch, hardwareNotchHeight: notchedHardwareNotchHeight)
     }
 
     /// The closed row prints its speed number in the skin's accent - the black skin's only green -
@@ -1121,9 +1124,12 @@ final class FleetFormatTests: XCTestCase {
     func testTheClosedBarMatchesTheNotchOnANotchedDisplayAndSeventyPercentWithoutOne() throws {
         XCTAssertEqual(FleetPanelMetrics.closedBarHeightScale, 0.7, accuracy: 0.0001)
         // The owner's MacBook: a 38 pt hardware notch draws a 38 pt bar.
-        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(38, hasHardwareNotch: true), 38, accuracy: 0.0001)
+        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(30, hardwareNotchHeight: 38), 38, accuracy: 0.0001)
+        // A custom 24 pt closed notch on that same 38 pt cutout still draws a 38 pt bar: the bar
+        // follows the hardware notch, not the notch height setting (Odin QA round 1).
+        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(24, hardwareNotchHeight: 38), 38, accuracy: 0.0001)
         // The job machine's display: no cutout, so the 30 pt closed notch keeps the 21 pt bar.
-        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(30, hasHardwareNotch: false), 21, accuracy: 0.0001)
+        XCTAssertEqual(FleetPanelMetrics.closedBarHeight(30, hardwareNotchHeight: 0), 21, accuracy: 0.0001)
 
         let speedReading = try XCTUnwrap(
             FleetFormat.closedRightReading(speed: FleetSpeed(current: 47.2, lastAt: nil), jobs: 2),
