@@ -22,9 +22,10 @@ private struct PaneFixture: View {
 
 /// The findings box is a ScrollView, and `ImageRenderer` draws a ScrollView as a blank image,
 /// so these tests host the real view in an `NSHostingView`, scroll it through AppKit's own
-/// `NSScrollView` and rasterise it with `cacheDisplay`. The system scroller is never painted by
-/// `cacheDisplay` (a plain AppKit `NSScroller` renders nothing either), so the indicator is
-/// asserted as an object: visible with a real knob while the content is taller than the box.
+/// `NSScrollView` and rasterise it with `cacheDisplay`. The proof image is the live view's
+/// `cacheDisplay` pass with the same view's PDF pass over its indicator strip: `cacheDisplay`
+/// paints no `NSScroller` at all (0 lit pixels in the box's right strip, and for a plain
+/// AppKit scroll view too), while PDF paints the indicator but no layer-backed SwiftUI content.
 ///
 /// The proof PNGs come from the env vars `ODIN_PANE_TALL_PREVIEW`, `ODIN_PANE_BOTTOM_PREVIEW`
 /// and `ODIN_PANE_SHORT_PREVIEW`; only their `TEST_RUNNER_`-prefixed names reach the test
@@ -69,18 +70,75 @@ final class OdinDecisionPaneTests: XCTestCase {
         throw NSError(domain: "Missing SwiftUI NSScrollView", code: 1)
     }
 
-    @MainActor private func raster(_ view: NSView, preview: String? = nil) throws -> NSBitmapImageRep {
+    @MainActor private func raster(_ view: NSView) throws -> NSBitmapImageRep {
         view.layoutSubtreeIfNeeded()
         let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width) * 2,
             pixelsHigh: Int(view.bounds.height) * 2, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
             isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
         rep.size = view.bounds.size
         view.cacheDisplay(in: view.bounds, to: rep)
-        if let preview, let path = ProcessInfo.processInfo.environment[preview] {
-            let scroll = try scrollView(view)
-            let bounds = box(scroll, in: view)
+        return rep
+    }
+
+    @MainActor private func pdfRaster(_ view: NSView, scale: Int) throws -> NSBitmapImageRep {
+        let provider = try XCTUnwrap(CGDataProvider(data: view.dataWithPDF(inside: view.bounds) as CFData))
+        let document = try XCTUnwrap(CGPDFDocument(provider))
+        let page = try XCTUnwrap(document.page(at: 1))
+        let rep = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil,
+            pixelsWide: Int(view.bounds.width) * scale, pixelsHigh: Int(view.bounds.height) * scale,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        rep.size = view.bounds.size
+        let graphics = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: rep))
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = graphics
+        let context = graphics.cgContext
+        // Bitmap contexts already include rep.size's pixel density; apply the requested scale once.
+        context.concatenate(context.ctm.inverted())
+        context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
+        context.drawPDFPage(page)
+        return rep
+    }
+
+    private func indicatorPixels(_ rep: NSBitmapImageRep, box: NSRect) -> Int {
+        var count = 0
+        for y in max(0, Int(box.minY * 2))..<min(rep.pixelsHigh, max(0, Int(box.maxY * 2))) {
+            for x in max(0, min(rep.pixelsWide, Int((box.maxX - 17) * 2)))..<min(rep.pixelsWide, max(0, Int(box.maxX * 2))) {
+                if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                   max(c.redComponent, c.greenComponent, c.blueComponent) > 0.12 { count += 1 }
+            }
+        }
+        return count
+    }
+
+    @MainActor private func proofImage(_ host: NSView, box scroll: NSScrollView,
+                                      rep: NSBitmapImageRep, preview: String) throws -> (before: Int, after: Int) {
+        scroll.flashScrollers()
+        pump(0.3)
+        let scrollerRep = try pdfRaster(scroll, scale: 2)
+        let r = host.convert(scroll.bounds, from: scroll)
+        let boxRect = NSRect(x: r.minX, y: host.isFlipped ? r.minY : host.bounds.height - r.maxY,
+                             width: r.width, height: r.height)
+        let body = NSRect(x: boxRect.minX, y: boxRect.minY, width: boxRect.width - 17, height: boxRect.height)
+        let bodyBefore = brightest(rep, body)
+        let before = indicatorPixels(rep, box: boxRect)
+        let y = host.isFlipped ? host.bounds.height - r.maxY : r.minY
+        let graphics = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: rep))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = graphics
+        graphics.cgContext.clip(to: NSRect(x: r.maxX - 17, y: y, width: 17, height: r.height))
+        NSImage(cgImage: try XCTUnwrap(scrollerRep.cgImage), size: scroll.bounds.size)
+            .draw(in: NSRect(x: r.minX, y: y, width: r.width, height: r.height))
+        NSGraphicsContext.restoreGraphicsState()
+        let after = indicatorPixels(rep, box: boxRect)
+        let bodyAfter = brightest(rep, body)
+        XCTAssertEqual(bodyBefore, bodyAfter, accuracy: 0.001, "\(preview) body \(bodyBefore) -> \(bodyAfter)")
+        print("\(preview) body brightness \(bodyBefore) -> \(bodyAfter)")
+        if let path = ProcessInfo.processInfo.environment[preview] {
+            let bounds = box(scroll, in: host)
             let height = min(rep.pixelsHigh, Int((bounds.maxY + 2) * 2))
-            let width = min(rep.pixelsWide, Int(scroll.convert(scroll.bounds, to: view).maxX * 2))
+            let width = min(rep.pixelsWide, Int(r.maxX * 2))
             let crop = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width,
                 pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
                 isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
@@ -90,9 +148,9 @@ final class OdinDecisionPaneTests: XCTestCase {
                 }
             }
             try XCTUnwrap(crop.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: path))
-            print("\(preview): \(path), \(crop.pixelsWide)x\(crop.pixelsHigh)")
+            print("\(preview): \(path), \(width)x\(height), indicator \(before) -> \(after)")
         }
-        return rep
+        return (before, after)
     }
 
     // All raster rectangles use top-left point coordinates, independently of AppKit's flippedness.
@@ -252,7 +310,7 @@ final class OdinDecisionPaneTests: XCTestCase {
         let (view, window) = host(PaneDriver(decision()))
         defer { window.close() }
         let scroll = try scrollView(view)
-        let top = try raster(view, preview: "ODIN_PANE_TALL_PREVIEW")
+        let top = try raster(view)
         try assertRows(scroll, rep: top, host: view, atEnd: false)
         let b = box(scroll, in: view)
         let middle = brightest(top, CGRect(x: b.minX + 10, y: b.midY - 20, width: b.width - 30, height: 40))
@@ -266,8 +324,11 @@ final class OdinDecisionPaneTests: XCTestCase {
         XCTAssertLessThan(scroller.knobProportion, 0.99)
         XCTAssertGreaterThan(try XCTUnwrap(scroll.documentView).frame.height, scroll.contentView.bounds.height)
         print("ODIN tall knobProportion=\(scroller.knobProportion), hidden=\(scroller.isHidden), alpha=\(scroller.alphaValue)")
+        let tallProof = try proofImage(view, box: scroll, rep: top, preview: "ODIN_PANE_TALL_PREVIEW")
+        XCTAssertEqual(tallProof.before, 0, "Indicator \(tallProof.before) -> \(tallProof.after)")
+        XCTAssertGreaterThan(tallProof.after, 0, "Indicator \(tallProof.before) -> \(tallProof.after)")
         try scrollToEnd(view, scroll)
-        let end = try raster(view, preview: "ODIN_PANE_BOTTOM_PREVIEW")
+        let end = try raster(view)
         try assertRows(scroll, rep: end, host: view, atEnd: true)
         let endMiddle = brightest(end, CGRect(x: b.minX + 10, y: b.midY - 20, width: b.width - 30, height: 40))
         let endBottom = brightest(end, CGRect(x: b.minX + 10, y: b.maxY - 3, width: b.width - 30, height: 3))
@@ -277,6 +338,9 @@ final class OdinDecisionPaneTests: XCTestCase {
         let endBand = brightest(end, CGRect(x: b.minX + 10, y: b.maxY - OdinDecisionPaneMetrics.fadeHeight,
                                             width: b.width - 30, height: OdinDecisionPaneMetrics.fadeHeight))
         XCTAssertGreaterThan(endBand, endMiddle * 0.95, "Unfaded 12 pt band \(endBand), middle \(endMiddle)")
+        let bottomProof = try proofImage(view, box: scroll, rep: end, preview: "ODIN_PANE_BOTTOM_PREVIEW")
+        XCTAssertEqual(bottomProof.before, 0, "Indicator \(bottomProof.before) -> \(bottomProof.after)")
+        XCTAssertGreaterThan(bottomProof.after, 0, "Indicator \(bottomProof.before) -> \(bottomProof.after)")
     }
 
     @MainActor func testASingleShortFindingLeavesTheBoxAtItsContentHeight() throws {
@@ -286,7 +350,7 @@ final class OdinDecisionPaneTests: XCTestCase {
         XCTAssertEqual(tallBox.height, 96, accuracy: 0.5)
         let (short, shortWindow) = host(PaneDriver(decision(short: true)))
         defer { shortWindow.close() }
-        let rep = try raster(short, preview: "ODIN_PANE_SHORT_PREVIEW")
+        let rep = try raster(short)
         let scroll = try scrollView(short)
         let b = box(scroll, in: short)
         XCTAssertGreaterThan(brightest(rep, b.insetBy(dx: 10, dy: 0)), 0.35)
@@ -303,6 +367,9 @@ final class OdinDecisionPaneTests: XCTestCase {
             XCTAssertTrue(scroller.knobProportion <= 0.01 || scroller.isHidden || scroller.alphaValue == 0)
             XCTAssertLessThanOrEqual(try XCTUnwrap(scroll.documentView).frame.height, scroll.contentView.bounds.height + 0.5)
         } else { print("ODIN short scroller: none") }
+        let shortProof = try proofImage(short, box: scroll, rep: rep, preview: "ODIN_PANE_SHORT_PREVIEW")
+        XCTAssertEqual(shortProof.before, 0, "Indicator \(shortProof.before) -> \(shortProof.after)")
+        XCTAssertEqual(shortProof.after, 0, "Indicator \(shortProof.before) -> \(shortProof.after)")
     }
 
     @MainActor func testANewDecisionStartsAtTheTopAgain() throws {
