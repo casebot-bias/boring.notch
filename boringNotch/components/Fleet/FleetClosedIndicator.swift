@@ -28,8 +28,10 @@ struct FleetClosedIndicator: View {
             let model = store.panelModel
             // The geometry this bar draws in: a display with a camera cutout keeps the gap the cutout
             // needs and gives each wing 6 pt of padding, so the closed bar hugs the camera there.
-            let hasHardwareNotch = (vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) }?
-                .safeAreaInsets.top ?? 0) > 0
+            // `safeAreaInsets.top` is the hardware cutout's own height and 0 where there is none.
+            let hardwareNotchHeight = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) }?
+                .safeAreaInsets.top ?? 0
+            let hasHardwareNotch = hardwareNotchHeight > 0
             // Both sides take the wider text's width so the camera gap sits on the physical notch's
             // centre; unequal sides would push the gap off-centre and the notch would cover text.
             FleetClosedRowView(
@@ -45,8 +47,13 @@ struct FleetClosedIndicator: View {
                     notchWidth: vm.closedNotchSize.width,
                     hasHardwareNotch: hasHardwareNotch),
                 hasHardwareNotch: hasHardwareNotch,
-                // The bar is 70 % of the closed notch: the notch's own height left it hanging well below the menu bar.
-                height: FleetPanelMetrics.closedBarHeight(vm.effectiveClosedNotchHeight),
+                // The bar's height follows the display: beside the camera cutout it is the hardware
+                // notch's own height, whatever the notch height setting makes of the closed notch (a
+                // custom height, a measured menu bar and the real notch size all leave the bar as tall
+                // as the cutout, never shorter); a display without a cutout keeps the shorter 70 % bar
+                // that clears the menu bar.
+                height: FleetPanelMetrics.closedBarHeight(vm.effectiveClosedNotchHeight,
+                                                          hardwareNotchHeight: hardwareNotchHeight),
                 toolRuns: model.toolRuns,
                 trend: model.speed?.trend,
                 blackHole: FleetBlackHoleState.resolve(working: model.workingCount, toolRuns: model.toolRuns)

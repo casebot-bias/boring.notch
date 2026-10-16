@@ -640,14 +640,23 @@ enum FleetPanelMetrics {
     /// the tab strip that carries the health text free the room the map's four rows need, so the
     /// notch does not grow.
     static let fleetSectionHeight: CGFloat = 300
-    /// The closed fleet bar's height as a share of the closed notch's own height. The closed notch is
-    /// as tall as the display's menu bar (30 pt on the job machine's screen, the hardware notch's
-    /// 38 pt on a MacBook), which left the fleet row hanging well below the menu bar. The bar draws in
-    /// 70 % of it; the open notch and the other closed faces keep their height.
+    /// The closed fleet bar's height where the display has no camera cutout, as a share of the closed
+    /// notch's own height. That closed notch is as tall as the display's menu bar (30 pt on the job
+    /// machine's screen), which left the fleet row hanging well below it; there the bar draws in 70 %
+    /// of it (30 pt -> 21 pt). A display with a hardware notch draws the bar at the hardware notch's
+    /// own height instead - see `closedBarHeight(_:hardwareNotchHeight:)`.
     static let closedBarHeightScale: CGFloat = 0.7
-    /// The closed fleet bar's height for a closed notch of `closedNotchHeight` pt.
-    static func closedBarHeight(_ closedNotchHeight: CGFloat) -> CGFloat {
-        closedNotchHeight * closedBarHeightScale
+    /// The closed fleet bar's height. Beside a hardware notch it is the hardware notch itself
+    /// (`hardwareNotchHeight` > 0, the physical cutout's 38 pt on the owner's MacBook, whose
+    /// `notchHeightMode` is `.matchRealNotchSize`, i.e. `safeAreaInsets.top`), whole and
+    /// whatever closed notch height the settings produce: a custom height, a measured menu bar and
+    /// `.matchRealNotchSize` all draw the bar as tall as the cutout, so its bottom edge lines up with
+    /// the notch's and the black cutout never sticks out past the bar. `hardwareNotchHeight` is
+    /// `NSScreen.safeAreaInsets.top`, 0 where the display has no cutout, and only there does
+    /// `closedNotchHeight` choose the bar: `closedBarHeightScale` of it. The open notch and the other
+    /// closed faces keep their height either way.
+    static func closedBarHeight(_ closedNotchHeight: CGFloat, hardwareNotchHeight: CGFloat) -> CGFloat {
+        hardwareNotchHeight > 0 ? hardwareNotchHeight : closedNotchHeight * closedBarHeightScale
     }
     /// The closed-notch row: one line per side ("2 working" or "2 working · 1 down" / the speed).
     /// Both sides are as wide as the wider text, so the camera gap stays centred and the notch is
@@ -689,10 +698,12 @@ enum FleetPanelMetrics {
         2 * closedRowSide(left: left, right: right, padding: padding) + gap
     }
     /// The closed row's speed reading: the number at this size (medium weight), its unit at
-    /// `minTextSize` after this spacing. The bar is 70 % of the closed notch, so the number drops from
-    /// 20 pt to 14 pt (0.7 x 20, whose line box still fits the shorter bar) and the row's labels sit
-    /// on `minTextSize`. The closed row draws its speed reading with these and the fit rule
-    /// (`closedSpeedFits`) measures with the same numbers.
+    /// `minTextSize` after this spacing. The bar is 70 % of the closed notch only where the display has no
+    /// camera cutout, so there the number drops from 20 pt to 14 pt (0.7 x 20, whose line box still fits the
+    /// shorter bar) and the row's labels sit on `minTextSize`. Beside a hardware notch the bar is the
+    /// hardware notch's own height, which holds this same 14 pt number, the same 11 pt labels and the same 10 pt sparkline.
+    /// The closed row draws its speed reading with these and the fit rule (`closedSpeedFits`) measures
+    /// with the same numbers.
     static let closedSpeedNumberSize: CGFloat = 14
     static let closedSpeedSpacing: CGFloat = 3
     /// The speed number never draws narrower than three digits, so "0" and "147 tok/s" leave the
@@ -714,8 +725,10 @@ enum FleetPanelMetrics {
     /// its `closedSpeedSpacing` are what keep the notched bar at 85.7 % of main's width rather
     /// than the 75 % bound.
     static let closedSparklineWidth: CGFloat = 24
-    /// Short enough to sit inside the speed number's line box without pushing the row taller. The
-    /// height follows the bar's 70 % (0.7 x 14), so the sparkline stays inside the shorter bar.
+    /// Short enough to sit inside the speed number's line box without pushing the row taller. Where the
+    /// display has no camera cutout the height follows the bar's 70 % (0.7 x 14), so the sparkline stays
+    /// inside the shorter bar; beside a hardware notch the bar is the hardware notch's own height and the same
+    /// 10 pt sparkline sits inside it.
     static let closedSparklineHeight: CGFloat = 10
     /// The current-work column: 604 pt section, less the 18 pt lead and 1 pt rule, the 292 pt map and
     /// the 20 + 1 + 20 pt around the hairline.
