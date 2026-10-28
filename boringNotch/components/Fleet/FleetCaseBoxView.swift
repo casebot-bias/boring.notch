@@ -27,7 +27,7 @@ struct FleetCaseBoxView: View {
             .overlay {
                 VStack(spacing: 1) {
                     Text(lane.label)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(FleetType.size(12, weight: .semibold))
                         .foregroundColor(theme.text)
                     Text(FleetFormat.caseBoxState(lane))
                         .font(FleetType.mono(size: 11))

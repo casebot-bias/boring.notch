@@ -415,15 +415,20 @@ enum FleetFormat {
 
     // MARK: - tool runs
 
-    /// A run's elapsed seconds as the few characters the box and the closed row have: 45 -> "45s",
-    /// 600 -> "10m", 5400 -> "1h30m"; nil when the dashboard reports no elapsed time at all - a run
+    /// An elapsed time as the few characters the box and the closed row have: 45 -> "45s",
+    /// 600 -> "10m", 5400 -> "1h30m"; nil when nothing reports an elapsed time at all - a run
     /// that never reported its clock has no age to show, and guessing one would be a lie.
-    static func toolRunAge(_ run: ToolRun) -> String? {
-        guard let elapsed = run.elapsedSec else { return nil }
+    static func age(seconds: Int?) -> String? {
+        guard let elapsed = seconds else { return nil }
         let s = max(0, elapsed)
         if s < 60 { return "\(s)s" }
         if s < 3600 { return "\(s / 60)m" }
         return "\(s / 3600)h" + String(format: "%02d", (s % 3600) / 60) + "m"
+    }
+
+    /// A run's elapsed seconds as the few characters the box and the closed row have.
+    static func toolRunAge(_ run: ToolRun) -> String? {
+        age(seconds: run.elapsedSec)
     }
 
     /// The run that has been going longest: the one the box names, because it is what the machine is
@@ -461,6 +466,61 @@ enum FleetFormat {
         if let age = toolRunAge(run) { parts.append(age) }
         guard !parts.isEmpty else { return unknown }
         return parts.joined(separator: " · ")
+    }
+
+    /// Trimmed text, `nil` when nothing is left: a field the feed sends blank reads as a field
+    /// it never sent.
+    private static func trimmedText(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// One (job, label) group of tool runs: the same command repeated on one job prints one line.
+    struct ToolRunGroup: Equatable {
+        struct Label: Equatable { var text: String; var count: Int }
+        var job: String?
+        var labels: [Label]
+        var age: String?
+        /// "node ×2, xcodebuild · 2h07m" - no job name: the heartbeat row above names it.
+        var subline: String
+        /// "visage-onb2-save-home · node ×2 · 7m" - the whole line, for a job with no heartbeat row.
+        var line: String
+    }
+
+    /// The runs grouped by job, then by printed label, in the order the feed first reports each job
+    /// and each label. A run without a label prints its kind's verb (`toolRunVerb`), and a run
+    /// without a job stays a group of its own. A group's age is its oldest run's.
+    static func toolRunGroups(_ runs: [ToolRun]) -> [ToolRunGroup] {
+        // Feed order first: the key is the trimmed job, and a run with no job keys on `nil`, which
+        // is its own key - every jobless run lands in that one bucket, in the order the feed sent.
+        var jobOrder: [String?] = []
+        var jobRuns: [String?: [ToolRun]] = [:]
+        for run in runs {
+            let job = trimmedText(run.job)
+            if jobRuns[job] == nil { jobOrder.append(job) }
+            jobRuns[job, default: []].append(run)
+        }
+        return jobOrder.map { job in
+            // Then the labels, same way: keyed on the printed text, first-seen order kept, a repeat
+            // of one command counted rather than printed again.
+            var labelOrder: [String] = []
+            var counts: [String: Int] = [:]
+            var oldestSec: Int?
+            for run in jobRuns[job] ?? [] {
+                let text = trimmedText(run.label) ?? toolRunVerb(run)
+                if counts[text] == nil { labelOrder.append(text) }
+                counts[text, default: 0] += 1
+                if let sec = run.elapsedSec, sec > (oldestSec ?? Int.min) { oldestSec = sec }
+            }
+            let labels = labelOrder.map { ToolRunGroup.Label(text: $0, count: counts[$0] ?? 1) }
+            let joined = labels.map { $0.count > 1 ? "\($0.text) ×\($0.count)" : $0.text }
+                .joined(separator: ", ")
+            let ageText = age(seconds: oldestSec)
+            let subline = ageText.map { "\(joined) · \($0)" } ?? joined
+            let line = job.map { "\($0) · \(subline)" } ?? subline
+            return ToolRunGroup(job: job, labels: labels, age: ageText, subline: subline, line: line)
+        }
     }
 
     /// The closed row's left side while nobody works: a count (nil when one run speaks for itself),
@@ -615,7 +675,14 @@ enum FleetFormat {
 /// map and the closed-notch row read these; the tests measure the real strings at `minTextSize`
 /// against them. Foundation/CoreGraphics only, so it compiles into the app and the test target.
 enum FleetPanelMetrics {
-    /// The smallest text size any fleet view may use.
+    /// The one scale every Fleet panel text runs through: `FleetType.size(_:)` and
+    /// `FleetType.mono(size:)` multiply a base size by it, so the whole panel reads about 1 pt
+    /// smaller (11 -> 10.1, 12.5 -> 11.5, 15 -> 13.8) and the space between items grows without
+    /// touching one layout, padding or colour value. `minTextSize` stays the base floor.
+    static let textScale: CGFloat = 0.92
+    /// The smallest base text size any fleet view may use. `FleetType.scaled(_:)` clamps a base to
+    /// it before applying `textScale`, so the smallest size the panel draws is this value scaled
+    /// (11 -> 10.12) and nothing can be drawn below that. Keep the value: it is the base floor.
     static let minTextSize: CGFloat = 11
     /// A response-map row's fixed furniture: signal square, its spacing, the trailing spacer and
     /// the job badge. Everything left in the column is the text budget.
@@ -747,13 +814,94 @@ enum FleetPanelMetrics {
     static let workPreviewHeight: CGFloat = 65
     static let workPreviewGap: CGFloat = 15
     static let workMoreLinkHeight: CGFloat = 15
-    /// How many preview jobs sit under the heartbeat lines: two as before, one while lines show.
-    static func previewLimit(caseJobLines: Int) -> Int { caseJobLines > 0 ? 1 : 2 }
-    /// The column's content height for that many heartbeat lines and the matching previews.
-    static func workContentHeight(caseJobLines: Int, previews: Int, moreLink: Bool) -> CGFloat {
-        let lines = CGFloat(caseJobLines) * caseJobLineHeight + (caseJobLines > 0 ? 8 : 0)
-        let rows = CGFloat(previews) * workPreviewHeight + CGFloat(max(0, previews - 1)) * workPreviewGap
-        return workHeadHeight + lines + rows + (moreLink ? workMoreLinkHeight : 0)
+    /// The most preview jobs the column ever wants; the height budget drops previews first.
+    static let workPreviewLimit = 2
+    /// What the CURRENT WORK column draws. `height` is the stack the view renders, so a plan whose
+    /// `height` is over `workColumnHeight` is a bug, not a squeeze.
+    struct WorkPlan: Equatable {
+        struct Heartbeat: Equatable {
+            var job: CaseJob
+            var line: FleetFormat.CaseJobLine
+            var subline: String?
+        }
+        var heartbeats: [Heartbeat] = []
+        var orphanLines: [String] = []
+        var previews: [FleetJob] = []
+        /// The more link's count: running jobs not shown plus every row dropped to fit. 0 hides it.
+        var hidden: Int = 0
+        var height: CGFloat = 0
+    }
+    /// The column's height for that many rows: head, an 8 pt gap, heartbeat and sub-line rows (16 pt
+    /// each), an 8 pt gap + 16 pt orphan rows, an 8 pt gap + 65 pt previews (15 pt apart), the more link.
+    static func workHeight(heartbeats: Int, sublines: Int, orphanLines: Int, previews: Int, more: Bool) -> CGFloat {
+        let rows = max(0, heartbeats) + max(0, sublines)
+        var height = workHeadHeight
+        if rows > 0 { height += 8 + CGFloat(rows) * caseJobLineHeight }
+        if orphanLines > 0 { height += 8 + CGFloat(orphanLines) * caseJobLineHeight }
+        if previews > 0 {
+            height += 8 + CGFloat(previews) * workPreviewHeight + CGFloat(previews - 1) * workPreviewGap
+        }
+        if more { height += workMoreLinkHeight }
+        return height
+    }
+    /// The trimmed job name a plan matches tool-run groups on; blank reads as no name.
+    private static func trimmedJobName(_ name: String) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+    /// The rows the column draws for this state, dropped until it fits `workColumnHeight`: first the
+    /// previews (last one first), then the tool lines of jobs without a heartbeat row, then the
+    /// sub-lines. Every dropped row adds one to `hidden`.
+    static func workPlan(caseJobs: [CaseJob], toolRuns: [ToolRun], jobs: [FleetJob],
+                         runningTaskCount: Int) -> WorkPlan {
+        let groups = FleetFormat.toolRunGroups(toolRuns)
+        // The heartbeat rows: the first `caseJobLineLimit` jobs in feed order, each with its
+        // group's sub-line (the group keyed on the same job name) or nil.
+        var heartbeats: [WorkPlan.Heartbeat] = []
+        var heartbeatNames: Set<String> = []
+        for job in caseJobs.prefix(caseJobLineLimit) {
+            let name = trimmedJobName(job.job)
+            if let name { heartbeatNames.insert(name) }
+            heartbeats.append(WorkPlan.Heartbeat(job: job,
+                                                 line: FleetFormat.caseJobLine(job),
+                                                 subline: name.flatMap { name in groups.first { $0.job == name }?.subline }))
+        }
+        // The groups no heartbeat names: their own lines, with the job in front.
+        var orphanLines = groups.filter { group in
+            guard let job = group.job else { return true }
+            return !heartbeatNames.contains(job)
+        }.map(\.line)
+        var previews = Array(jobs.prefix(workPreviewLimit))
+        var dropped = 0
+        func planHeight(more: Bool) -> CGFloat {
+            workHeight(heartbeats: heartbeats.count,
+                       sublines: heartbeats.reduce(0) { $0 + ($1.subline != nil ? 1 : 0) },
+                       orphanLines: orphanLines.count,
+                       previews: previews.count,
+                       more: more)
+        }
+        func hiddenCount() -> Int { max(0, runningTaskCount - previews.count) + dropped }
+        // Drop to fit, the last row of each block first; while anything is left to drop the more
+        // link stays reserved, because every drop feeds its count. Stop when only the head, its
+        // heartbeat rows and the link are left - heartbeats themselves always show.
+        while planHeight(more: hiddenCount() > 0) > workColumnHeight {
+            if !previews.isEmpty {
+                // A dropped preview is already one of the running jobs `hiddenCount` counts.
+                previews.removeLast()
+            } else if !orphanLines.isEmpty {
+                orphanLines.removeLast()
+                dropped += 1
+            } else if let lastSubline = heartbeats.lastIndex(where: { $0.subline != nil }) {
+                heartbeats[lastSubline].subline = nil
+                dropped += 1
+            } else { break }
+        }
+        let hidden = hiddenCount()
+        return WorkPlan(heartbeats: heartbeats,
+                        orphanLines: orphanLines,
+                        previews: previews,
+                        hidden: hidden,
+                        height: planHeight(more: hidden > 0))
     }
     /// A pulsing status dot breathes by size, never by opacity: dimming an alert dot would drop it
     /// under the 3:1 dot floor. The busy cells keep their own dim pulse.

@@ -169,6 +169,13 @@
 		F7E0A1000000000000000002 /* FleetTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000001 /* FleetTheme.swift */; };
 		F7E0A1000000000000000003 /* FleetTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000001 /* FleetTheme.swift */; };
 		F7E0A1000000000000000005 /* FleetThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000004 /* FleetThemeTests.swift */; };
+		CA5E0000000000000000B001 /* FleetSectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD4298C2F5B96CB89DDA1B88 /* FleetSectionView.swift */; };
+		CA5E0000000000000000B002 /* FleetResponseMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10D4356B8C14E68D8309B2A /* FleetResponseMapView.swift */; };
+		CA5E0000000000000000B003 /* FleetWorkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CA111D99EBAD7362EB7B5B /* FleetWorkView.swift */; };
+		CA5E0000000000000000B004 /* FleetPressureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7E0A1000000000000000107 /* FleetPressureView.swift */; };
+		CA5E0000000000000000B005 /* FleetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B263B9B9718A79CB57973D /* FleetStore.swift */; };
+		CA5E0000000000000000B006 /* FleetPanelSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E0000000000000000F002 /* FleetPanelSnapshotTests.swift */; };
+		CA5E0000000000000000B007 /* FleetPanelRenderDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E0000000000000000F003 /* FleetPanelRenderDefaults.swift */; };
 		B19016242CC15B5000E3F12E /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B19016232CC15B4D00E3F12E /* Constants.swift */; };
 		B19424092CD0FF01003E5DC2 /* LottieAnimationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B19424082CD0FEFE003E5DC2 /* LottieAnimationView.swift */; };
 		B1A78C822C8BA08100BD51B0 /* FullscreenMediaDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A78C812C8BA08100BD51B0 /* FullscreenMediaDetection.swift */; };
@@ -387,6 +394,8 @@
 		D1E3C7F860A060EDE8E06363 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DD4809E4B9876FEE672F1C96 /* FleetPanelModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetPanelModelTests.swift; path = boringNotchTests/FleetPanelModelTests.swift; sourceTree = "<group>"; };
 		F7E0A1000000000000000004 /* FleetThemeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetThemeTests.swift; path = boringNotchTests/FleetThemeTests.swift; sourceTree = "<group>"; };
+		CA5E0000000000000000F002 /* FleetPanelSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetPanelSnapshotTests.swift; path = boringNotchTests/FleetPanelSnapshotTests.swift; sourceTree = "<group>"; };
+		CA5E0000000000000000F003 /* FleetPanelRenderDefaults.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetPanelRenderDefaults.swift; path = boringNotchTests/FleetPanelRenderDefaults.swift; sourceTree = "<group>"; };
 		F38DE6472D8243E2008B5C6D /* BatteryActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryActivityManager.swift; sourceTree = "<group>"; };
 		FD3E45FB207CA856A28D20FF /* FleetFormat.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetFormat.swift; path = Fleet/FleetFormat.swift; sourceTree = "<group>"; };
 		F7E0A1000000000000000001 /* FleetTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FleetTheme.swift; path = Fleet/FleetTheme.swift; sourceTree = "<group>"; };
@@ -771,6 +780,8 @@
 				A1D0C0DE0000000000000060 /* FleetBlackHoleTests.swift */,
 				DD4809E4B9876FEE672F1C96 /* FleetPanelModelTests.swift */,
 				F7E0A1000000000000000004 /* FleetThemeTests.swift */,
+				CA5E0000000000000000F002 /* FleetPanelSnapshotTests.swift */,
+				CA5E0000000000000000F003 /* FleetPanelRenderDefaults.swift */,
 				D1DEC1510000000000000003 /* OdinDecisionPaneTests.swift */,
 				F7E0A1000000000000000204 /* NotchWindowPlannerTests.swift */,
 				A1D0C0DE0000000000000003 /* FleetClientTests.swift */,
@@ -1135,6 +1146,13 @@
 				6A043F09ECA359512A6D19DA /* FleetPanelModelTests.swift in Sources */,
 				F7E0A1000000000000000202 /* NotchWindowPlanner.swift in Sources */,
 				F7E0A1000000000000000203 /* NotchWindowPlannerTests.swift in Sources */,
+				CA5E0000000000000000B001 /* FleetSectionView.swift in Sources */,
+				CA5E0000000000000000B002 /* FleetResponseMapView.swift in Sources */,
+				CA5E0000000000000000B003 /* FleetWorkView.swift in Sources */,
+				CA5E0000000000000000B004 /* FleetPressureView.swift in Sources */,
+				CA5E0000000000000000B005 /* FleetStore.swift in Sources */,
+				CA5E0000000000000000B006 /* FleetPanelSnapshotTests.swift in Sources */,
+				CA5E0000000000000000B007 /* FleetPanelRenderDefaults.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

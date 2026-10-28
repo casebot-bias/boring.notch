@@ -101,10 +101,15 @@ final class OdinDecisionPaneTests: XCTestCase {
         return rep
     }
 
-    private func indicatorPixels(_ rep: NSBitmapImageRep, box: NSRect) -> Int {
+    /// Lit pixels inside `area`: a host-space top-left rect, or - without one - the box's trailing
+    /// 17 pt strip. The indicator proofs sample the vertical scroller's own view rather than that
+    /// strip: at the scaled 10.12 pt mono the wrapped findings reach into the strip, and glyphs
+    /// there must never be mistaken for the scroller.
+    private func indicatorPixels(_ rep: NSBitmapImageRep, box: NSRect, in override: NSRect? = nil) -> Int {
         var count = 0
-        for y in max(0, Int(box.minY * 2))..<min(rep.pixelsHigh, max(0, Int(box.maxY * 2))) {
-            for x in max(0, min(rep.pixelsWide, Int((box.maxX - 17) * 2)))..<min(rep.pixelsWide, max(0, Int(box.maxX * 2))) {
+        let area = override ?? NSRect(x: box.maxX - 17, y: box.minY, width: 17, height: box.height)
+        for y in max(0, Int(area.minY * 2))..<min(rep.pixelsHigh, max(0, Int(area.maxY * 2))) {
+            for x in max(0, Int(area.minX * 2))..<min(rep.pixelsWide, max(0, Int(area.maxX * 2))) {
                 if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
                    max(c.redComponent, c.greenComponent, c.blueComponent) > 0.12 { count += 1 }
             }
@@ -112,8 +117,26 @@ final class OdinDecisionPaneTests: XCTestCase {
         return count
     }
 
-    @MainActor private func proofImage(_ host: NSView, box scroll: NSScrollView,
+    /// `scrollerSampled` marks a box that must show a scroller: both indicator samples are then
+    /// taken from the vertical scroller's own view. Without it the legacy trailing 17 pt strip of
+    /// the caller's raster is the sample, which suits a box that must never show one, where "no
+    /// pixels" is the whole claim.
+    @MainActor private func proofImage(_ host: NSView, box scroll: NSScrollView, scrollerSampled: Bool = false,
                                       rep: NSBitmapImageRep, preview: String) throws -> (before: Int, after: Int) {
+        // `before`: the scroller's own cacheDisplay raster. cacheDisplay draws no `NSScroller`
+        // (the scroller is layer-backed: measured 0 pixels live vs 776 in its PDF pass at 0.92),
+        // so this is 0 whenever nothing paints the indicator - and no finding text is inside the
+        // scroller view, so wrapping cannot feed it. Unsampled boxes keep the legacy sample: the
+        // caller's box raster and its trailing 17 pt.
+        let before: Int
+        if scrollerSampled, let scrollerView = scroll.verticalScroller {
+            before = indicatorPixels(try raster(scrollerView), box: scrollerView.bounds)
+        } else {
+            let q = host.convert(scroll.bounds, from: scroll)
+            before = indicatorPixels(rep, box: NSRect(x: q.minX,
+                                                      y: host.isFlipped ? q.minY : host.bounds.height - q.maxY,
+                                                      width: q.width, height: q.height))
+        }
         scroll.flashScrollers()
         pump(0.3)
         let scrollerRep = try pdfRaster(scroll, scale: 2)
@@ -122,16 +145,39 @@ final class OdinDecisionPaneTests: XCTestCase {
                              width: r.width, height: r.height)
         let body = NSRect(x: boxRect.minX, y: boxRect.minY, width: boxRect.width - 17, height: boxRect.height)
         let bodyBefore = brightest(rep, body)
-        let before = indicatorPixels(rep, box: boxRect)
         let y = host.isFlipped ? host.bounds.height - r.maxY : r.minY
         let graphics = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: rep))
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = graphics
+        // The PDF pass overlays the indicator exactly where it can land: the scroller's own rect,
+        // clipped to the strip the proof has always composited into.
         graphics.cgContext.clip(to: NSRect(x: r.maxX - 17, y: y, width: 17, height: r.height))
         NSImage(cgImage: try XCTUnwrap(scrollerRep.cgImage), size: scroll.bounds.size)
             .draw(in: NSRect(x: r.minX, y: y, width: r.width, height: r.height))
         NSGraphicsContext.restoreGraphicsState()
-        let after = indicatorPixels(rep, box: boxRect)
+        // `after`: the PDF pass paints the indicator (776 knob pixels measured at 0.92), while the
+        // same view's cacheDisplay raster paints none - the scroller is layer-backed, so
+        // cacheDisplay draws nothing of it. The two rasters' difference is the indicator alone:
+        // wrapped finding text sits in both and cancels, and a scroller that paints nothing live
+        // yet leaks in a PDF pass still fails, because that leak is exactly this difference.
+        let after: Int
+        if let scv = scrollerSampled ? scroll.verticalScroller : nil {
+            let pdf = try pdfRaster(scv, scale: 2)
+            let live = try raster(scv)
+            func lit(_ color: NSColor?) -> Bool {
+                guard let color = color?.usingColorSpace(.deviceRGB) else { return false }
+                return max(color.redComponent, color.greenComponent, color.blueComponent) > 0.12
+            }
+            var ink = 0
+            for yy in 0..<min(pdf.pixelsHigh, live.pixelsHigh) {
+                for x in 0..<min(pdf.pixelsWide, live.pixelsWide) {
+                    if lit(pdf.colorAt(x: x, y: yy)), !lit(live.colorAt(x: x, y: yy)) { ink += 1 }
+                }
+            }
+            after = ink
+        } else {
+            after = indicatorPixels(rep, box: boxRect)
+        }
         let bodyAfter = brightest(rep, body)
         XCTAssertEqual(bodyBefore, bodyAfter, accuracy: 0.001, "\(preview) body \(bodyBefore) -> \(bodyAfter)")
         print("\(preview) body brightness \(bodyBefore) -> \(bodyAfter)")
@@ -233,7 +279,15 @@ final class OdinDecisionPaneTests: XCTestCase {
         XCTAssertEqual(claimed.maxY, rect.maxY, accuracy: 1.5)
         // The narrower clip view is inside the claim: the scroller gutter is claimed too, on purpose.
         XCTAssertTrue(claimed.contains(clip))
-        XCTAssertLessThan(clip.width, claimed.width)
+        // With legacy scrollers the gutter is a real strip inside the claim, so the clip view is
+        // narrower than the claim. With overlay scrollers there is no gutter to claim: the clip
+        // view fills the claim horizontally, so the invariant there is equality, not strictness.
+        if scroll.scrollerStyle == .legacy {
+            XCTAssertLessThan(clip.width, claimed.width)
+        } else {
+            XCTAssertEqual(clip.width, claimed.width, accuracy: 1.5,
+                           "Overlay scrollers have no gutter, so the clip must fill the claim: clip \(clip), claim \(claimed)")
+        }
         XCTAssertTrue(ScrollClaimView.claims(centre, in: window))
         XCTAssertTrue(view.convert(view.bounds, to: nil).contains(options))
         XCTAssertFalse(ScrollClaimView.claims(options, in: window))
@@ -324,7 +378,8 @@ final class OdinDecisionPaneTests: XCTestCase {
         XCTAssertLessThan(scroller.knobProportion, 0.99)
         XCTAssertGreaterThan(try XCTUnwrap(scroll.documentView).frame.height, scroll.contentView.bounds.height)
         print("ODIN tall knobProportion=\(scroller.knobProportion), hidden=\(scroller.isHidden), alpha=\(scroller.alphaValue)")
-        let tallProof = try proofImage(view, box: scroll, rep: top, preview: "ODIN_PANE_TALL_PREVIEW")
+        let tallProof = try proofImage(view, box: scroll, scrollerSampled: true,
+                                       rep: top, preview: "ODIN_PANE_TALL_PREVIEW")
         XCTAssertEqual(tallProof.before, 0, "Indicator \(tallProof.before) -> \(tallProof.after)")
         XCTAssertGreaterThan(tallProof.after, 0, "Indicator \(tallProof.before) -> \(tallProof.after)")
         try scrollToEnd(view, scroll)
@@ -338,7 +393,8 @@ final class OdinDecisionPaneTests: XCTestCase {
         let endBand = brightest(end, CGRect(x: b.minX + 10, y: b.maxY - OdinDecisionPaneMetrics.fadeHeight,
                                             width: b.width - 30, height: OdinDecisionPaneMetrics.fadeHeight))
         XCTAssertGreaterThan(endBand, endMiddle * 0.95, "Unfaded 12 pt band \(endBand), middle \(endMiddle)")
-        let bottomProof = try proofImage(view, box: scroll, rep: end, preview: "ODIN_PANE_BOTTOM_PREVIEW")
+        let bottomProof = try proofImage(view, box: scroll, scrollerSampled: true,
+                                         rep: end, preview: "ODIN_PANE_BOTTOM_PREVIEW")
         XCTAssertEqual(bottomProof.before, 0, "Indicator \(bottomProof.before) -> \(bottomProof.after)")
         XCTAssertGreaterThan(bottomProof.after, 0, "Indicator \(bottomProof.before) -> \(bottomProof.after)")
     }

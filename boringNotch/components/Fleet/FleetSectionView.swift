@@ -26,14 +26,20 @@ struct FleetSectionView: View {
     @State private var openHovered = false
     /// The tab the panel opens on: the panel starts on FLEET; the render harness picks one.
     let initialTab: FleetPanelTab
+    /// A fixed model for the snapshot test's render harness; nil in the notch, which reads the store.
+    private let previewModel: FleetPanelModel?
     @State private var tab: FleetPanelTab
 
-    init(initialTab: FleetPanelTab = .fleet) {
+    init(initialTab: FleetPanelTab = .fleet, previewModel: FleetPanelModel? = nil) {
         self.initialTab = initialTab
+        self.previewModel = previewModel
         _tab = State(initialValue: initialTab)
     }
 
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
+
+    /// The model the panel draws: the render harness's fixed one, or the live store's.
+    private var model: FleetPanelModel { previewModel ?? store.panelModel }
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -47,11 +53,11 @@ struct FleetSectionView: View {
                         fleetTab
                     case .odin:
                         OdinDecisionView(
-                            decisions: store.panelModel.decisions,
+                            decisions: model.decisions,
                             sendingJob: store.sendingDecisionJob,
                             sentJob: store.sentDecisionJob,
                             error: store.decisionError,
-                            caseJobs: store.panelModel.caseJobs,
+                            caseJobs: model.caseJobs,
                             onSend: { decision, option in
                                 Task { await store.sendDecision(decision, option: option) }
                             }
@@ -63,7 +69,7 @@ struct FleetSectionView: View {
             }
             .padding(.leading, 18)
         }
-        .frame(height: fleetSectionHeight, alignment: .topLeading)
+        .frame(height: FleetPanelMetrics.fleetSectionHeight, alignment: .topLeading)
     }
 
     // MARK: - Header
@@ -72,11 +78,11 @@ struct FleetSectionView: View {
     /// the speed on one line: the number is the fleet's total decode rate while the
     /// API reported it (the unit says "total"), otherwise the notch's stand-in rate.
     private var header: some View {
-        let model = store.panelModel
+        let model = self.model
         let idle = FleetFormat.speedIsIdle(model.speed)
         return HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text("FLEET")
-                .font(.system(size: 15, weight: .bold))
+                .font(FleetType.size(15, weight: .bold))
                 .tracking(0.3)
                 .foregroundColor(theme.text)
             Spacer(minLength: 8)
@@ -101,7 +107,7 @@ struct FleetSectionView: View {
 
     /// FLEET / DECISIONS tabs with the health line on the same line, over the strip's hairline.
     private var tabsRow: some View {
-        let model = store.panelModel
+        let model = self.model
         return HStack(alignment: .center, spacing: 20) {
             tabButton("FLEET", .fleet)
             tabButton("DECISIONS", .odin, chip: FleetFormat.actionNeededLabel(model.decisions.count))
@@ -126,7 +132,7 @@ struct FleetSectionView: View {
         let current = tab == value
         return HStack(spacing: 7) {
             Text(title)
-                .font(.system(size: 12, weight: current ? .semibold : .medium))
+                .font(FleetType.size(12, weight: current ? .semibold : .medium))
                 .tracking(0.7)
                 .foregroundColor(current ? theme.text : theme.dim)
             if let chip = chip {
@@ -160,12 +166,10 @@ struct FleetSectionView: View {
     /// map takes at least `responseMapWidth` and the work column takes the
     /// remainder. This row absorbs whatever height the fixed rows leave.
     private var main: some View {
-        let model = store.panelModel
         // One model value for every read below, so the map, the work list and the tool runs can never
         // disagree about the same poll.
         return HStack(alignment: .top, spacing: 20) {
-            FleetResponseMapView(lanes: store.panelModel.agents, origin: store.panelModel.origin,
-                                 workingCount: store.panelModel.workingCount)
+            FleetResponseMapView(lanes: model.agents, origin: model.origin, workingCount: model.workingCount)
                 .frame(minWidth: FleetPanelMetrics.responseMapWidth, maxWidth: .infinity)
             theme.line
                 .frame(width: 1)
@@ -186,11 +190,11 @@ struct FleetSectionView: View {
     /// 10 pt keeps the last machine's reading clear of the button, a 100 % reading included.
     private var footer: some View {
         HStack(alignment: .center, spacing: 10) {
-            FleetPressureView(hosts: store.panelModel.hosts)
+            FleetPressureView(hosts: model.hosts)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: openFleet) {
                 Text("Open Fleet →")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(FleetType.size(12, weight: .semibold))
                     .foregroundColor(openHovered ? theme.accent : theme.muted)
                     .padding(.vertical, 6)
                     .padding(.horizontal, 12)
@@ -229,7 +233,7 @@ private struct ActionNeededChip: View {
                 .frame(width: 6, height: 6)
                 .scaleEffect(reduceMotion ? 1 : (pulsing ? FleetPanelMetrics.alertPulseScale : 1))
             Text(label)
-                .font(.system(size: 11, weight: .bold))
+                .font(FleetType.size(11, weight: .bold))
                 .tracking(0.6)
                 .foregroundColor(theme.alertChipText)
                 .lineLimit(1)

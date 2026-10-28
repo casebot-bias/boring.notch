@@ -79,7 +79,7 @@ struct FleetResponseMapView: View {
         let working = workingCount
         return HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text("RESPONSE MAP")
-                .font(.system(size: 11, weight: .semibold))
+                .font(FleetType.size(11, weight: .semibold))
                 .tracking(0.9)
                 .foregroundColor(theme.muted)
             Spacer(minLength: 0)
@@ -263,7 +263,7 @@ struct FleetResponseMapView: View {
             .frame(width: signalSize, height: signalSize)
             VStack(alignment: .leading, spacing: 1) {
                 Text(lane.label)
-                    .font(.system(size: 12, weight: live ? .semibold : .medium))
+                    .font(FleetType.size(12, weight: live ? .semibold : .medium))
                     .foregroundColor(nameColor)
                     .lineLimit(1)
                     // A long name plus a job badge can run short of the column; the longest agent
