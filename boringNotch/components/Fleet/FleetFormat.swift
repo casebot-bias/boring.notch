@@ -676,13 +676,15 @@ enum FleetFormat {
 /// against them. Foundation/CoreGraphics only, so it compiles into the app and the test target.
 enum FleetPanelMetrics {
     /// The one scale every Fleet panel text runs through: `FleetType.size(_:)` and
-    /// `FleetType.mono(size:)` multiply a base size by it, so the whole panel reads about 1 pt
-    /// smaller (11 -> 10.1, 12.5 -> 11.5, 15 -> 13.8) and the space between items grows without
-    /// touching one layout, padding or colour value. `minTextSize` stays the base floor.
+    /// `FleetType.mono(size:)` multiply a base size by `textScale`, then clamp the drawn
+    /// size to `minTextSize`, so the panel reads about 1 pt smaller wherever that floor
+    /// allows (11 -> 11, 12.5 -> 11.5, 15 -> 13.8) and the space between items grows
+    /// without touching one layout, padding or colour value.
     static let textScale: CGFloat = 0.92
-    /// The smallest base text size any fleet view may use. `FleetType.scaled(_:)` clamps a base to
-    /// it before applying `textScale`, so the smallest size the panel draws is this value scaled
-    /// (11 -> 10.12) and nothing can be drawn below that. Keep the value: it is the base floor.
+    /// The smallest drawn text size any fleet view may use. `FleetType.scaled(_:)` first
+    /// multiplies the base by `textScale`, then clamps the drawn size to this value, so
+    /// nothing on the panel is ever drawn below 11 pt (a scaled 10.12 comes back to 11).
+    /// Keep the value: it is the post-scale floor.
     static let minTextSize: CGFloat = 11
     /// A response-map row's fixed furniture: signal square, its spacing, the trailing spacer and
     /// the job badge. Everything left in the column is the text budget.
