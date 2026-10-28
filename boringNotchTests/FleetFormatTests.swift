@@ -352,15 +352,76 @@ final class FleetFormatTests: XCTestCase {
         }
     }
 
-    /// The heartbeat lines and the shorter preview list stay inside the column's height: the notch does not grow.
-    func testWorkColumnStaysInItsHeight() {
+    /// The heartbeat rows, their sub-lines and the previews share the column's height: the notch does not grow.
+    func testAnyHeartbeatCountFitsTheColumn() {
         for lines in 0...FleetPanelMetrics.caseJobLineLimit {
-            let previews = FleetPanelMetrics.previewLimit(caseJobLines: lines)
-            XCTAssertLessThanOrEqual(
-                FleetPanelMetrics.workContentHeight(caseJobLines: lines, previews: previews, moreLink: true),
-                FleetPanelMetrics.workColumnHeight, "\(lines) heartbeat lines do not fit the column")
+            let caseJobs = (0..<lines).map { CaseJob(job: "job-\($0)") }
+            let plan = FleetPanelMetrics.workPlan(caseJobs: caseJobs, toolRuns: [],
+                                                  jobs: (0..<3).map { job("j\($0)") }, runningTaskCount: 3)
+            XCTAssertLessThanOrEqual(plan.height, FleetPanelMetrics.workColumnHeight,
+                                     "\(lines) heartbeat lines do not fit the column")
         }
-        XCTAssertEqual(FleetPanelMetrics.previewLimit(caseJobLines: 0), 2, "no feed: the column reads as before")
+    }
+
+    /// Two heartbeat jobs with their sub-lines, the four runs of the screenshot, four running jobs.
+    private func heartbeatJobs() -> [CaseJob] {
+        [CaseJob(job: "visage-onb2-wiring", itemsPassed: 4, itemsTotal: 6, minutesSinceCommit: 11),
+         CaseJob(job: "visage-onb2-save-home", itemsPassed: 6, itemsTotal: 6, minutesSinceCommit: 14)]
+    }
+
+    /// Three runs on the wiring job and one on the save-home job.
+    private func screenshotRuns() -> [ToolRun] {
+        [run(kind: "test", job: "visage-onb2-wiring", label: "node", elapsed: 7500),
+         run(kind: "test", job: "visage-onb2-wiring", label: "node", elapsed: 7620),
+         run(kind: "build", job: "visage-onb2-wiring", label: "xcodebuild", elapsed: 300),
+         run(kind: "test", job: "visage-onb2-save-home", label: "node", elapsed: 420)]
+    }
+
+    func testTheWorkPlanFitsTheScreenshotState() {
+        let plan = FleetPanelMetrics.workPlan(caseJobs: heartbeatJobs(), toolRuns: screenshotRuns(),
+                                              jobs: (0..<4).map { job("j\($0)") }, runningTaskCount: 4)
+        XCTAssertEqual(plan.height, 184)
+        XCTAssertEqual(plan.heartbeats.count, 2)
+        XCTAssertEqual(plan.heartbeats.map { $0.subline != nil }, [true, true], "both sub-lines set")
+        XCTAssertTrue(plan.orphanLines.isEmpty)
+        XCTAssertEqual(plan.previews.count, 1)
+        XCTAssertEqual(plan.hidden, 3)
+        XCTAssertLessThanOrEqual(plan.height, FleetPanelMetrics.workColumnHeight)
+    }
+
+    func testTheWorkPlanDropsRowsToFitTheStressState() {
+        let runs = [
+            run(kind: "test", job: "visage-onb2-wiring", label: "node", elapsed: 7620),
+            run(kind: "test", job: "visage-onb2-wiring", label: "node", elapsed: 7500),
+            run(kind: "test", job: "visage-onb2-save-home", label: "node", elapsed: 420),
+            run(kind: "test", job: "visage-onb2-save-home", label: "node", elapsed: 400),
+            run(kind: "test", job: "notch-fleet-smaller-fonts", label: "node", elapsed: 900),
+            run(kind: "test", job: "notch-fleet-smaller-fonts", label: "node", elapsed: 880),
+            run(kind: "test", job: "odin-pane-fixture", label: "node", elapsed: 60),
+            run(kind: "test", job: "odin-pane-fixture", label: "node", elapsed: 50),
+        ]
+        let plan = FleetPanelMetrics.workPlan(caseJobs: heartbeatJobs(), toolRuns: runs,
+                                              jobs: (0..<4).map { job("j\($0)") }, runningTaskCount: 4)
+        XCTAssertEqual(plan.height, 151)
+        XCTAssertTrue(plan.previews.isEmpty)
+        XCTAssertEqual(plan.orphanLines.count, 2)
+        XCTAssertEqual(plan.heartbeats.map { $0.subline != nil }, [true, true], "both sub-lines kept")
+        XCTAssertEqual(plan.hidden, 4)
+    }
+
+    func testTheWorkPlanCountsHiddenRowsWithoutDoubleCounting() {
+        let plan = FleetPanelMetrics.workPlan(caseJobs: heartbeatJobs(), toolRuns: screenshotRuns(),
+                                              jobs: (0..<3).map { job("j\($0)") }, runningTaskCount: 3)
+        XCTAssertEqual(plan.previews.count, 1)
+        XCTAssertEqual(plan.hidden, 2)
+    }
+
+    func testNoHeartbeatRowsStillFitTwoPreviews() {
+        let plan = FleetPanelMetrics.workPlan(caseJobs: [], toolRuns: [],
+                                              jobs: [job("a"), job("b")], runningTaskCount: 2)
+        XCTAssertEqual(plan.height, 177)
+        XCTAssertEqual(plan.previews.count, 2)
+        XCTAssertEqual(plan.hidden, 0)
     }
 
     // MARK: - fleetBaseURL
@@ -610,6 +671,39 @@ final class FleetFormatTests: XCTestCase {
             "monitor-platform-split · smoke.cjs")
         XCTAssertEqual(FleetFormat.toolRunLine(run(kind: "test", label: "smoke.cjs", elapsed: 600)),
                        "smoke.cjs · 10m")
+    }
+
+    func testToolRunsGroupByJobAndLabel() {
+        let runs = [
+            run(kind: "test", job: "visage-onb2-wiring", label: "node", elapsed: 7500),
+            run(kind: "test", job: "visage-onb2-wiring", label: "node", elapsed: 7620),
+            run(kind: "build", job: "visage-onb2-wiring", label: "xcodebuild", elapsed: 300),
+            run(kind: "test", job: "visage-onb2-save-home", label: "node", elapsed: 420),
+        ]
+        let groups = FleetFormat.toolRunGroups(runs)
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertEqual(groups[0].job, "visage-onb2-wiring")
+        XCTAssertEqual(groups[0].labels, [.init(text: "node", count: 2), .init(text: "xcodebuild", count: 1)])
+        XCTAssertEqual(groups[0].age, "2h07m")
+        XCTAssertEqual(groups[0].subline, "node ×2, xcodebuild · 2h07m")
+        XCTAssertEqual(groups[0].line, "visage-onb2-wiring · node ×2, xcodebuild · 2h07m")
+        XCTAssertEqual(groups[1].subline, "node · 7m")
+    }
+
+    /// A run with no job is a group of its own. A run with no label prints its verb as its own
+    /// label, so it does not join the labelled `smoke.cjs` group on the same job.
+    func testToolRunsWithNoJobOrLabelKeepTheirOwnGroup() {
+        let groups = FleetFormat.toolRunGroups([
+            run(kind: "test", label: "smoke.cjs", elapsed: 600),
+            run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 120),
+            run(kind: "test", job: "monitor-platform-split", elapsed: 120),
+        ])
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertNil(groups[0].job)
+        XCTAssertEqual(groups[0].line, "smoke.cjs · 10m")
+        XCTAssertEqual(groups[1].job, "monitor-platform-split")
+        XCTAssertEqual(groups[1].labels, [.init(text: "smoke.cjs", count: 1), .init(text: "testing", count: 1)])
+        XCTAssertEqual(groups[1].line, "monitor-platform-split · smoke.cjs, testing · 2m")
     }
 
     func testClosedToolRunNamesOneRunOrCountsThem() throws {
@@ -1507,18 +1601,18 @@ final class FleetFormatTests: XCTestCase {
         // the system fallback for every later test, and FleetTypeTests would fail on our account.
         FleetType.registerBundledFonts(in: Bundle(for: FleetFormatTests.self))
         let theme = FleetTheme(skin: .black)
-        // Two runs the activity feed reports: a 10 m smoke test and a 3 m build, each with the job
-        // and label the formatter puts on its line.
-        let runs = [
-            run(kind: "test", job: "monitor-platform-split", label: "smoke.cjs", elapsed: 600),
-            run(kind: "build", job: "boring-notch", label: "boringNotch", elapsed: 180),
+        // Two lines the formatter prints for two runs: a 10 m smoke test and a 3 m build, each with
+        // the job and label it puts on its line.
+        let lines = [
+            "monitor-platform-split · smoke.cjs · 10m",
+            "boring-notch · boringNotch · 3m",
         ]
 
         // The column's own width and the two 16 pt rows two runs take, on the black background:
         // anything lit inside this box is the view's own doing, so a view that stopped drawing its
         // lines would leave the box as empty as the no-runs render.
-        func linesBitmap(_ runList: [ToolRun]) throws -> NSBitmapImageRep {
-            let renderer = ImageRenderer(content: FleetToolRunLines(runs: runList, theme: theme)
+        func linesBitmap(_ lineList: [String]) throws -> NSBitmapImageRep {
+            let renderer = ImageRenderer(content: FleetToolRunLines(lines: lineList, theme: theme)
                 .frame(width: FleetPanelMetrics.workColumnWidth,
                        height: 2 * FleetPanelMetrics.caseJobLineHeight)
                 .background(Color.black))
@@ -1528,7 +1622,7 @@ final class FleetFormatTests: XCTestCase {
                                  "tool-run lines bitmap")
         }
 
-        XCTAssertGreaterThan(litPixelCount(try linesBitmap(runs)), 0,
+        XCTAssertGreaterThan(litPixelCount(try linesBitmap(lines)), 0,
                              "two runs draw their lines")
         XCTAssertEqual(litPixelCount(try linesBitmap([])), 0,
                        "no runs draw no lines at all")
@@ -1539,10 +1633,10 @@ final class FleetFormatTests: XCTestCase {
         // `if let` rather than `guard … else { return }`, as in this file's other previews.
         if let previewPath = ProcessInfo.processInfo.environment["FLEET_TOOL_RUNS_LINES_PREVIEW"] {
             let strip = ImageRenderer(content: VStack(spacing: 12) {
-                FleetToolRunLines(runs: runs, theme: theme)
+                FleetToolRunLines(lines: lines, theme: theme)
                     .frame(width: FleetPanelMetrics.workColumnWidth,
                            height: 2 * FleetPanelMetrics.caseJobLineHeight)
-                FleetToolRunLines(runs: [], theme: theme)
+                FleetToolRunLines(lines: [], theme: theme)
                     .frame(width: FleetPanelMetrics.workColumnWidth,
                            height: 2 * FleetPanelMetrics.caseJobLineHeight)
             }.padding(16).background(Color.black))

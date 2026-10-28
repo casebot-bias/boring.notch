@@ -10,9 +10,10 @@
 //  Both tabs draw the same fixed model, so the two images differ only by the tab.
 //
 //  The proof PNGs are written only when an env var names a path: `FLEET_PANEL_FLEET_PREVIEW`
-//  for the FLEET tab and `FLEET_PANEL_DECISIONS_PREVIEW` for the DECISIONS tab. xcodebuild
+//  for the FLEET tab and `FLEET_PANEL_DECISIONS_PREVIEW` for the DECISIONS tab; the work-column
+//  shots add `FLEET_WORK_OVERFLOW_PREVIEW` and `FLEET_WORK_STRESS_PREVIEW`. xcodebuild
 //  only forwards `TEST_RUNNER_`-prefixed names into the test process, so the invocation is
-//  env TEST_RUNNER_FLEET_PANEL_FLEET_PREVIEW=<path> TEST_RUNNER_FLEET_PANEL_DECISIONS_PREVIEW=<path> xcodebuild test -project boringNotch.xcodeproj -scheme boringNotchTests -destination 'platform=macOS,arch=arm64'
+//  env TEST_RUNNER_FLEET_PANEL_FLEET_PREVIEW=<path> TEST_RUNNER_FLEET_PANEL_DECISIONS_PREVIEW=<path> TEST_RUNNER_FLEET_WORK_OVERFLOW_PREVIEW=<path> TEST_RUNNER_FLEET_WORK_STRESS_PREVIEW=<path> xcodebuild test -project boringNotch.xcodeproj -scheme boringNotchTests -destination 'platform=macOS,arch=arm64'
 //  Without either var nothing is written and nothing fails.
 //
 
@@ -77,6 +78,57 @@ final class FleetPanelSnapshotTests: XCTestCase {
         return model
     }
 
+    /// The owner's screenshot, as a model: two Case heartbeats, four waiting test runs, and four
+    /// running jobs (the case lane plus the first three agents), so the work column's lines push
+    /// the footer down. Derived from `panelModel()`, keeping the map, speed and host readings.
+    @MainActor private func overflowModel() throws -> FleetPanelModel {
+        var model = try panelModel()
+        model.caseJobs = [
+            CaseJob(job: "visage-onb2-wiring", running: true, itemsPassed: 4, itemsTotal: 6,
+                    minutesSinceCommit: 11),
+            CaseJob(job: "visage-onb2-save-home", running: true, itemsPassed: 6, itemsTotal: 6,
+                    minutesSinceCommit: 14),
+        ]
+        model.origin.toolRuns = [
+            ToolRun(job: "visage-onb2-wiring", kind: "test", label: "node", pid: 101, since: nil, elapsedSec: 7620),
+            ToolRun(job: "visage-onb2-wiring", kind: "test", label: "node", pid: 102, since: nil, elapsedSec: 7500),
+            ToolRun(job: "visage-onb2-save-home", kind: "test", label: "node", pid: 103, since: nil, elapsedSec: 420),
+            ToolRun(job: "visage-onb2-save-home", kind: "test", label: "node", pid: 104, since: nil, elapsedSec: 400),
+        ]
+        // Four running jobs: the case lane's own, plus one on each of the first three agents.
+        model.origin.state = .busy
+        model.origin.jobs = [FleetJob(key: "overflow-case", pill: "case",
+                                      label: "notch-fleet-smaller-fonts",
+                                      step: "Checking the work column", elapsedSec: 300)]
+        for index in model.agents.indices.prefix(3) {
+            let id = model.agents[index].id
+            model.agents[index].state = .busy
+            model.agents[index].jobs = [FleetJob(key: "overflow-agent-\(id)", pill: id,
+                                                 label: "visage-onb2-wiring",
+                                                 step: "Running tests", elapsedSec: 120)]
+        }
+        XCTAssertEqual(model.runningTaskCount, 4, "the overflow fixture has four running jobs")
+        XCTAssertEqual(model.nowJobs.count, 4, "and four jobs in the preview list")
+        return model
+    }
+
+    /// The same two heartbeats and four busy lanes, with eight waiting runs over four jobs: the
+    /// stress variant, one run line per job on top of the overflow shot.
+    @MainActor private func stressModel() throws -> FleetPanelModel {
+        var model = try overflowModel()
+        model.origin.toolRuns = [
+            ToolRun(job: "visage-onb2-wiring", kind: "test", label: "node", pid: 201, since: nil, elapsedSec: 7620),
+            ToolRun(job: "visage-onb2-wiring", kind: "test", label: "node", pid: 202, since: nil, elapsedSec: 7500),
+            ToolRun(job: "visage-onb2-save-home", kind: "test", label: "node", pid: 203, since: nil, elapsedSec: 420),
+            ToolRun(job: "visage-onb2-save-home", kind: "test", label: "node", pid: 204, since: nil, elapsedSec: 400),
+            ToolRun(job: "notch-fleet-smaller-fonts", kind: "test", label: "node", pid: 205, since: nil, elapsedSec: 900),
+            ToolRun(job: "notch-fleet-smaller-fonts", kind: "test", label: "node", pid: 206, since: nil, elapsedSec: 880),
+            ToolRun(job: "odin-pane-fixture", kind: "test", label: "node", pid: 207, since: nil, elapsedSec: 60),
+            ToolRun(job: "odin-pane-fixture", kind: "test", label: "node", pid: 208, since: nil, elapsedSec: 50),
+        ]
+        return model
+    }
+
     // MARK: - Render harness (the OdinDecisionPaneTests window + pump + cacheDisplay pattern)
 
     /// Drains the run loop, so the hosting view lays out and draws before it is rasterised.
@@ -126,16 +178,28 @@ final class FleetPanelSnapshotTests: XCTestCase {
                          "the \(name) proof PNG is writable at \(path)", file: file, line: line)
     }
 
-    /// Pixels with any channel above 0.12: what proves the panel drew something.
-    private func litPixels(_ rep: NSBitmapImageRep) -> Int {
+    /// Pixels with any channel above 0.12 in the given pixel rows, all columns: what proves the
+    /// panel drew something, and what the footer and bottom-edge checks count.
+    private func litPixels(_ rep: NSBitmapImageRep, rows: Range<Int>) -> Int {
         var count = 0
-        for y in 0..<rep.pixelsHigh {
+        for y in rows {
             for x in 0..<rep.pixelsWide {
                 if let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
                    max(c.redComponent, c.greenComponent, c.blueComponent) > 0.12 { count += 1 }
             }
         }
         return count
+    }
+
+    /// Pixels with any channel above 0.12 over the whole bitmap.
+    private func litPixels(_ rep: NSBitmapImageRep) -> Int {
+        litPixels(rep, rows: 0..<rep.pixelsHigh)
+    }
+
+    /// The rows in `rows` that carry a real mark: at least `minimum` lit pixels, which a glyph, a ring
+    /// arc or a rule reaches and an antialiased stray pixel does not.
+    private func rowsWithInk(_ rep: NSBitmapImageRep, rows: Range<Int>, atLeast minimum: Int) -> [Int] {
+        rows.filter { litPixels(rep, rows: $0..<($0 + 1)) >= minimum }
     }
 
     // MARK: - Fixtures (the FleetDecodingTests loader)
@@ -166,7 +230,7 @@ final class FleetPanelSnapshotTests: XCTestCase {
         return nil
     }
 
-    // MARK: - Test
+    // MARK: - Tests
 
     @MainActor func testRendersTheFleetAndDecisionsTabs() throws {
         XCTAssertTrue(FleetType.registerBundledFonts(in: Bundle(for: Self.self)),
@@ -181,6 +245,41 @@ final class FleetPanelSnapshotTests: XCTestCase {
             XCTAssertEqual(rep.pixelsWide, 1208, "\(envName): 604 pt at 2x")
             XCTAssertGreaterThanOrEqual(litPixels(rep), 2000,
                                         "\(envName): the panel drew content, not a blank bitmap")
+            writePreview(rep, env: envName)
+        }
+    }
+
+    /// The FLEET tab drawn with a work column full of lines: the owner's overflow shot and its
+    /// eight-run stress variant. Each must fit the column's height budget and keep the gauge row
+    /// inside the panel.
+    @MainActor func testRendersTheWorkColumnStates() throws {
+        XCTAssertTrue(FleetType.registerBundledFonts(in: Bundle(for: Self.self)),
+                      "the test bundle ships the three JetBrains Mono faces")
+        let cases: [(model: FleetPanelModel, envName: String)] = [
+            (try overflowModel(), "FLEET_WORK_OVERFLOW_PREVIEW"),
+            (try stressModel(), "FLEET_WORK_STRESS_PREVIEW"),
+        ]
+        for (model, envName) in cases {
+            let (view, window) = host(.fleet, model)
+            defer { window.close() }
+            let rep = try raster(view)
+            XCTAssertEqual(rep.pixelsWide, 1208, "\(envName): 604 pt at 2x")
+            XCTAssertEqual(rep.pixelsHigh, 600, "\(envName): 300 pt at 2x")
+            XCTAssertGreaterThanOrEqual(litPixels(rep), 2000,
+                                        "\(envName): the panel drew content, not a blank bitmap")
+            let plan = FleetPanelMetrics.workPlan(caseJobs: model.runningCaseJobs, toolRuns: model.toolRuns,
+                                                  jobs: model.nowJobs, runningTaskCount: model.runningTaskCount)
+            XCTAssertLessThanOrEqual(plan.height, FleetPanelMetrics.workColumnHeight,
+                                     "\(envName): the work plan is \(plan.height) pt, over the \(FleetPanelMetrics.workColumnHeight) pt column")
+            // The gauge row sits in the footer band; its own last glyph row ends at 592, so nothing may
+            // draw in the panel's last 2 pt (rows 596..<600 at 2x). The clipped "before" render has a
+            // 380-430 pixel mark on each of those rows (glyphs running off the edge); a row that fits
+            // carries at most a stray antialiased pair.
+            let footer = litPixels(rep, rows: 520..<592)
+            let clipped = rowsWithInk(rep, rows: 596..<600, atLeast: 20)
+            print("\(envName): plan height \(plan.height) pt, footer lit \(footer), ink rows at the edge \(clipped)")
+            XCTAssertTrue(clipped.isEmpty, "\(envName): rows \(clipped) still carry ink at the panel's bottom 4 pt, so the gauge row is clipped")
+            XCTAssertGreaterThanOrEqual(footer, 400, "\(envName): the footer band has fewer than 400 lit pixels, so the gauge row did not draw")
             writePreview(rep, env: envName)
         }
     }

@@ -25,37 +25,42 @@ struct FleetWorkView: View {
     @State private var linkHovered = false
     private var theme: FleetTheme { FleetTheme(skin: fleetSkin) }
 
-    /// The heartbeat lines that fit (the first running jobs), and the previews that share the column.
-    private var jobLines: [CaseJob] { Array(caseJobs.prefix(FleetPanelMetrics.caseJobLineLimit)) }
-    private var previewLimit: Int { FleetPanelMetrics.previewLimit(caseJobLines: jobLines.count) }
-
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let plan = FleetPanelMetrics.workPlan(caseJobs: caseJobs, toolRuns: toolRuns, jobs: jobs,
+                                              runningTaskCount: runningTaskCount)
+        return VStack(alignment: .leading, spacing: 0) {
             head
-                .padding(.bottom, 8)
 
-            if !jobLines.isEmpty {
-                heartbeat
-                    .padding(.bottom, (jobs.isEmpty && toolRuns.isEmpty) ? 0 : 8)
-            }
-
-            if !toolRuns.isEmpty {
-                FleetToolRunLines(runs: toolRuns, theme: theme)
-                    .padding(.bottom, jobs.isEmpty ? 0 : 8)
-            }
-
-            if jobs.isEmpty {
-                if jobLines.isEmpty && toolRuns.isEmpty { emptyState }
+            if caseJobs.isEmpty && toolRuns.isEmpty && jobs.isEmpty {
+                emptyState
             } else {
-                previews
+                if !plan.heartbeats.isEmpty {
+                    Color.clear.frame(height: 8)
+                    ForEach(plan.heartbeats.indices, id: \.self) { index in
+                        heartbeatRow(plan.heartbeats[index].line)
+                        if let subline = plan.heartbeats[index].subline {
+                            sublineRow(subline)
+                        }
+                    }
+                }
+
+                if !plan.orphanLines.isEmpty {
+                    Color.clear.frame(height: 8)
+                    FleetToolRunLines(lines: plan.orphanLines, theme: theme)
+                }
+
+                if !plan.previews.isEmpty {
+                    Color.clear.frame(height: 8)
+                    previews(plan.previews)
+                }
             }
 
             Spacer(minLength: 0)
 
-            if runningTaskCount > previewLimit {
-                moreLink
+            if plan.hidden > 0 {
+                moreLink(plan.hidden)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -90,12 +95,16 @@ struct FleetWorkView: View {
 
     // MARK: - Heartbeat
 
-    private var heartbeat: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(jobLines) { job in
-                heartbeatRow(FleetFormat.caseJobLine(job))
-            }
-        }
+    /// A tool group's sub-line under its heartbeat row: the same mono and dim as the orphan tool
+    /// lines, indented because the row above already names the job.
+    private func sublineRow(_ text: String) -> some View {
+        Text(text)
+            .font(FleetType.mono(size: 11))
+            .foregroundColor(theme.dim)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .padding(.leading, 10)
+            .frame(height: FleetPanelMetrics.caseJobLineHeight, alignment: .leading)
     }
 
     /// One Case job on one line: name, `2/5`, `12m` (amber after an hour), watchdog badge.
@@ -134,12 +143,11 @@ struct FleetWorkView: View {
 
     // MARK: - Previews
 
-    private var previews: some View {
-        let rows = Array(jobs.prefix(previewLimit))
-        return VStack(alignment: .leading, spacing: 0) {
-            ForEach(rows.indices, id: \.self) { index in
-                jobRow(rows[index])
-                if index < rows.count - 1 {
+    private func previews(_ jobs: [FleetJob]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(jobs.indices, id: \.self) { index in
+                jobRow(jobs[index])
+                if index < jobs.count - 1 {
                     Rectangle()
                         .fill(theme.line)
                         .frame(height: 1)
@@ -177,9 +185,9 @@ struct FleetWorkView: View {
 
     // MARK: - More link
 
-    private var moreLink: some View {
+    private func moreLink(_ hidden: Int) -> some View {
         Button(action: openFleet) {
-            Text("+\(runningTaskCount - previewLimit) jobs in Fleet →")
+            Text("+\(hidden) jobs in Fleet →")
                 .font(FleetType.size(12, weight: .medium))
                 .foregroundColor(linkHovered ? theme.accent : theme.muted)
         }
