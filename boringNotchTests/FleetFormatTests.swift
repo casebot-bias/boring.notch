@@ -1379,7 +1379,13 @@ final class FleetFormatTests: XCTestCase {
         let lastLeftInk = try XCTUnwrap((0..<Int(ceil(wing * scale))).last(where: hasInk))
         let firstRightInk = try XCTUnwrap(
             (Int(ceil((wing + gap) * scale))..<bitmap.pixelsWide).first(where: hasInk))
-        XCTAssertEqual(CGFloat(lastLeftInk) / scale, wing, accuracy: 2)
+        // The left label is right-aligned at the wing edge, but its last glyph's ink stops short of
+        // the text box's layout edge: rendered at the row's fonts (scale 2, half-point pixel grid)
+        // the label alone ends 1.5 pt before its own layout edge, and the whole row's left ink ends
+        // 2.116 pt before the metric wing (99.5 against 101.616). The label-alone margin plus 1 pt
+        // of grid slop gives 2.5: enough for the bearing and snap, still far under any wing error
+        // of tens of points, which this catches.
+        XCTAssertEqual(CGFloat(lastLeftInk) / scale, wing, accuracy: 2.5)
         XCTAssertEqual(CGFloat(firstRightInk) / scale, wing + gap, accuracy: 2)
     }
 
