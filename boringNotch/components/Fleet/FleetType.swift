@@ -35,8 +35,13 @@ enum FleetType {
         return available
     }
 
-    /// `base` at the panel's one text scale (`FleetPanelMetrics.textScale`).
-    static func scaled(_ base: CGFloat) -> CGFloat { base * FleetPanelMetrics.textScale }
+    /// `base` at the panel's one text scale (`FleetPanelMetrics.textScale`), never below the floor's
+    /// own drawn size: `FleetPanelMetrics.minTextSize` is the smallest base a view may pass, so it
+    /// is clamped first and then scaled (11 -> 10.12). The floor keeps its value; only its drawn
+    /// size follows the panel, and no text can be drawn smaller than `scaled(minTextSize)`.
+    static func scaled(_ base: CGFloat) -> CGFloat {
+        max(base, FleetPanelMetrics.minTextSize) * FleetPanelMetrics.textScale
+    }
 
     /// The word font (SF Pro) at `base`, scaled by `FleetPanelMetrics.textScale`: every Fleet view
     /// draws its text through this or `mono(size:)`, so one constant shrinks the panel.

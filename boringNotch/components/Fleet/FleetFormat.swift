@@ -620,7 +620,9 @@ enum FleetPanelMetrics {
     /// smaller (11 -> 10.1, 12.5 -> 11.5, 15 -> 13.8) and the space between items grows without
     /// touching one layout, padding or colour value. `minTextSize` stays the base floor.
     static let textScale: CGFloat = 0.92
-    /// The smallest text size any fleet view may use.
+    /// The smallest base text size any fleet view may use. `FleetType.scaled(_:)` clamps a base to
+    /// it before applying `textScale`, so the smallest size the panel draws is this value scaled
+    /// (11 -> 10.12) and nothing can be drawn below that. Keep the value: it is the base floor.
     static let minTextSize: CGFloat = 11
     /// A response-map row's fixed furniture: signal square, its spacing, the trailing spacer and
     /// the job badge. Everything left in the column is the text budget.
