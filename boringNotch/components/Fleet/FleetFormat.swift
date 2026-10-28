@@ -615,6 +615,11 @@ enum FleetFormat {
 /// map and the closed-notch row read these; the tests measure the real strings at `minTextSize`
 /// against them. Foundation/CoreGraphics only, so it compiles into the app and the test target.
 enum FleetPanelMetrics {
+    /// The one scale every Fleet panel text runs through: `FleetType.size(_:)` and
+    /// `FleetType.mono(size:)` multiply a base size by it, so the whole panel reads about 1 pt
+    /// smaller (11 -> 10.1, 12.5 -> 11.5, 15 -> 13.8) and the space between items grows without
+    /// touching one layout, padding or colour value. `minTextSize` stays the base floor.
+    static let textScale: CGFloat = 0.92
     /// The smallest text size any fleet view may use.
     static let minTextSize: CGFloat = 11
     /// A response-map row's fixed furniture: signal square, its spacing, the trailing spacer and

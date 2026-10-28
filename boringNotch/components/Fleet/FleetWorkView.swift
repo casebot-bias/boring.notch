@@ -66,7 +66,7 @@ struct FleetWorkView: View {
     private var head: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("CURRENT WORK")
-                .font(.system(size: 11, weight: .semibold))
+                .font(FleetType.size(11, weight: .semibold))
                 .tracking(0.9)
                 .foregroundColor(theme.muted)
             Spacer(minLength: 0)
@@ -83,7 +83,7 @@ struct FleetWorkView: View {
             Text("No tasks running.")
             Text("Ready for the next assignment.")
         }
-        .font(.system(size: 12.5))
+        .font(FleetType.size(12.5))
         .foregroundColor(theme.muted)
         .padding(.top, 20)
     }
@@ -102,7 +102,7 @@ struct FleetWorkView: View {
     private func heartbeatRow(_ line: FleetFormat.CaseJobLine) -> some View {
         HStack(spacing: FleetPanelMetrics.caseJobLineSpacing) {
             Text(line.name)
-                .font(.system(size: 12))
+                .font(FleetType.size(12))
                 .foregroundColor(theme.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -164,12 +164,12 @@ struct FleetWorkView: View {
                     .foregroundColor(theme.dim)
             }
             Text(job.label)
-                .font(.system(size: 12.5))
+                .font(FleetType.size(12.5))
                 .foregroundColor(theme.text)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
             Text(FleetFormat.step(job.step))
-                .font(.system(size: 12.5))
+                .font(FleetType.size(12.5))
                 .foregroundColor(theme.muted)
                 .lineLimit(1)
         }
@@ -180,7 +180,7 @@ struct FleetWorkView: View {
     private var moreLink: some View {
         Button(action: openFleet) {
             Text("+\(runningTaskCount - previewLimit) jobs in Fleet →")
-                .font(.system(size: 12, weight: .medium))
+                .font(FleetType.size(12, weight: .medium))
                 .foregroundColor(linkHovered ? theme.accent : theme.muted)
         }
         .buttonStyle(.plain)

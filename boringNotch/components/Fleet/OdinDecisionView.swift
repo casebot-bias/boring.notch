@@ -138,7 +138,7 @@ struct OdinDecisionView: View {
         Text(sentJob != nil
              ? "Decision sent. Case goes on with the job. Odin reviews it again when it is done."
              : "No decisions waiting. Odin is idle.")
-            .font(.system(size: 12.5))
+            .font(FleetType.size(12.5))
             .foregroundColor(sentJob != nil ? theme.accent : theme.muted)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 6)
@@ -148,7 +148,7 @@ struct OdinDecisionView: View {
     /// the answered job leaves the list at once, so only `sentJob` remembers that it was answered.
     private var sentNote: some View {
         Text("Decision sent")
-            .font(.system(size: 12.5, weight: .medium))
+            .font(FleetType.size(12.5, weight: .medium))
             .foregroundColor(theme.accent)
             .lineLimit(1)
     }
@@ -236,7 +236,7 @@ struct OdinDecisionView: View {
     private func arrowButton(_ glyph: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(glyph)
-                .font(.system(size: 12))
+                .font(FleetType.size(12))
                 .foregroundColor(theme.text)
                 .frame(width: 20, height: 20)
                 .overlay(
@@ -289,7 +289,7 @@ struct OdinDecisionView: View {
                 }
             } label: {
                 Text("Open PR ↗")
-                    .font(.system(size: 12))
+                    .font(FleetType.size(12))
                     .foregroundColor(url == nil ? theme.dim : theme.text)
                     .padding(.vertical, 4)
                     .padding(.horizontal, 11)
@@ -343,13 +343,13 @@ struct OdinDecisionView: View {
             switch pane {
             case .question:
                 Text(FleetFormat.decisionQuestion(d))
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(FleetType.size(12.5, weight: .medium))
                     .foregroundColor(theme.text)
                     .fixedSize(horizontal: false, vertical: true)
             case .found:
                 if d.found.isEmpty {
                     Text("Odin found nothing to report.")
-                        .font(.system(size: 11))
+                        .font(FleetType.size(11))
                         .foregroundColor(theme.dim)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
@@ -397,7 +397,7 @@ struct OdinDecisionView: View {
     private func paneButton(_ title: String, active: Bool, select: @escaping () -> Void) -> some View {
         Button(action: select) {
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(FleetType.size(11, weight: .semibold))
                 .tracking(0.9)
                 .foregroundColor(theme.muted)
                 .padding(.bottom, 1)
@@ -445,13 +445,13 @@ struct OdinDecisionView: View {
                         .frame(width: 11, height: 11)
                 }
                 Text(option.label)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(FleetType.size(12, weight: .medium))
                     .foregroundColor(theme.text)
                     .lineLimit(1)
                 Spacer(minLength: 6)
                 if option.pick {
                     Text("MY PICK")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(FleetType.size(11, weight: .bold))
                         .tracking(0.6)
                         .foregroundColor(theme.accent)
                 }
@@ -482,7 +482,7 @@ struct OdinDecisionView: View {
                 onSend(d, option)
             } label: {
                 Text(sending ? "Sending…" : "Send decision")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(FleetType.size(12, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 5)
                     .foregroundColor(on ? theme.panelTop : theme.off)

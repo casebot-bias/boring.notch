@@ -35,13 +35,25 @@ enum FleetType {
         return available
     }
 
-    /// The data font at `size`: JetBrains Mono when registered, otherwise the system monospaced font.
+    /// `base` at the panel's one text scale (`FleetPanelMetrics.textScale`).
+    static func scaled(_ base: CGFloat) -> CGFloat { base * FleetPanelMetrics.textScale }
+
+    /// The word font (SF Pro) at `base`, scaled by `FleetPanelMetrics.textScale`: every Fleet view
+    /// draws its text through this or `mono(size:)`, so one constant shrinks the panel.
+    static func size(_ base: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: scaled(base), weight: weight)
+    }
+
+    /// The data font at `size`, scaled by `FleetPanelMetrics.textScale`: JetBrains Mono when
+    /// registered, otherwise the system monospaced font. The parameter is a base size; the drawn
+    /// size is `scaled(size)`.
     static func mono(size: CGFloat, weight: Weight = .regular) -> Font {
-        if registerBundledFonts(), NSFont(name: postScriptName(for: weight), size: size) != nil {
-            return .custom(postScriptName(for: weight), size: size)
+        let pointSize = scaled(size)
+        if registerBundledFonts(), NSFont(name: postScriptName(for: weight), size: pointSize) != nil {
+            return .custom(postScriptName(for: weight), size: pointSize)
         }
         logFallbackOnce()
-        return .system(size: size, weight: fontWeight(weight), design: .monospaced)
+        return .system(size: pointSize, weight: fontWeight(weight), design: .monospaced)
     }
 
     /// The PostScript name `mono(size:)` resolves to: "JetBrainsMono-Regular"/"-Medium"/"-Bold"
@@ -58,13 +70,15 @@ enum FleetType {
     }
 
     /// The rendered width of `text` at `size`: the closed row measures its speed reading against
-    /// this, so the fit rule matches what the view renders. The width comes from the bundled
+    /// this, so the fit rule matches what the view renders. `size` is a base size; the measurement
+    /// uses `scaled(size)`, the size `mono(size:)` draws at. The width comes from the bundled
     /// JetBrains face when it is registered and from the system monospaced font otherwise. A
     /// measurement never registers the faces or logs the fallback; the views own that through
     /// `mono(size:)`, so measuring first can never pin the fallback for a later registration.
     static func monoWidth(text: String, size: CGFloat, weight: Weight = .regular) -> CGFloat {
-        let font = NSFont(name: postScriptName(for: weight), size: size)
-            ?? NSFont.monospacedSystemFont(ofSize: size, weight: nsFontWeight(weight))
+        let pointSize = scaled(size)
+        let font = NSFont(name: postScriptName(for: weight), size: pointSize)
+            ?? NSFont.monospacedSystemFont(ofSize: pointSize, weight: nsFontWeight(weight))
         return (text as NSString).size(withAttributes: [.font: font]).width
     }
 

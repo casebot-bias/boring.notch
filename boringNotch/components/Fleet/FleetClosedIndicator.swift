@@ -83,13 +83,13 @@ struct FleetUpdatedLabel: View {
         if Defaults[.showFleet], store.isReachable, let lastUpdated = store.lastUpdated {
             let age = max(0, Int(Date().timeIntervalSince(lastUpdated)))
             Text("updated ")
-                .font(.system(size: 11))
+                .font(FleetType.size(11))
                 .foregroundColor(theme.muted)
             + Text("\(age)")
                 .font(FleetType.mono(size: 11, weight: .medium))
                 .foregroundColor(theme.muted)
             + Text("s ago")
-                .font(.system(size: 11))
+                .font(FleetType.size(11))
                 .foregroundColor(theme.muted)
         }
     }

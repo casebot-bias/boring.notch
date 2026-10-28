@@ -68,7 +68,7 @@ struct FleetClosedRowView: View {
                     workingLabel
                     if let alert {
                         Text("·")
-                            .font(.system(size: FleetPanelMetrics.minTextSize))
+                            .font(FleetType.size(FleetPanelMetrics.minTextSize))
                             .foregroundColor(theme.dim)
                         Text(alert)
                             .font(FleetType.mono(size: FleetPanelMetrics.minTextSize))
@@ -137,15 +137,15 @@ struct FleetClosedRowView: View {
                     .font(FleetType.mono(size: FleetPanelMetrics.minTextSize, weight: .medium))
                     .foregroundColor(theme.text)
                     + Text(" \(run.word)")
-                    .font(.system(size: FleetPanelMetrics.minTextSize))
+                    .font(FleetType.size(FleetPanelMetrics.minTextSize))
                     .foregroundColor(theme.text)
             } else {
                 Text(run.word)
-                    .font(.system(size: FleetPanelMetrics.minTextSize))
+                    .font(FleetType.size(FleetPanelMetrics.minTextSize))
                     .foregroundColor(theme.text)
                 if let age = run.age {
                     Text("·")
-                        .font(.system(size: FleetPanelMetrics.minTextSize))
+                        .font(FleetType.size(FleetPanelMetrics.minTextSize))
                         .foregroundColor(theme.dim)
                     Text(age)
                         .font(FleetType.mono(size: FleetPanelMetrics.minTextSize))
@@ -157,7 +157,7 @@ struct FleetClosedRowView: View {
                 .font(FleetType.mono(size: FleetPanelMetrics.minTextSize, weight: .medium))
                 .foregroundColor(theme.text)
                 + Text(" working")
-                .font(.system(size: FleetPanelMetrics.minTextSize))
+                .font(FleetType.size(FleetPanelMetrics.minTextSize))
                 .foregroundColor(theme.text)
         }
     }

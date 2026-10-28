@@ -37,7 +37,7 @@ private struct HostRings: View {
                 .frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 1) {
                 Text(host.label)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(FleetType.size(11, weight: .semibold))
                     .foregroundColor(host.live ? theme.text : theme.off)
                 Text(FleetFormat.ringHeadline(host))
                     .font(FleetType.mono(size: 11, weight: .medium))
