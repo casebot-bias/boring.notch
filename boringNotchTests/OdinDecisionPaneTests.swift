@@ -103,8 +103,8 @@ final class OdinDecisionPaneTests: XCTestCase {
 
     /// Lit pixels inside `area`: a host-space top-left rect, or - without one - the box's trailing
     /// 17 pt strip. The indicator proofs sample the vertical scroller's own view rather than that
-    /// strip: wrapped findings can reach into the strip, and glyphs there must never be mistaken
-    /// for the scroller.
+    /// strip: at the scaled 10.12 pt mono the wrapped findings reach into the strip, and glyphs
+    /// there must never be mistaken for the scroller.
     private func indicatorPixels(_ rep: NSBitmapImageRep, box: NSRect, in override: NSRect? = nil) -> Int {
         var count = 0
         let area = override ?? NSRect(x: box.maxX - 17, y: box.minY, width: 17, height: box.height)
