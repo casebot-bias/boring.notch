@@ -25,13 +25,19 @@ final class FleetTypeTests: XCTestCase {
         }
     }
 
-    /// The one scale never draws below the floor's own drawn size: a base under `minTextSize` is
-    /// clamped to it first, so 11 pt and anything smaller all draw at the same 10.12 pt, and
-    /// larger text keeps the panel's ratio.
-    func testTheScaleClampsAtTheBaseFloor() {
-        let floor = FleetType.scaled(FleetPanelMetrics.minTextSize)
-        XCTAssertEqual(floor, 10.12, accuracy: 0.0001, "the 11 pt floor draws at the panel scale")
-        XCTAssertEqual(FleetType.scaled(6), floor, "a base under the floor is clamped to it, never drawn smaller")
+    /// The one scale is clamped after scaling: nothing draws below `minTextSize`, so the rendered
+    /// floor is `minTextSize` itself. Bases at or below the threshold `minTextSize / textScale`
+    /// all draw at the floor; above it the panel's ratio applies (12.5 -> 11.5, 15 -> 13.8).
+    /// A base between the floor and the threshold (11.5) catches the bug: clamping the base
+    /// before scaling would draw it below 11 pt.
+    func testTheScaleClampsAtTheRenderedFloor() {
+        XCTAssertEqual(FleetType.scaled(6), 11, accuracy: 0.0001, "a base under the floor draws at the floor")
+        XCTAssertEqual(FleetType.scaled(FleetPanelMetrics.minTextSize), 11, accuracy: 0.0001, "the floor base draws at the floor")
+        XCTAssertEqual(FleetType.scaled(11.5), 11, accuracy: 0.0001, "above the base floor but below the post-scale floor, still the floor")
+        let threshold = FleetPanelMetrics.minTextSize / FleetPanelMetrics.textScale
+        XCTAssertEqual(FleetType.scaled(threshold - 0.05), 11, accuracy: 0.0001, "just below the threshold the floor holds")
+        XCTAssertEqual(FleetType.scaled(threshold), 11, accuracy: 0.0001, "at the threshold the floor still holds")
+        XCTAssertEqual(FleetType.scaled(threshold + 0.5), (threshold + 0.5) * FleetPanelMetrics.textScale, accuracy: 0.0001, "just above the threshold the scale applies")
         XCTAssertEqual(FleetType.scaled(12.5), 11.5, accuracy: 0.0001)
         XCTAssertEqual(FleetType.scaled(15), 13.8, accuracy: 0.0001)
     }
