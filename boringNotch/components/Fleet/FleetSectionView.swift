@@ -58,6 +58,7 @@ struct FleetSectionView: View {
                             sentJob: store.sentDecisionJob,
                             error: store.decisionError,
                             caseJobs: model.caseJobs,
+                            pmHandled: model.pmHandled,
                             onSend: { decision, option in
                                 Task { await store.sendDecision(decision, option: option) }
                             }

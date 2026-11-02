@@ -40,6 +40,9 @@ struct FleetLane: Identifiable, Equatable {
     /// The device's own decode speed in tokens/s; nil when the device reports none (nova: never).
     var speed: Double?
     var decisions: [FleetDecision] = []
+    /// Decisions the PM is handling: never an alert and never counted as an action, only shown
+    /// under a collapsed "Being handled by the PM" line.
+    var pmHandled: [FleetDecision] = []
     /// The machine is on but its activity probe failed (the feed's device `state: "error"`, e.g. its
     /// model server is switched off): the same rule the web dashboard uses for "telemetry probe failed".
     var probeFailed: Bool = false
@@ -65,11 +68,23 @@ struct FleetDecision: Equatable {
     var found: [String] = []
     var question: String?
     var options: [OdinOption] = OdinOption.defaults
+    /// True when `question` and `options` are the owner's plain text (no Odin words): the panel
+    /// then hides the findings, the proof readout and the PR link.
+    var plain: Bool = false
+    /// The first plain sentence, shown where the technical reason would be.
+    var plainWhy: String?
 }
 
 extension FleetDecision {
     /// The one place an Odin stop record becomes a decision.
     fileprivate init(_ status: OdinStatus) {
+        if status.audience != "pm", let text = status.ownerText {
+            let question = text.whatItMeans.isEmpty ? text.whatHappened : "\(text.whatHappened) \(text.whatItMeans)"
+            self.init(job: status.job, repo: status.repo, pr: status.pr, reason: status.reason,
+                      round: status.round, found: [], question: question,
+                      options: text.options, plain: true, plainWhy: text.whatHappened)
+            return
+        }
         self.init(job: status.job, repo: status.repo, pr: status.pr, reason: status.reason,
                   round: status.round, found: status.found, question: status.question,
                   options: status.options)
@@ -214,6 +229,9 @@ struct FleetPanelModel: Equatable {
     /// Odin's open decisions, in order. Walks the agents and returns the first lane
     /// with an open list (only Odin ever sets one).
     var decisions: [FleetDecision] { agents.first { !$0.decisions.isEmpty }?.decisions ?? [] }
+
+    /// Decisions the PM is handling, for the collapsed line under the DECISIONS list.
+    var pmHandled: [FleetDecision] { agents.first { !$0.pmHandled.isEmpty }?.pmHandled ?? [] }
 
     /// The first open decision: the one the panel's alert strip names.
     var decision: FleetDecision? { decisions.first }
@@ -405,16 +423,23 @@ enum FleetPanelModelBuilder {
         return FleetLane(id: "odin", label: "odin", state: state, jobs: toJobs(device?.items ?? []),
                          toolRuns: device?.toolRuns ?? [],
                          speed: laneSpeed(device), decisions: decisions(from: device?.odin),
+                         pmHandled: pmHandled(from: device?.odin),
                          probeFailed: probeFailed(device))
     }
 
     /// The open decisions of an Odin report, in file order. The feed's open-decisions
     /// list wins whenever it is present (`[]` means nothing is open, even with a
     /// needs-decision status); without it, the single needs-decision status.
+    /// Only owner decisions: an entry with audience "pm" is being handled and is no action for the owner.
     static func decisions(from report: OdinReport?) -> [FleetDecision] {
-        if let open = report?.open { return open.map { FleetDecision($0) } }
-        guard let status = report?.status, status.needsDecision else { return [] }
+        if let open = report?.open { return open.filter { $0.audience != "pm" }.map { FleetDecision($0) } }
+        guard let status = report?.status, status.needsDecision, status.audience != "pm" else { return [] }
         return [FleetDecision(status)]
+    }
+
+    /// The decisions the PM is handling (audience "pm"), in file order.
+    static func pmHandled(from report: OdinReport?) -> [FleetDecision] {
+        (report?.open ?? []).filter { $0.audience == "pm" }.map { FleetDecision($0) }
     }
 
     // MARK: - Footer hosts

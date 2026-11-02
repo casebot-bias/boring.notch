@@ -57,6 +57,8 @@ struct OdinDecisionView: View {
     /// The Case jobs' heartbeat, for the proof readout; empty without that feed.
     var caseJobs: [CaseJob] = []
     let onSend: (FleetDecision, OdinOption) -> Void
+    /// Decisions the PM is handling: shown only as a collapsed line with a count, never as an action.
+    var pmHandled: [FleetDecision] = []
 
     /// Fixture entry: the proof harness renders ODIN FOUND without a click, since a synthesized
     /// click never reaches a SwiftUI button in-process. The tab itself always starts on QUESTION.
@@ -66,7 +68,9 @@ struct OdinDecisionView: View {
          error: String?,
          caseJobs: [CaseJob] = [],
          startsOnFound: Bool = false,
+         pmHandled: [FleetDecision] = [],
          onSend: @escaping (FleetDecision, OdinOption) -> Void) {
+        self.pmHandled = pmHandled
         self.decisions = decisions
         self.sendingJob = sendingJob
         self.sentJob = sentJob
@@ -78,6 +82,7 @@ struct OdinDecisionView: View {
 
     @Default(.fleetSkin) private var fleetSkin
     @State private var index = 0
+    @State private var pmOpen = false
     @State private var pane: Pane = .question
     @State private var picked: [String: String] = [:]
     @State private var chipOffset: CGFloat = 0
@@ -112,6 +117,24 @@ struct OdinDecisionView: View {
 
     var body: some View {
         Group {
+            if pmHandled.isEmpty {
+                content
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    content
+                    pmLine
+                }
+            }
+        }
+        .onChange(of: decisions.count) { _, count in
+            index = FleetFormat.clampedIndex(index, count: count)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// The decisions themselves (or the empty state), laid out exactly as before the PM line existed.
+    private var content: some View {
+        Group {
             if decisions.isEmpty {
                 emptyState
             } else {
@@ -126,18 +149,37 @@ struct OdinDecisionView: View {
                 }
             }
         }
-        .onChange(of: decisions.count) { _, count in
-            index = FleetFormat.clampedIndex(index, count: count)
-        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// "Being handled by the PM (n)": collapsed by default, no action. Opens to one line per item.
+    private var pmLine: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Button { pmOpen.toggle() } label: {
+                Text("\(pmOpen ? "\u{25BE}" : "\u{25B8}") Being handled by the PM (\(pmHandled.count))")
+                    .font(FleetType.size(11))
+                    .foregroundColor(theme.dim)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            if pmOpen {
+                ForEach(Array(pmHandled.enumerated()), id: \.offset) { _, d in
+                    Text("\(d.job ?? "a job") \u{00B7} \(FleetFormat.decisionWhy(d))")
+                        .font(FleetType.size(11))
+                        .foregroundColor(theme.dim)
+                        .lineLimit(1)
+                        .padding(.leading, 12)
+                }
+            }
+        }
     }
 
     // MARK: - Empty state
 
     private var emptyState: some View {
         Text(sentJob != nil
-             ? "Decision sent. Case goes on with the job. Odin reviews it again when it is done."
-             : "No decisions waiting. Odin is idle.")
+             ? "Sent. The work goes on."
+             : "Nothing needs you right now.")
             .font(FleetType.size(12.5))
             .foregroundColor(sentJob != nil ? theme.accent : theme.muted)
             .fixedSize(horizontal: false, vertical: true)
@@ -270,7 +312,7 @@ struct OdinDecisionView: View {
                 .font(FleetType.mono(size: 11))
                 .foregroundColor(theme.hotText)
                 .lineLimit(1)
-            if let proof = FleetFormat.decisionProof(d, jobs: caseJobs) {
+            if !d.plain, let proof = FleetFormat.decisionProof(d, jobs: caseJobs) {
                 Text(proof.text)
                     .font(FleetType.mono(size: 11))
                     .foregroundColor(theme.dim)
@@ -283,23 +325,25 @@ struct OdinDecisionView: View {
                 }
             }
             Spacer(minLength: 8)
-            Button {
-                if let url {
-                    NSWorkspace.shared.open(url)
+            if !d.plain {
+                Button {
+                    if let url {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Text("Open PR ↗")
+                        .font(FleetType.size(12))
+                        .foregroundColor(url == nil ? theme.dim : theme.text)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 11)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(theme.pillBorder, lineWidth: 1)
+                        )
                 }
-            } label: {
-                Text("Open PR ↗")
-                    .font(FleetType.size(12))
-                    .foregroundColor(url == nil ? theme.dim : theme.text)
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 11)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(theme.pillBorder, lineWidth: 1)
-                    )
+                .buttonStyle(.plain)
+                .disabled(url == nil)
             }
-            .buttonStyle(.plain)
-            .disabled(url == nil)
         }
         .padding(.vertical, 5)
         .overlay(alignment: .bottom) {
@@ -319,8 +363,10 @@ struct OdinDecisionView: View {
         let boxHeight = OdinDecisionPaneMetrics.boxHeight(contentHeight: paneScroll.contentHeight)
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 12) {
-                paneButton("QUESTION", active: pane == .question) { pane = .question }
-                paneButton("ODIN FOUND \(d.found.count)", active: pane == .found) { pane = .found }
+                paneButton(d.plain ? "WHAT HAPPENED" : "QUESTION", active: pane == .question || d.plain) { pane = .question }
+                if !d.plain {
+                    paneButton("ODIN FOUND \(d.found.count)", active: pane == .found) { pane = .found }
+                }
             }
             ScrollView(.vertical) {
                 paneContent(d)
@@ -340,7 +386,7 @@ struct OdinDecisionView: View {
     /// The findings box's text: the question, or the ODIN FOUND lines.
     private func paneContent(_ d: FleetDecision) -> some View {
         Group {
-            switch pane {
+            switch d.plain ? Pane.question : pane {
             case .question:
                 Text(FleetFormat.decisionQuestion(d))
                     .font(FleetType.size(12.5, weight: .medium))

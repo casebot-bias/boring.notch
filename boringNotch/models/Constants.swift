@@ -71,7 +71,7 @@ enum OptionKeyAction: String, CaseIterable, Identifiable, Defaults.Serializable 
 extension Defaults.Keys {
     // MARK: General
     static let menubarIcon = Key<Bool>("menubarIcon", default: true)
-    static let showOnAllDisplays = Key<Bool>("showOnAllDisplays", default: false)
+    static let showOnAllDisplays = Key<Bool>("showOnAllDisplays", default: true)
     /// Logs every notch window (screen, frame, visible) on each layout pass, so the owner can see
     /// on a real Mac whether a screen got a visible window: `defaults write <bundle id>
     /// debugWindows -bool true`, then watch Console for "[boringNotch]".

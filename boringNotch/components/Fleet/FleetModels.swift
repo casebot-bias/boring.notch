@@ -242,6 +242,24 @@ struct OdinOption: Codable, Equatable {
     }
 }
 
+/// The plain-language text the PM (or a template) wrote for an owner decision: short sentences, no jargon.
+struct OdinOwnerText: Codable, Equatable {
+    var whatHappened: String
+    var whatItMeans: String
+    var options: [OdinOption]
+
+    private enum CodingKeys: String, CodingKey {
+        case whatHappened, whatItMeans, options
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.whatHappened = try container.decodeIfPresent(String.self, forKey: .whatHappened) ?? ""
+        self.whatItMeans = try container.decodeIfPresent(String.self, forKey: .whatItMeans) ?? ""
+        self.options = try container.decodeIfPresent([OdinOption].self, forKey: .options) ?? []
+    }
+}
+
 /// Odin's QA status: the fleet API copies the writer's `~/.case/odin.json` under
 /// the activity device's `odin.status`, so a missing block is an Odin that does
 /// not need a decision, never an error.
@@ -263,13 +281,18 @@ struct OdinStatus: Codable, Equatable {
     var question: String?
     /// The owner's answer choices; a missing key decodes to `OdinOption.defaults`.
     var options: [OdinOption]
+    /// Open-decision entries: who the decision is for ("pm" or "owner"). A missing value reads as the
+    /// owner, so a decision from an older dashboard is never hidden.
+    var audience: String?
+    /// Owner decisions: the plain text to show instead of the technical found/question lines.
+    var ownerText: OdinOwnerText?
 
     var needsDecision: Bool {
         return state == "needs_decision"
     }
 
     private enum CodingKeys: String, CodingKey {
-        case state, job, repo, pr, sha, round, reason, findings, verdict, updated, found, question, options
+        case state, job, repo, pr, sha, round, reason, findings, verdict, updated, found, question, options, audience, ownerText
     }
 
     init(from decoder: Decoder) throws {
@@ -287,6 +310,10 @@ struct OdinStatus: Codable, Equatable {
         self.found = try container.decodeIfPresent([String].self, forKey: .found) ?? []
         self.question = try container.decodeIfPresent(String.self, forKey: .question)
         self.options = try container.decodeIfPresent([OdinOption].self, forKey: .options) ?? OdinOption.defaults
+        self.audience = try container.decodeIfPresent(String.self, forKey: .audience)
+        let text = try? container.decodeIfPresent(OdinOwnerText.self, forKey: .ownerText)
+        // Plain text without its sentence or its choices is not usable: read it as none.
+        self.ownerText = (text?.whatHappened.isEmpty == false && text?.options.isEmpty == false) ? text : nil
     }
 }
 
