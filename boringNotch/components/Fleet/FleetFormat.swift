@@ -127,12 +127,14 @@ enum FleetFormat {
     }
 
     /// The watchdog's badge: nudged -> NUDGED, restarted -> RESTART (amber), escalated -> STUCK (red).
-    /// ok, none, missing or an unknown state -> no badge.
+    /// recovered (the watchdog saw progress again) -> no badge, like ok; ok, none, missing or an
+    /// unknown state -> no badge.
     static func caseJobBadge(_ watchdog: CaseJobWatchdog?) -> CaseJobBadge? {
         switch watchdog?.state {
         case "nudged": return CaseJobBadge(text: "NUDGED", level: .amber)
         case "restarted": return CaseJobBadge(text: "RESTART", level: .amber)
         case "escalated": return CaseJobBadge(text: "STUCK", level: .red)
+        case "recovered": return nil
         default: return nil
         }
     }
@@ -481,11 +483,22 @@ enum FleetFormat {
 
     /// One (job, label) group of tool runs: the same command repeated on one job prints one line.
     struct ToolRunGroup: Equatable {
-        struct Label: Equatable { var text: String; var count: Int }
+        struct Label: Equatable {
+            var text: String
+            var count: Int
+            /// The label's CURRENT run: its newest process (smallest elapsedSec).
+            var age: String?
+            /// The label's oldest process, only while it reports a different age - printed as
+            /// "total 2h35m" so two live clocks never hide each other.
+            var total: String?
+        }
         var job: String?
         var labels: [Label]
+        /// The group's CURRENT age: its newest run, the live command. Never the group's oldest run -
+        /// that total read as the test's own clock (a 6 m xcodebuild listed under 2 h 35 m of node).
         var age: String?
-        /// "node ×2, xcodebuild · 2h07m" - no job name: the heartbeat row above names it.
+        /// "node ×2 · 2h05m · total 2h07m, xcodebuild · 5m" - each label's own current age;
+        /// no job name: the heartbeat row above names it.
         var subline: String
         /// "visage-onb2-save-home · node ×2 · 7m" - the whole line, for a job with no heartbeat row.
         var line: String
@@ -493,7 +506,9 @@ enum FleetFormat {
 
     /// The runs grouped by job, then by printed label, in the order the feed first reports each job
     /// and each label. A run without a label prints its kind's verb (`toolRunVerb`), and a run
-    /// without a job stays a group of its own. A group's age is its oldest run's.
+    /// without a job stays a group of its own. Each label carries its own run's age, so a young
+    /// command never inherits an old one's clock; a repeat of one command with two clocks shows the
+    /// current age first and the older one as its total; the group's `age` is its newest run's.
     static func toolRunGroups(_ runs: [ToolRun]) -> [ToolRunGroup] {
         // Feed order first: the key is the trimmed job, and a run with no job keys on `nil`, which
         // is its own key - every jobless run lands in that one bucket, in the order the feed sent.
@@ -505,24 +520,38 @@ enum FleetFormat {
             jobRuns[job, default: []].append(run)
         }
         return jobOrder.map { job in
-            // Then the labels, same way: keyed on the printed text, first-seen order kept, a repeat
-            // of one command counted rather than printed again.
             var labelOrder: [String] = []
             var counts: [String: Int] = [:]
-            var oldestSec: Int?
+            var labelCurrent: [String: Int] = [:]
+            var labelOldest: [String: Int] = [:]
+            var currentSec: Int?
             for run in jobRuns[job] ?? [] {
                 let text = trimmedText(run.label) ?? toolRunVerb(run)
                 if counts[text] == nil { labelOrder.append(text) }
                 counts[text, default: 0] += 1
-                if let sec = run.elapsedSec, sec > (oldestSec ?? Int.min) { oldestSec = sec }
+                if let sec = run.elapsedSec {
+                    if sec < (labelCurrent[text] ?? Int.max) { labelCurrent[text] = sec }
+                    if sec > (labelOldest[text] ?? Int.min) { labelOldest[text] = sec }
+                    if sec < (currentSec ?? Int.max) { currentSec = sec }
+                }
             }
-            let labels = labelOrder.map { ToolRunGroup.Label(text: $0, count: counts[$0] ?? 1) }
-            let joined = labels.map { $0.count > 1 ? "\($0.text) ×\($0.count)" : $0.text }
-                .joined(separator: ", ")
-            let ageText = age(seconds: oldestSec)
-            let subline = ageText.map { "\(joined) · \($0)" } ?? joined
-            let line = job.map { "\($0) · \(subline)" } ?? subline
-            return ToolRunGroup(job: job, labels: labels, age: ageText, subline: subline, line: line)
+            let labels = labelOrder.map { text in
+                let current = age(seconds: labelCurrent[text])
+                let oldest = age(seconds: labelOldest[text])
+                return ToolRunGroup.Label(text: text, count: counts[text] ?? 1, age: current,
+                                          total: oldest == current ? nil : oldest)
+            }
+            // A repeat of one command with two clocks prints both: the current process's age first
+            // and the older process's span labelled as the total, so neither hides the other.
+            let joined = labels.map { label in
+                let name = label.count > 1 ? "\(label.text) ×\(label.count)" : label.text
+                guard let age = label.age else { return name }
+                let current = "\(name) · \(age)"
+                return label.total.map { "\(current) · total \($0)" } ?? current
+            }.joined(separator: ", ")
+            let line = job.map { "\($0) · \(joined)" } ?? joined
+            return ToolRunGroup(job: job, labels: labels, age: age(seconds: currentSec),
+                                subline: joined, line: line)
         }
     }
 

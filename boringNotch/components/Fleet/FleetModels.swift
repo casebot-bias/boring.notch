@@ -467,7 +467,8 @@ private extension KeyedDecodingContainer {
     }
 }
 
-/// The watchdog's last word on a job: `ok`, `nudged`, `restarted`, `escalated` or `none`.
+/// The watchdog's last word on a job: `ok`, `nudged`, `restarted`, `escalated`, `recovered` (progress
+/// after an escalation, so no longer stuck) or `none`.
 struct CaseJobWatchdog: Equatable {
     var state: String?
     var at: String?
