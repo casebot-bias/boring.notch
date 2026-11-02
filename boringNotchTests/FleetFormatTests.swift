@@ -698,13 +698,14 @@ final class FleetFormatTests: XCTestCase {
         let groups = FleetFormat.toolRunGroups(runs)
         XCTAssertEqual(groups.count, 2)
         XCTAssertEqual(groups[0].job, "visage-onb2-wiring")
-        XCTAssertEqual(groups[0].labels, [.init(text: "node", count: 2, age: "2h07m"),
-                                          .init(text: "xcodebuild", count: 1, age: "5m")])
+        XCTAssertEqual(groups[0].labels, [.init(text: "node", count: 2, age: "2h05m", total: "2h07m"),
+                                          .init(text: "xcodebuild", count: 1, age: "5m", total: nil)])
         XCTAssertEqual(groups[0].age, "5m", "the group's age is its newest run - the live command")
-        XCTAssertEqual(groups[0].subline, "node ×2 · 2h07m, xcodebuild · 5m")
-        XCTAssertEqual(groups[0].line, "visage-onb2-wiring · node ×2 · 2h07m, xcodebuild · 5m")
+        XCTAssertEqual(groups[0].subline, "node ×2 · 2h05m · total 2h07m, xcodebuild · 5m")
+        XCTAssertEqual(groups[0].line, "visage-onb2-wiring · node ×2 · 2h05m · total 2h07m, xcodebuild · 5m")
         XCTAssertEqual(groups[1].subline, "node · 7m")
     }
+
     /// The owner's report: a 6 min xcodebuild under 2 h 35 m of node read as "xcodebuild test · 2h35m".
     /// Each run prints its own current age; the oldest (total) age stays on the run that owns it.
     func testToolRunsShowEachRunsCurrentAgeNotTheGroupsTotal() {
@@ -716,7 +717,20 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(groups.count, 1)
         XCTAssertEqual(groups[0].subline, "node ×2 · 2h35m, xcodebuild test · 6m")
         XCTAssertEqual(groups[0].labels.map(\.age), ["2h35m", "6m"])
+        XCTAssertEqual(groups[0].labels.map(\.total), [nil, nil], "distinct labels keep one clock each")
         XCTAssertEqual(groups[0].age, "6m", "current: the live command, not the 2h35m total")
+    }
+    /// Odin QA round 1: two live processes of ONE command must not collapse into the older age.
+    func testRepeatedLabelShowsTheCurrentAgeAndTheTotalItHides() {
+        let groups = FleetFormat.toolRunGroups([
+            run(kind: "build", job: "visage-facemap-2", label: "xcodebuild test", elapsed: 9300),
+            run(kind: "build", job: "visage-facemap-2", label: "xcodebuild test", elapsed: 360),
+        ])
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].subline, "xcodebuild test ×2 · 6m · total 2h35m")
+        XCTAssertEqual(groups[0].labels.map(\.age), ["6m"], "the current process's age stays visible")
+        XCTAssertEqual(groups[0].labels.map(\.total), ["2h35m"], "the older span is labelled")
+        XCTAssertEqual(groups[0].age, "6m")
     }
 
     /// A run with no job is a group of its own. A run with no label prints its verb as its own
@@ -729,11 +743,11 @@ final class FleetFormatTests: XCTestCase {
         ])
         XCTAssertEqual(groups.count, 2)
         XCTAssertNil(groups[0].job)
-        XCTAssertEqual(groups[0].labels, [.init(text: "smoke.cjs", count: 1, age: "10m")])
+        XCTAssertEqual(groups[0].labels, [.init(text: "smoke.cjs", count: 1, age: "10m", total: nil)])
         XCTAssertEqual(groups[0].line, "smoke.cjs · 10m")
         XCTAssertEqual(groups[1].job, "monitor-platform-split")
-        XCTAssertEqual(groups[1].labels, [.init(text: "smoke.cjs", count: 1, age: "2m"),
-                                          .init(text: "testing", count: 1, age: "2m")])
+        XCTAssertEqual(groups[1].labels, [.init(text: "smoke.cjs", count: 1, age: "2m", total: nil),
+                                          .init(text: "testing", count: 1, age: "2m", total: nil)])
         XCTAssertEqual(groups[1].line, "monitor-platform-split · smoke.cjs · 2m, testing · 2m")
     }
 

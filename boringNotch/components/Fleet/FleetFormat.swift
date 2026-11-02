@@ -480,14 +480,22 @@ enum FleetFormat {
 
     /// One (job, label) group of tool runs: the same command repeated on one job prints one line.
     struct ToolRunGroup: Equatable {
-        struct Label: Equatable { var text: String; var count: Int; var age: String? }
+        struct Label: Equatable {
+            var text: String
+            var count: Int
+            /// The label's CURRENT run: its newest process (smallest elapsedSec).
+            var age: String?
+            /// The label's oldest process, only while it reports a different age - printed as
+            /// "total 2h35m" so two live clocks never hide each other.
+            var total: String?
+        }
         var job: String?
         var labels: [Label]
         /// The group's CURRENT age: its newest run, the live command. Never the group's oldest run -
         /// that total read as the test's own clock (a 6 m xcodebuild listed under 2 h 35 m of node).
         var age: String?
-        /// "node ×2 · 2h07m, xcodebuild · 5m" - each run's own age; no job name: the heartbeat row
-        /// above names it.
+        /// "node ×2 · 2h05m · total 2h07m, xcodebuild · 5m" - each label's own current age;
+        /// no job name: the heartbeat row above names it.
         var subline: String
         /// "visage-onb2-save-home · node ×2 · 7m" - the whole line, for a job with no heartbeat row.
         var line: String
@@ -496,7 +504,8 @@ enum FleetFormat {
     /// The runs grouped by job, then by printed label, in the order the feed first reports each job
     /// and each label. A run without a label prints its kind's verb (`toolRunVerb`), and a run
     /// without a job stays a group of its own. Each label carries its own run's age, so a young
-    /// command never inherits an old one's clock; the group's `age` is its newest run's.
+    /// command never inherits an old one's clock; a repeat of one command with two clocks shows the
+    /// current age first and the older one as its total; the group's `age` is its newest run's.
     static func toolRunGroups(_ runs: [ToolRun]) -> [ToolRunGroup] {
         // Feed order first: the key is the trimmed job, and a run with no job keys on `nil`, which
         // is its own key - every jobless run lands in that one bucket, in the order the feed sent.
@@ -510,25 +519,32 @@ enum FleetFormat {
         return jobOrder.map { job in
             var labelOrder: [String] = []
             var counts: [String: Int] = [:]
-            var labelElapsed: [String: Int] = [:]
+            var labelCurrent: [String: Int] = [:]
+            var labelOldest: [String: Int] = [:]
             var currentSec: Int?
             for run in jobRuns[job] ?? [] {
                 let text = trimmedText(run.label) ?? toolRunVerb(run)
                 if counts[text] == nil { labelOrder.append(text) }
                 counts[text, default: 0] += 1
                 if let sec = run.elapsedSec {
-                    if sec > (labelElapsed[text] ?? Int.min) { labelElapsed[text] = sec }
+                    if sec < (labelCurrent[text] ?? Int.max) { labelCurrent[text] = sec }
+                    if sec > (labelOldest[text] ?? Int.min) { labelOldest[text] = sec }
                     if sec < (currentSec ?? Int.max) { currentSec = sec }
                 }
             }
             let labels = labelOrder.map { text in
-                ToolRunGroup.Label(text: text, count: counts[text] ?? 1, age: age(seconds: labelElapsed[text]))
+                let current = age(seconds: labelCurrent[text])
+                let oldest = age(seconds: labelOldest[text])
+                return ToolRunGroup.Label(text: text, count: counts[text] ?? 1, age: current,
+                                          total: oldest == current ? nil : oldest)
             }
-            // Each run keeps its own age: one age after the whole label list made the last label
-            // read as the oldest, and a bare total hid the live command's clock.
+            // A repeat of one command with two clocks prints both: the current process's age first
+            // and the older process's span labelled as the total, so neither hides the other.
             let joined = labels.map { label in
                 let name = label.count > 1 ? "\(label.text) ×\(label.count)" : label.text
-                return label.age.map { "\(name) · \($0)" } ?? name
+                guard let age = label.age else { return name }
+                let current = "\(name) · \(age)"
+                return label.total.map { "\(current) · total \($0)" } ?? current
             }.joined(separator: ", ")
             let line = job.map { "\($0) · \(joined)" } ?? joined
             return ToolRunGroup(job: job, labels: labels, age: age(seconds: currentSec),
