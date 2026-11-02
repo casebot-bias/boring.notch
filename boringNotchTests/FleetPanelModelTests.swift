@@ -779,6 +779,45 @@ final class FleetPanelModelTests: XCTestCase {
                 FleetDecision(job: "hue-release", pr: 7, reason: "repeat_finding", round: nil)]
     }
 
+    /// Audience: only owner decisions are actions; PM decisions sit apart; plain text replaces the technical lines.
+    func testOnlyOwnerDecisionsAreActionsAndTheyReadInPlainText() {
+        let open = "[{\"state\":\"needs_decision\",\"job\":\"handled\",\"reason\":\"repeat_finding\",\"audience\":\"pm\"},"
+            + "{\"state\":\"needs_decision\",\"job\":\"yours\",\"repo\":\"x/y\",\"pr\":3,\"reason\":\"repeat_finding\",\"audience\":\"owner\","
+            + "\"found\":[\"a.js:1 broke\"],\"ownerText\":{\"whatHappened\":\"The price is wrong.\",\"whatItMeans\":\"It is not ready.\","
+            + "\"options\":[{\"id\":\"fix\",\"label\":\"Try again\",\"pick\":true},{\"id\":\"stop\",\"label\":\"Stop this work\"}]}},"
+            + "{\"state\":\"needs_decision\",\"job\":\"legacy\",\"reason\":\"agent_question\"}]"
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: false,
+                                                        odinStatus: "{\"state\":\"idle\"}",
+                                                        odinOpen: open)])) else { return }
+        let model = panel(fleet: f, activity: a)
+        XCTAssertEqual(model.decisions.map { $0.job }, ["yours", "legacy"])          // the PM one is no action
+        XCTAssertEqual(model.pmHandled.map { $0.job }, ["handled"])
+        XCTAssertTrue(model.hasOpenDecision)
+        guard let plain = model.decisions.first else { return }
+        XCTAssertTrue(plain.plain)
+        XCTAssertEqual(plain.question, "The price is wrong. It is not ready.")
+        XCTAssertEqual(plain.found, [])
+        XCTAssertEqual(plain.options.map { $0.id }, ["fix", "stop"])
+        XCTAssertEqual(FleetFormat.decisionWhy(plain), "The price is wrong.")
+        XCTAssertEqual(FleetFormat.decisionChip(plain), "Needs you")
+        XCTAssertNil(FleetFormat.decisionPullRequestURL(plain))
+        XCTAssertFalse(model.decisions[1].plain)                                     // an unclassified entry keeps its own text
+    }
+
+    func testOnlyPMDecisionsRaiseNoAlert() {
+        let open = "[{\"state\":\"needs_decision\",\"job\":\"handled\",\"reason\":\"round_limit\",\"audience\":\"pm\"}]"
+        guard let f = fleet(onlineFleetJSON()),
+              let a = activity(activityJSON([deviceJSON("odin", busy: false,
+                                                        odinStatus: "{\"state\":\"needs_decision\",\"job\":\"handled\"}",
+                                                        odinOpen: open)])) else { return }
+        let model = panel(fleet: f, activity: a)
+        XCTAssertFalse(model.hasOpenDecision)
+        XCTAssertEqual(model.decisions, [])
+        XCTAssertEqual(model.pmHandled.count, 1)
+        XCTAssertNil(FleetFormat.actionNeededLabel(model.decisions.count))
+    }
+
     func testTwoOpenDecisionsDriveTheOdinLane() {
         guard let f = fleet(onlineFleetJSON()),
               let a = activity(activityJSON([deviceJSON("odin", busy: false,

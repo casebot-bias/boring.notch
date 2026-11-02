@@ -163,7 +163,7 @@ enum FleetFormat {
 
     /// The proof line for a decision's job, when the jobs feed knows that job.
     static func decisionProof(_ decision: FleetDecision, jobs: [CaseJob]) -> CaseJobProofLine? {
-        guard let name = decision.job, !name.isEmpty else { return nil }
+        guard !decision.plain, let name = decision.job, !name.isEmpty else { return nil }
         return proofLine(jobs.first { $0.job == name }?.proof)
     }
 
@@ -179,6 +179,7 @@ enum FleetFormat {
     /// One open decision's chip: "ciri-skill-trim #9"; job-only or PR-only reads fine, `unknown`
     /// when neither is reported.
     static func decisionChip(_ decision: FleetDecision) -> String {
+        if decision.plain { return "Needs you" }
         var parts: [String] = []
         if let job = decision.job?.trimmingCharacters(in: .whitespacesAndNewlines), !job.isEmpty {
             parts.append(job)
@@ -190,6 +191,7 @@ enum FleetFormat {
     /// Why Odin stopped, as the ODIN tab's orange line: `decisionReason` plus " · round r of 4"
     /// while a round is reported and the reason is not `round_limit` (which already names it).
     static func decisionWhy(_ decision: FleetDecision) -> String {
+        if let plain = decision.plainWhy { return plain }
         let reason = decisionReason(decision.reason, round: decision.round)
         if let round = decision.round, decision.reason != "round_limit" {
             return "\(reason) · round \(round) of \(odinRoundLimit)"
@@ -217,6 +219,7 @@ enum FleetFormat {
     /// The PR to open from the ODIN tab, or nil while the entry names no repo or no PR:
     /// "https://github.com/<repo>/pull/<pr>".
     static func decisionPullRequestURL(_ decision: FleetDecision) -> URL? {
+        if decision.plain { return nil }
         guard let repo = decision.repo?.trimmingCharacters(in: .whitespacesAndNewlines),
               !repo.isEmpty, let pr = decision.pr else { return nil }
         return URL(string: "https://github.com/\(repo)/pull/\(pr)")
