@@ -272,11 +272,26 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(badge("nudged"), FleetFormat.CaseJobBadge(text: "NUDGED", level: .amber))
         XCTAssertEqual(badge("restarted"), FleetFormat.CaseJobBadge(text: "RESTART", level: .amber))
         XCTAssertEqual(badge("escalated"), FleetFormat.CaseJobBadge(text: "STUCK", level: .red))
+        XCTAssertNil(badge("recovered"))
         XCTAssertNil(badge("ok"))
         XCTAssertNil(badge("none"))
         XCTAssertNil(badge("something_new"))
         XCTAssertNil(badge(nil))
         XCTAssertNil(FleetFormat.caseJobBadge(nil))
+    }
+    /// A recovered watchdog (progress after an escalation) is not stuck: no red STUCK badge.
+    func testRecoveredWatchdogShowsNoStuckBadge() {
+        let recovered = FleetFormat.caseJobLine(
+            CaseJob(job: "visage-facemap-2", running: true, itemsPassed: 4, itemsTotal: 5,
+                    minutesSinceCommit: 6,
+                    watchdog: CaseJobWatchdog(state: "recovered", at: "2026-11-02T08:30:00.000Z",
+                                              detail: "progress after the escalation")))
+        XCTAssertNil(recovered.badge, "recovered must not paint a STUCK badge")
+        XCTAssertEqual(recovered.items, "4/5")
+        let escalated = FleetFormat.caseJobLine(
+            CaseJob(job: "visage-facemap-2", running: true, watchdog: CaseJobWatchdog(state: "escalated")))
+        XCTAssertEqual(escalated.badge, FleetFormat.CaseJobBadge(text: "STUCK", level: .red),
+                       "only an escalated watchdog is red")
     }
 
     func testCaseJobLineFullAndPartial() {
@@ -683,11 +698,25 @@ final class FleetFormatTests: XCTestCase {
         let groups = FleetFormat.toolRunGroups(runs)
         XCTAssertEqual(groups.count, 2)
         XCTAssertEqual(groups[0].job, "visage-onb2-wiring")
-        XCTAssertEqual(groups[0].labels, [.init(text: "node", count: 2), .init(text: "xcodebuild", count: 1)])
-        XCTAssertEqual(groups[0].age, "2h07m")
-        XCTAssertEqual(groups[0].subline, "node ×2, xcodebuild · 2h07m")
-        XCTAssertEqual(groups[0].line, "visage-onb2-wiring · node ×2, xcodebuild · 2h07m")
+        XCTAssertEqual(groups[0].labels, [.init(text: "node", count: 2, age: "2h07m"),
+                                          .init(text: "xcodebuild", count: 1, age: "5m")])
+        XCTAssertEqual(groups[0].age, "5m", "the group's age is its newest run - the live command")
+        XCTAssertEqual(groups[0].subline, "node ×2 · 2h07m, xcodebuild · 5m")
+        XCTAssertEqual(groups[0].line, "visage-onb2-wiring · node ×2 · 2h07m, xcodebuild · 5m")
         XCTAssertEqual(groups[1].subline, "node · 7m")
+    }
+    /// The owner's report: a 6 min xcodebuild under 2 h 35 m of node read as "xcodebuild test · 2h35m".
+    /// Each run prints its own current age; the oldest (total) age stays on the run that owns it.
+    func testToolRunsShowEachRunsCurrentAgeNotTheGroupsTotal() {
+        let groups = FleetFormat.toolRunGroups([
+            run(kind: "test", job: "visage-facemap-2", label: "node", elapsed: 9300),
+            run(kind: "test", job: "visage-facemap-2", label: "node", elapsed: 9310),
+            run(kind: "build", job: "visage-facemap-2", label: "xcodebuild test", elapsed: 360),
+        ])
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].subline, "node ×2 · 2h35m, xcodebuild test · 6m")
+        XCTAssertEqual(groups[0].labels.map(\.age), ["2h35m", "6m"])
+        XCTAssertEqual(groups[0].age, "6m", "current: the live command, not the 2h35m total")
     }
 
     /// A run with no job is a group of its own. A run with no label prints its verb as its own
@@ -700,10 +729,12 @@ final class FleetFormatTests: XCTestCase {
         ])
         XCTAssertEqual(groups.count, 2)
         XCTAssertNil(groups[0].job)
+        XCTAssertEqual(groups[0].labels, [.init(text: "smoke.cjs", count: 1, age: "10m")])
         XCTAssertEqual(groups[0].line, "smoke.cjs · 10m")
         XCTAssertEqual(groups[1].job, "monitor-platform-split")
-        XCTAssertEqual(groups[1].labels, [.init(text: "smoke.cjs", count: 1), .init(text: "testing", count: 1)])
-        XCTAssertEqual(groups[1].line, "monitor-platform-split · smoke.cjs, testing · 2m")
+        XCTAssertEqual(groups[1].labels, [.init(text: "smoke.cjs", count: 1, age: "2m"),
+                                          .init(text: "testing", count: 1, age: "2m")])
+        XCTAssertEqual(groups[1].line, "monitor-platform-split · smoke.cjs · 2m, testing · 2m")
     }
 
     func testClosedToolRunNamesOneRunOrCountsThem() throws {
