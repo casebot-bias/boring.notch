@@ -65,9 +65,9 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     private let MRMediaRemoteSetShuffleModeFunction: @convention(c) (Int) -> Void
     private let MRMediaRemoteSetRepeatModeFunction: @convention(c) (Int) -> Void
 
-    private var process: Process?
-    private var pipeHandler: JSONLinesPipeHandler?
-    private var streamTask: Task<Void, Never>?
+    private let lifecycleLock = NSLock()
+    private var isClosed = false
+    private var streamSupervisor: MediaRemoteStreamSupervisor?
 
     // MARK: - Initialization
     init?() {
@@ -100,22 +100,28 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     }
 
     deinit {
-        streamTask?.cancel()
-        
-        if let pipeHandler = self.pipeHandler {
-            Task { await pipeHandler.close()
-            }
-        }
-        
-        if let process = self.process {
-            if process.isRunning {
-                process.terminate()
-                process.waitUntilExit()
-            }
-        }
+        close()
+    }
 
-        self.process = nil
-        self.pipeHandler = nil
+    /// Stops the mediaremote-adapter stream for good: no restart happens after this.
+    func close() {
+        lifecycleLock.lock()
+        let alreadyClosed = isClosed
+        isClosed = true
+        let supervisor = streamSupervisor
+        streamSupervisor = nil
+        lifecycleLock.unlock()
+        guard !alreadyClosed else { return }
+        supervisor?.close()
+    }
+
+    /// Stores the supervisor unless `close()` already ran. Returns false when closed.
+    private func install(_ supervisor: MediaRemoteStreamSupervisor) -> Bool {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard !isClosed else { return false }
+        streamSupervisor = supervisor
+        return true
     }
 
     // MARK: - Protocol Implementation
@@ -188,7 +194,6 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     
     // MARK: - Setup Methods
     private func setupNowPlayingObserver() async {
-        let process = Process()
         guard
             let scriptURL = Bundle.main.url(forResource: "mediaremote-adapter", withExtension: "pl"),
             let frameworkPath = Bundle.main.privateFrameworksPath?.appending("/MediaRemoteAdapter.framework")
@@ -197,32 +202,14 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
             return
         }
         
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
-        process.arguments = [scriptURL.path, frameworkPath, "stream"]
-        
-        let pipeHandler = JSONLinesPipeHandler()
-        process.standardOutput = await pipeHandler.getPipe()
-        
-        self.process = process
-        self.pipeHandler = pipeHandler
-
-        do {
-            try process.run()
-            streamTask = Task { [weak self] in
-                await self?.processJSONStream()
-            }
-        } catch {
-            assertionFailure("Failed to launch mediaremote-adapter.pl: \(error)")
-        }
-    }
-
-    // MARK: - Async Stream Processing
-    private func processJSONStream() async {
-        guard let pipeHandler = self.pipeHandler else { return }
-        
-        await pipeHandler.readJSONLines(as: NowPlayingUpdate.self) { [weak self] update in
+        let supervisor = MediaRemoteStreamSupervisor(
+            scriptURL: scriptURL,
+            frameworkPath: frameworkPath
+        ) { [weak self] update in
             await self?.handleAdapterUpdate(update)
         }
+        guard install(supervisor) else { return }
+        supervisor.start()
     }
 
     // MARK: - Update Methods
@@ -325,6 +312,140 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     
 }
 
+private final class MediaRemoteStreamSupervisor {
+    private enum Timing {
+        static let initialRestartDelay: Duration = .seconds(1)
+        static let maxRestartDelay: Duration = .seconds(30)
+        static let healthyUptime: TimeInterval = 60
+    }
+
+    private let scriptURL: URL
+    private let frameworkPath: String
+    private let onUpdate: (NowPlayingUpdate) async -> Void
+    private let lock = NSLock()
+    private var closed = false
+    private var supervisorTask: Task<Void, Never>?
+    private var currentHandler: JSONLinesPipeHandler?
+    private var currentProcess: Process?
+
+    private var isClosed: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return closed
+    }
+
+    init(
+        scriptURL: URL,
+        frameworkPath: String,
+        onUpdate: @escaping (NowPlayingUpdate) async -> Void
+    ) {
+        self.scriptURL = scriptURL
+        self.frameworkPath = frameworkPath
+        self.onUpdate = onUpdate
+    }
+
+    func start() {
+        lock.lock()
+        guard !closed && supervisorTask == nil else {
+            lock.unlock()
+            return
+        }
+        supervisorTask = Task<Void, Never> { [weak self] in
+            await self?.runRestartLoop()
+        }
+        lock.unlock()
+    }
+
+    func close() {
+        lock.lock()
+        guard !closed else {
+            lock.unlock()
+            return
+        }
+        closed = true
+        let task = supervisorTask
+        let handler = currentHandler
+        let process = currentProcess
+        supervisorTask = nil
+        currentHandler = nil
+        currentProcess = nil
+        lock.unlock()
+
+        task?.cancel()
+        if let handler { Task { await handler.close() } }
+        if let process, process.isRunning { process.terminate() }
+        print("NowPlaying: stream supervisor closed; no restart")
+    }
+
+    private func runRestartLoop() async {
+        var delay = Timing.initialRestartDelay
+        while !isClosed && !Task.isCancelled {
+            let startedAt = Date()
+            await runStreamOnce()
+            guard !isClosed, !Task.isCancelled else { break }
+            let uptime = Date().timeIntervalSince(startedAt)
+            if uptime >= Timing.healthyUptime {
+                delay = Timing.initialRestartDelay
+            }
+            print("NowPlaying: stream process exited after \(Int(uptime))s; restarting in \(delay)")
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                break
+            }
+            if uptime < Timing.healthyUptime {
+                delay = min(delay * 2, Timing.maxRestartDelay)
+            }
+        }
+    }
+
+    private func runStreamOnce() async {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        process.arguments = [scriptURL.path, frameworkPath, "stream"]
+        let handler = JSONLinesPipeHandler()
+        process.standardOutput = await handler.getPipe()
+        do {
+            try process.run()
+        } catch {
+            print("NowPlaying: failed to launch mediaremote-adapter.pl: \(error)")
+            return
+        }
+
+        if !adopt(process: process, handler: handler) {
+            if process.isRunning { process.terminate() }
+            return
+        }
+
+        await handler.readJSONLines(as: NowPlayingUpdate.self) { [onUpdate] update in
+            await onUpdate(update)
+        }
+
+        release(process: process, handler: handler)
+
+        await handler.close()
+        if process.isRunning { process.terminate() }
+        process.waitUntilExit()
+    }
+
+    /// Registers the running child so `close()` can stop it. Returns false when already closed.
+    private func adopt(process: Process, handler: JSONLinesPipeHandler) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !closed else { return false }
+        currentProcess = process
+        currentHandler = handler
+        return true
+    }
+
+    private func release(process: Process, handler: JSONLinesPipeHandler) {
+        lock.lock()
+        defer { lock.unlock() }
+        if currentHandler === handler { currentHandler = nil }
+        if currentProcess === process { currentProcess = nil }
+    }
+}
+
 struct NowPlayingUpdate: Codable {
     let payload: NowPlayingPayload
     let diff: Bool?
@@ -351,6 +472,8 @@ actor JSONLinesPipeHandler {
     private let pipe: Pipe
     private let fileHandle: FileHandle
     private var buffer = ""
+    private var pendingRead: CheckedContinuation<Data, Error>?
+    private var isClosed = false
     
     init() {
         self.pipe = Pipe()
@@ -403,20 +526,30 @@ actor JSONLinesPipeHandler {
         }
     }
     
+    private func resumePendingRead(with data: Data) {
+        guard let continuation = pendingRead else { return }
+        pendingRead = nil
+        continuation.resume(returning: data)
+    }
+
     private func readData() async throws -> Data {
+        if isClosed { return Data() }
         return try await withCheckedThrowingContinuation { continuation in
-            
-            fileHandle.readabilityHandler = { handle in
-                let data = handle.availableData
+            pendingRead = continuation
+            fileHandle.readabilityHandler = { [weak self] handle in
                 handle.readabilityHandler = nil
-                continuation.resume(returning: data)
+                let data = handle.availableData
+                Task { await self?.resumePendingRead(with: data) }
             }
         }
     }
     
     func close() async {
+        guard !isClosed else { return }
+        isClosed = true
+        fileHandle.readabilityHandler = nil
+        resumePendingRead(with: Data())
         do {
-            fileHandle.readabilityHandler = nil
             try fileHandle.close()
             try pipe.fileHandleForWriting.close()
         } catch {
