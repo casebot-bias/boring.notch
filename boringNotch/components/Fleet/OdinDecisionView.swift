@@ -95,9 +95,13 @@ struct OdinDecisionView: View {
 
     // MARK: - Helpers
 
-    /// The pick map's key for a decision: its job, falling back to its chip text.
+    /// The pick map's key for a decision: its job, falling back to its place in the list.
+    /// The chip text cannot be the fallback: every decision of a project now reads the same
+    /// "<Project> · Needs you", so two jobless decisions would share one pick and one scroll id.
     private func key(_ d: FleetDecision) -> String {
-        return d.job ?? FleetFormat.decisionChip(d)
+        if let job = d.job, !job.isEmpty { return job }
+        guard let offset = decisions.firstIndex(of: d) else { return FleetFormat.decisionProject(d) }
+        return "decision-\(offset)"
     }
 
     /// The selected decision. `index` is clamped on read and pulled back on shrink, so it never reads out of range.
@@ -246,7 +250,8 @@ struct OdinDecisionView: View {
         .frame(height: 22)
     }
 
-    /// One open decision: "<job> #<pr>" with a red pip; the selected chip carries the orange frame.
+    /// One open decision: "<Project> · Needs you" from `FleetFormat.decisionChip` with a red pip;
+    /// the selected chip carries the orange frame.
     private func chip(_ d: FleetDecision, selected: Bool, select: @escaping () -> Void) -> some View {
         Button(action: select) {
             HStack(spacing: 6) {
@@ -353,6 +358,23 @@ struct OdinDecisionView: View {
 
     // MARK: - Question pane
 
+    /// The decision's project on one line above the pane heading: the project name in the
+    /// existing mono face, plus "#<pr>" in the dim colour while a PR is reported. Two
+    /// decisions from different projects therefore read differently above their questions.
+    private func projectLine(_ d: FleetDecision) -> some View {
+        HStack(spacing: 5) {
+            Text(FleetFormat.decisionProject(d))
+                .font(FleetType.mono(size: 11, weight: .medium))
+                .foregroundColor(theme.text)
+            if let pr = d.pr {
+                Text("#\(pr)")
+                    .font(FleetType.mono(size: 11))
+                    .foregroundColor(theme.dim)
+            }
+        }
+        .lineLimit(1)
+    }
+
     /// QUESTION / ODIN FOUND switch over the findings box. The box is a real
     /// ScrollView: as tall as its text up to `OdinDecisionPaneMetrics.maxHeight`,
     /// scrollable by trackpad and wheel, with a fade while text is cut off below.
@@ -362,6 +384,7 @@ struct OdinDecisionView: View {
     private func questionPane(_ d: FleetDecision) -> some View {
         let boxHeight = OdinDecisionPaneMetrics.boxHeight(contentHeight: paneScroll.contentHeight)
         return VStack(alignment: .leading, spacing: 4) {
+            projectLine(d)
             HStack(spacing: 12) {
                 paneButton(d.plain ? "WHAT HAPPENED" : "QUESTION", active: pane == .question || d.plain) { pane = .question }
                 if !d.plain {

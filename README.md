@@ -42,6 +42,10 @@ Say hello to **Boring Notch**, the coolest way to make your MacBook’s notch th
 - [Buy us a coffee!](#buy-us-a-coffee)
 - [Acknowledgments](#-acknowledgments)-->
 
+## Fleet decisions
+
+Decisions appear as chips labelled `<Project> · Needs you`, with the project name (and its PR, when one is attached) shown above the question. The project name is resolved from the repository first, then `head.repo`, then job-name prefixes such as `lg-` / `visage-`, falling back to `Unknown project`. Older feeds that don't carry `head` still work; resolution just skips that step.
+
 ## Installation
 
 **System Requirements:**

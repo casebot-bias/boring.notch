@@ -178,16 +178,53 @@ enum FleetFormat {
         return count == 1 ? "1 ACTION NEEDED" : "\(count) ACTIONS NEEDED"
     }
 
-    /// One open decision's chip: "ciri-skill-trim #9"; job-only or PR-only reads fine, `unknown`
-    /// when neither is reported.
-    static func decisionChip(_ decision: FleetDecision) -> String {
-        if decision.plain { return "Needs you" }
-        var parts: [String] = []
-        if let job = decision.job?.trimmingCharacters(in: .whitespacesAndNewlines), !job.isEmpty {
-            parts.append(job)
+    /// The project an open decision's work belongs to: the repository it names, else the repository
+    /// in its `head`, else the repository family its job name is prefixed with, else
+    /// "Unknown project". Every source is trimmed and the empty string never names a project.
+    /// A repository is read by its short name (the part after the last "/"), because that is what
+    /// distinguishes one project's repos from another's.
+    static func decisionProject(_ decision: FleetDecision) -> String {
+        if let short = repoShortName(decision.repo) ?? repoShortName(decision.head?.repo) {
+            return projectName(forRepoShortName: short)
         }
-        if let pr = decision.pr { parts.append("#\(pr)") }
-        return parts.isEmpty ? unknown : parts.joined(separator: " ")
+        if let job = decision.job?.trimmingCharacters(in: .whitespacesAndNewlines), !job.isEmpty {
+            if job.hasPrefix("lg-") { return "LetsGoto" }
+            if job.hasPrefix("visage-") { return "Visage" }
+        }
+        return "Unknown project"
+    }
+
+    /// The part of a repository name after its last "/", trimmed; nil when nothing is left.
+    private static func repoShortName(_ repo: String?) -> String? {
+        guard let repo else { return nil }
+        guard let slash = repo.lastIndex(of: "/") else {
+            let whole = repo.trimmingCharacters(in: .whitespacesAndNewlines)
+            return whole.isEmpty ? nil : whole
+        }
+        let short = String(repo[repo.index(after: slash)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return short.isEmpty ? nil : short
+    }
+
+    /// The friendly name of a repository's short name; an unmapped repo is called by its short
+    /// name as the dashboard spells it.
+    private static func projectName(forRepoShortName short: String) -> String {
+        switch short {
+        case "visage2", "visage-backend", "visage-ios": return "Visage"
+        case "letsgoto": return "LetsGoto"
+        case "fleet-dashboard": return "Fleet dashboard"
+        case "case-pm": return "Case"
+        case "boring.notch": return "Notch"
+        case "hue-ios": return "Homer"
+        default: return short
+        }
+    }
+
+    /// One open decision's chip: "<Project> · Needs you". The project is the same for the plain and
+    /// the technical rendering - the owner's wording changes the body, never whose work it is - and
+    /// the job name and PR number are no longer chip text, so a jobless decision still names (or
+    /// honestly fails to name) its project.
+    static func decisionChip(_ decision: FleetDecision) -> String {
+        "\(decisionProject(decision)) · Needs you"
     }
 
     /// Why Odin stopped, as the ODIN tab's orange line: `decisionReason` plus " · round r of 4"

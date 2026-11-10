@@ -73,6 +73,13 @@ struct FleetDecision: Equatable {
     var plain: Bool = false
     /// The first plain sentence, shown where the technical reason would be.
     var plainWhy: String?
+    /// Where the work lives, spelled as the feed spells it; `OdinStatus.Head`, aliased so a decision
+    /// and the stop record it came from name the type the same way.
+    typealias Head = OdinStatus.Head
+    /// The repository and branch the work is on: the project name's second source. Not a display
+    /// field and not a chip key on its own - the view's decision key stays its job - so an entry
+    /// with no job stays distinguishable by its head rather than collapsing onto a shared chip text.
+    var head: Head? = nil
 }
 
 extension FleetDecision {
@@ -82,12 +89,13 @@ extension FleetDecision {
             let question = text.whatItMeans.isEmpty ? text.whatHappened : "\(text.whatHappened) \(text.whatItMeans)"
             self.init(job: status.job, repo: status.repo, pr: status.pr, reason: status.reason,
                       round: status.round, found: [], question: question,
-                      options: text.options, plain: true, plainWhy: text.whatHappened)
+                      options: text.options, plain: true, plainWhy: text.whatHappened,
+                      head: status.head)
             return
         }
         self.init(job: status.job, repo: status.repo, pr: status.pr, reason: status.reason,
                   round: status.round, found: status.found, question: status.question,
-                  options: status.options)
+                  options: status.options, head: status.head)
     }
 }
 
