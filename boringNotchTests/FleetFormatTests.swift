@@ -602,13 +602,15 @@ final class FleetFormatTests: XCTestCase {
                            FleetDecision(repo: "a/b/visage2")), "Visage")
     }
 
-    /// A repo the mapping does not know reads as its own short name, and a repo that reports nothing
-    /// falls through the chain to the job prefixes, then to "Unknown project".
+    /// A repo the mapping does not know reads as its own short name, and a repo that reports
+    /// nothing falls through the chain to the job prefixes, then to "Unknown project".
     func testDecisionProjectFallsBackThroughJobPrefixToUnknownProject() {
         XCTAssertEqual(FleetFormat.decisionProject(
                            FleetDecision(repo: "someone/slug-not-in-the-map")), "slug-not-in-the-map")
-        // Blank (or whitespace-only) repo is no repo: the chain carries on past it.
-        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "visage-facemap-2", repo: "   ")),
+        // A blank repo (absent or empty) is no repo: the chain carries on to the job.
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "visage-facemap-2", repo: nil)),
+                       "Visage")
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "visage-facemap-2", repo: "")),
                        "Visage")
         XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(repo: "")), "Unknown project")
     }
@@ -671,7 +673,8 @@ final class FleetFormatTests: XCTestCase {
         let nullEntry = try XCTUnwrap(nullSnapshot.devices.first?.odin?.open?.first)
         XCTAssertNil(nullEntry.head, "head:null decodes as nil, not an empty head")
         // head:{} is an empty head, not a missing one: both fields decode nil inside it, so it
-        // names nothing and the project falls through to the job prefix, then unknown.
+        // names nothing and the project falls through to the job prefix, then unknown. The
+        // builder-side chip is asserted on the absent head above.
         let emptyHead = absent.replacingOccurrences(of: "{\"state\":\"needs_decision\",\"job\":\"notch-map-overlap\"",
                                                     with: "{\"state\":\"needs_decision\",\"job\":\"notch-map-overlap\",\"head\":{}")
         let emptyEntry = try XCTUnwrap(

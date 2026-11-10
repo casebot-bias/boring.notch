@@ -325,6 +325,8 @@ struct OdinStatus: Codable, Equatable {
         let text = try? container.decodeIfPresent(OdinOwnerText.self, forKey: .ownerText)
         // Plain text without its sentence or its choices is not usable: read it as none.
         self.ownerText = (text?.whatHappened.isEmpty == false && text?.options.isEmpty == false) ? text : nil
+        // An absent or null head is nil: a dashboard older than the field. Any other value decodes
+        // normally, so a head of the wrong type fails the entry with the Codable error.
         self.head = try container.decodeIfPresent(Head.self, forKey: .head)
     }
 }
