@@ -286,13 +286,24 @@ struct OdinStatus: Codable, Equatable {
     var audience: String?
     /// Owner decisions: the plain text to show instead of the technical found/question lines.
     var ownerText: OdinOwnerText?
+    /// Where the decision's work lives. Both halves are optional with implicit nil defaults, so an
+    /// older dashboard that sends no `head` (or a `head` naming nothing) decodes as nil / a blank
+    /// head with no hand-written decoder, and callers that name a head pass repo and branch.
+    struct Head: Codable, Equatable {
+        var repo: String? = nil
+        var branch: String? = nil
+    }
+
+    /// The repository and branch the decision's work is on; nil when the feed reports none (an
+    /// older dashboard), which is a missing name, never an error.
+    var head: Head?
 
     var needsDecision: Bool {
         return state == "needs_decision"
     }
 
     private enum CodingKeys: String, CodingKey {
-        case state, job, repo, pr, sha, round, reason, findings, verdict, updated, found, question, options, audience, ownerText
+        case state, job, repo, pr, sha, round, reason, findings, verdict, updated, found, question, options, audience, ownerText, head
     }
 
     init(from decoder: Decoder) throws {
@@ -314,6 +325,7 @@ struct OdinStatus: Codable, Equatable {
         let text = try? container.decodeIfPresent(OdinOwnerText.self, forKey: .ownerText)
         // Plain text without its sentence or its choices is not usable: read it as none.
         self.ownerText = (text?.whatHappened.isEmpty == false && text?.options.isEmpty == false) ? text : nil
+        self.head = try container.decodeIfPresent(Head.self, forKey: .head)
     }
 }
 

@@ -800,7 +800,6 @@ final class FleetPanelModelTests: XCTestCase {
         XCTAssertEqual(plain.found, [])
         XCTAssertEqual(plain.options.map { $0.id }, ["fix", "stop"])
         XCTAssertEqual(FleetFormat.decisionWhy(plain), "The price is wrong.")
-        XCTAssertEqual(FleetFormat.decisionChip(plain), "Needs you")
         XCTAssertNil(FleetFormat.decisionPullRequestURL(plain))
         XCTAssertFalse(model.decisions[1].plain)                                     // an unclassified entry keeps its own text
     }

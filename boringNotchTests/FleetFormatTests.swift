@@ -19,6 +19,12 @@ final class FleetFormatTests: XCTestCase {
         FleetJob(key: key, pill: "frank", label: "Reviewing the diff", step: nil, elapsedSec: nil)
     }
 
+    /// A decision's git head as the activity feed reports it: the optional repo and branch the
+    /// project name falls back to when the entry itself names no repo.
+    private func head(repo: String?, branch: String? = nil) -> FleetDecision.Head {
+        FleetDecision.Head(repo: repo, branch: branch)
+    }
+
     private func lane(_ state: FleetNodeState, jobs: [FleetJob] = [], decisions: [FleetDecision] = []) -> FleetLane {
         FleetLane(id: "frank", label: "frank", state: state, jobs: jobs, decisions: decisions)
     }
@@ -543,14 +549,153 @@ final class FleetFormatTests: XCTestCase {
         XCTAssertEqual(FleetFormat.actionNeededLabel(4), "4 ACTIONS NEEDED")
     }
 
-    // MARK: - decisionChip
+    // MARK: - decisionProject / decisionChip
 
-    func testDecisionChipNamesTheJobAndThePR() {
+    /// The chip names the project, never the job or the PR number: every open decision reads
+    /// `<Project> · Needs you`, the owner's plain-text decisions included. The old job-and-PR spellings
+    /// ("ciri-skill-trim #9", "#4", the bare "Needs you" and the `unknown` dash) are gone on purpose:
+    /// the owner reads who needs them, not which job stalled.
+    func testEveryDecisionChipNamesItsProjectAndSaysNeedsYou() {
         XCTAssertEqual(FleetFormat.decisionChip(FleetDecision(job: "ciri-skill-trim", pr: 9)),
-                       "ciri-skill-trim #9")
-        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision(job: "notch-map-overlap")), "notch-map-overlap")
-        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision(pr: 4)), "#4")
-        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision()), "—")
+                       "Unknown project · Needs you")
+        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision(job: "notch-map-overlap", pr: 4)),
+                       "Unknown project · Needs you")
+        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision(pr: 4)), "Unknown project · Needs you",
+                       "a PR number names no project")
+        XCTAssertEqual(FleetFormat.decisionChip(FleetDecision()), "Unknown project · Needs you",
+                       "a decision that names nothing still says who is waiting")
+        // Plain (owner-text) decisions take the same chip as the technical ones: the early
+        // plain-means-bare-"Needs you" return is gone.
+        let plain = FleetDecision(job: "visage-onb2-save-home", question: "Ship the release?",
+                                  options: [], plain: true, plainWhy: "Ship the release?")
+        XCTAssertEqual(FleetFormat.decisionChip(plain), "Visage · Needs you")
+    }
+
+    /// The friendly mappings: the repos the fleet actually writes, each short name mapped to the
+    /// project the owner knows it by.
+    func testDecisionProjectMapsTheKnownReposToTheirNames() {
+        func project(_ repo: String) -> String {
+            FleetFormat.decisionProject(FleetDecision(repo: repo))
+        }
+        XCTAssertEqual(project("visage2"), "Visage")
+        XCTAssertEqual(project("visage-backend"), "Visage")
+        XCTAssertEqual(project("visage-ios"), "Visage")
+        XCTAssertEqual(project("letsgoto"), "LetsGoto")
+        XCTAssertEqual(project("fleet-dashboard"), "Fleet dashboard")
+        XCTAssertEqual(project("case-pm"), "Case")
+        XCTAssertEqual(project("boring.notch"), "Notch")
+        XCTAssertEqual(project("hue-ios"), "Homer")
+    }
+
+    /// The mapping keys are the repos' short names: whatever the owner, the part after the last "/"
+    /// decides, so a known project reads the same under any org.
+    func testDecisionProjectTakesTheRepoShortNameAndMapsIt() {
+        XCTAssertEqual(FleetFormat.decisionProject(
+                           FleetDecision(repo: "biaslabs-ai/visage2")), "Visage")
+        XCTAssertEqual(FleetFormat.decisionProject(
+                           FleetDecision(repo: "biaslabs-ai/monitor-improvements")), "monitor-improvements")
+        // A repo with no slash is already its short name, mapped or verbatim.
+        XCTAssertEqual(FleetFormat.decisionProject(
+                           FleetDecision(repo: "biaslabs-ai/letsgoto")), "LetsGoto")
+        // The LAST "/" wins, whatever the nesting: a subgroup's path still reads by its tail.
+        XCTAssertEqual(FleetFormat.decisionProject(
+                           FleetDecision(repo: "a/b/visage2")), "Visage")
+    }
+
+    /// A repo the mapping does not know reads as its own short name, and a repo that reports nothing
+    /// falls through the chain to the job prefixes, then to "Unknown project".
+    func testDecisionProjectFallsBackThroughJobPrefixToUnknownProject() {
+        XCTAssertEqual(FleetFormat.decisionProject(
+                           FleetDecision(repo: "someone/slug-not-in-the-map")), "slug-not-in-the-map")
+        // Blank (or whitespace-only) repo is no repo: the chain carries on past it.
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "visage-facemap-2", repo: "   ")),
+                       "Visage")
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(repo: "")), "Unknown project")
+    }
+
+    /// Repo outranks head, head outranks the job prefix: the first source that says anything names
+    /// the project, even when a later source would say something else.
+    func testDecisionProjectRanksRepoOverHeadAndHeadOverJob() {
+        // A known repo wins over a head pointing somewhere else and a visage job name.
+        let d = FleetDecision(job: "visage-onb2-wiring", repo: "casebot-bias/case-pm",
+                              head: head(repo: "biaslabs-ai/visage2"))
+        XCTAssertEqual(FleetFormat.decisionProject(d), "Case")
+        // An unknown-but-present repo still wins: it reads as its short name, not the head's project.
+        let unknownRepo = FleetDecision(job: "lg-map-tune", repo: "org/whatever", head: head(repo: "visage2"))
+        XCTAssertEqual(FleetFormat.decisionProject(unknownRepo), "whatever")
+        // No repo: head's repo takes over, short name and mapping rules the same as the repo's.
+        let fromHead = FleetDecision(job: "notch-map-overlap", head: head(repo: "biaslabs-ai/visage-ios"))
+        XCTAssertEqual(FleetFormat.decisionProject(fromHead), "Visage")
+        let headShort = FleetDecision(repo: "  ", head: head(repo: "org/letsgoto"))
+        XCTAssertEqual(FleetFormat.decisionProject(headShort), "LetsGoto")
+        // Neither repo nor head: only now does the job prefix name the project.
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "visage-facemap-2")), "Visage")
+    }
+
+    /// The job prefixes, on their own: `lg-` and `visage-` (hasPrefix, so anything hanging off the
+    /// prefix belongs to the project), and every other job name - a `notch-` or `odin-` job, a blank
+    /// or whitespace-only one - is an unknown project, not a guess.
+    func testDecisionProjectReadsTheJobPrefixesAndCallsTheRestUnknown() {
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "lg-map-tune")), "LetsGoto")
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "visage-onb2-save-home")), "Visage")
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "notch-fleet-smaller-fonts")),
+                       "Unknown project")
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "odin-pane-fixture")),
+                       "Unknown project")
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "   ")), "Unknown project")
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "")), "Unknown project")
+    }
+
+    /// Head is the feed's own block: an entry without it decodes nil (a dashboard older than the
+    /// field still reads, `head:null` likewise), `head:{}` decodes an empty head, and one with a
+    /// repo and branch reaches the built model's decision intact, where the repo names the project
+    /// through the whole pipeline.
+    func testDecisionHeadDecodesAbsentAndPresentAndNamesTheProjectThroughTheBuilder() throws {
+        let absent = """
+        {"generatedAt":"2026-11-10T18:00:00.000Z","devices":[{"device":"odin","items":[],"state":"ok","odin":{"open":[
+        {"state":"needs_decision","job":"notch-map-overlap","pr":4,"reason":"no_progress"}]}}]}
+        """
+        let absentSnapshot = try ActivitySnapshot.decode(Data(absent.utf8))
+        let absentEntry = try XCTUnwrap(absentSnapshot.devices.first?.odin?.open?.first)
+        XCTAssertNil(absentEntry.head, "an entry with no head key decodes head as nil")
+        let absentModel = FleetPanelModelBuilder.build(fleet: nil, activity: absentSnapshot, fleetLive: true)
+        let absentDecision = try XCTUnwrap(absentModel.decisions.first)
+        XCTAssertNil(absentDecision.head, "the builder carries the absent head through as nil")
+        XCTAssertEqual(FleetFormat.decisionChip(absentDecision), "Unknown project · Needs you",
+                       "a headless job the prefixes do not know names no project")
+        // An explicit null head decodes nil exactly like an absent one: the synthesized optional
+        // decode reads the same, and the chip never changes on a null.
+        let nullHead = absent.replacingOccurrences(of: "{\"state\":\"needs_decision\",\"job\":\"notch-map-overlap\"",
+                                                   with: "{\"state\":\"needs_decision\",\"job\":\"notch-map-overlap\",\"head\":null")
+        let nullSnapshot = try ActivitySnapshot.decode(Data(nullHead.utf8))
+        let nullEntry = try XCTUnwrap(nullSnapshot.devices.first?.odin?.open?.first)
+        XCTAssertNil(nullEntry.head, "head:null decodes as nil, not an empty head")
+        // head:{} is an empty head, not a missing one: both fields decode nil inside it, so it
+        // names nothing and the project falls through to the job prefix, then unknown.
+        let emptyHead = absent.replacingOccurrences(of: "{\"state\":\"needs_decision\",\"job\":\"notch-map-overlap\"",
+                                                    with: "{\"state\":\"needs_decision\",\"job\":\"notch-map-overlap\",\"head\":{}")
+        let emptyEntry = try XCTUnwrap(
+            ActivitySnapshot.decode(Data(emptyHead.utf8)).devices.first?.odin?.open?.first)
+        XCTAssertEqual(emptyEntry.head, FleetDecision.Head(),
+                       "head:{} decodes an empty head, not a nil one")
+        XCTAssertEqual(FleetFormat.decisionProject(FleetDecision(job: "map-overlap", head: FleetDecision.Head())),
+                       "Unknown project", "an empty head names nothing")
+
+        let present = """
+        {"generatedAt":"2026-11-10T18:00:00.000Z","devices":[{"device":"odin","items":[],"state":"ok","odin":{"open":[
+        {"state":"needs_decision","job":"map-overlap","head":{"repo":"biaslabs-ai/landscape-scale","branch":"fix/decision-project-name"}}]}}]}
+        """
+        let presentSnapshot = try ActivitySnapshot.decode(Data(present.utf8))
+        let presentEntry = try XCTUnwrap(presentSnapshot.devices.first?.odin?.open?.first)
+        XCTAssertEqual(presentEntry.head?.repo, "biaslabs-ai/landscape-scale")
+        XCTAssertEqual(presentEntry.head?.branch, "fix/decision-project-name")
+        let presentModel = FleetPanelModelBuilder.build(fleet: nil, activity: presentSnapshot, fleetLive: true)
+        let presentDecision = try XCTUnwrap(presentModel.decisions.first)
+        // The branch survives decode and conversion even though no formatter ever prints it, and the
+        // head's repo takes the same rules as a real repo: short name, mapped or verbatim.
+        XCTAssertEqual(presentDecision.head, FleetDecision.Head(repo: "biaslabs-ai/landscape-scale",
+                                                                branch: "fix/decision-project-name"))
+        XCTAssertEqual(FleetFormat.decisionChip(presentDecision), "landscape-scale · Needs you")
     }
 
     // MARK: - decisionWhy
