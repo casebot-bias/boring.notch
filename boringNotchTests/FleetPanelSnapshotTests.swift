@@ -11,9 +11,10 @@
 //
 //  The proof PNGs are written only when an env var names a path: `FLEET_PANEL_FLEET_PREVIEW`
 //  for the FLEET tab and `FLEET_PANEL_DECISIONS_PREVIEW` for the DECISIONS tab; the work-column
-//  shots add `FLEET_WORK_OVERFLOW_PREVIEW` and `FLEET_WORK_STRESS_PREVIEW`. xcodebuild
-//  only forwards `TEST_RUNNER_`-prefixed names into the test process, so the invocation is
-//  env TEST_RUNNER_FLEET_PANEL_FLEET_PREVIEW=<path> TEST_RUNNER_FLEET_PANEL_DECISIONS_PREVIEW=<path> TEST_RUNNER_FLEET_WORK_OVERFLOW_PREVIEW=<path> TEST_RUNNER_FLEET_WORK_STRESS_PREVIEW=<path> xcodebuild test -project boringNotch.xcodeproj -scheme boringNotchTests -destination 'platform=macOS,arch=arm64'
+//  shots add `FLEET_WORK_OVERFLOW_PREVIEW` and `FLEET_WORK_STRESS_PREVIEW`, and the owner's
+//  project-name proof adds `FLEET_DECISION_PROJECT_PREVIEW`. xcodebuild only forwards
+//  `TEST_RUNNER_`-prefixed names into the test process, so the invocation is
+//  env TEST_RUNNER_FLEET_PANEL_FLEET_PREVIEW=<path> TEST_RUNNER_FLEET_PANEL_DECISIONS_PREVIEW=<path> TEST_RUNNER_FLEET_WORK_OVERFLOW_PREVIEW=<path> TEST_RUNNER_FLEET_WORK_STRESS_PREVIEW=<path> TEST_RUNNER_FLEET_DECISION_PROJECT_PREVIEW=<path> xcodebuild test -project boringNotch.xcodeproj -scheme boringNotchTests -destination 'platform=macOS,arch=arm64'
 //  Without either var nothing is written and nothing fails.
 //
 
@@ -75,6 +76,30 @@ final class FleetPanelSnapshotTests: XCTestCase {
                     "f3: the footer rings sit close to their labels."],
             question: "Is every Fleet panel text a little smaller, with the same layout, colours and words?",
             options: OdinOption.defaults)]
+        return model
+    }
+
+    /// Two open owner decisions from different projects: Visage (job prefix only, plus a PR, so its
+    /// project line reads "Visage #41") and LetsGoto (job prefix only). Plain owner text, which is
+    /// the shape the owner's screenshot shows; both chips now share the "<Project> · Needs you" text.
+    @MainActor private func decisionProjectModel() throws -> FleetPanelModel {
+        var model = try panelModel()
+        guard let odin = model.agents.firstIndex(where: { $0.id == "odin" }) else {
+            XCTFail("the built model has no odin lane to carry a decision")
+            throw FleetPanelSnapshotError.missingOdinLane
+        }
+        model.agents[odin].decisions = [
+            FleetDecision(job: "visage-inprogress-bar", pr: 41,
+                          question: "Visage is ready for the progress bar: how should the bar move?",
+                          options: OdinOption.defaults,
+                          plain: true,
+                          plainWhy: "The progress bar is in place."),
+            FleetDecision(job: "lg-onboarding-copy",
+                          question: "LetsGoto needs a call on the onboarding copy: warmer, or shorter?",
+                          options: OdinOption.defaults,
+                          plain: true,
+                          plainWhy: "The onboarding copy is ready for a look."),
+        ]
         return model
     }
 
@@ -247,6 +272,19 @@ final class FleetPanelSnapshotTests: XCTestCase {
                                         "\(envName): the panel drew content, not a blank bitmap")
             writePreview(rep, env: envName)
         }
+    }
+
+    /// The DECISIONS tab with two open decisions from different projects: the owner's project-name
+    /// proof. Opt-in: `writePreview` writes `shot-decisions-project.png` only while
+    /// `TEST_RUNNER_FLEET_DECISION_PROJECT_PREVIEW` names a path. Visual inspection verifies labels.
+    @MainActor func testRendersTheDecisionProjects() throws {
+        XCTAssertTrue(FleetType.registerBundledFonts(in: Bundle(for: Self.self)),
+                      "the test bundle ships the three JetBrains Mono faces")
+        let model = try decisionProjectModel()
+        let (view, window) = host(.odin, model)
+        defer { window.close() }
+        let rep = try raster(view)
+        writePreview(rep, env: "FLEET_DECISION_PROJECT_PREVIEW")
     }
 
     /// The FLEET tab drawn with a work column full of lines: the owner's overflow shot and its
